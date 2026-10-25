@@ -77,6 +77,34 @@ export const TrashIcon = (p: IconProps) => (
 		<path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
 	</Svg>
 );
+export const SlidersIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M4 6h10" />
+		<path d="M18 6h2" />
+		<circle cx="16" cy="6" r="2" />
+		<path d="M4 12h3" />
+		<path d="M11 12h9" />
+		<circle cx="9" cy="12" r="2" />
+		<path d="M4 18h10" />
+		<path d="M18 18h2" />
+		<circle cx="16" cy="18" r="2" />
+	</Svg>
+);
+export const KeyIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<circle cx="8" cy="15" r="4" />
+		<path d="m10.8 12.2 8.2-8.2" />
+		<path d="m16 7 3 3" />
+		<path d="m14 9 2 2" />
+	</Svg>
+);
+export const InfoIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<circle cx="12" cy="12" r="9" />
+		<path d="M12 11v5" />
+		<path d="M12 8h.01" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />

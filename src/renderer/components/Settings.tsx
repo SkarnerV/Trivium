@@ -1,15 +1,15 @@
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, ProviderInfo } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
-import { AppIcon, BackIcon, Chevron, PlusIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
-	trivium,
 	refreshModels,
 	type SettingsSection,
 	setState,
+	trivium,
 	updateSettings,
 	useStore,
 } from "../store.ts";
@@ -17,6 +17,8 @@ import { THEMES } from "../theme.ts";
 import { Dropdown } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
+
+/* Building blocks */
 
 function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
 	return (
@@ -26,17 +28,74 @@ function Switch({ on, label, onChange }: { on: boolean; label: string; onChange:
 	);
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function PageHeader({
+	icon,
+	tone = "neutral",
+	title,
+	subtitle,
+	actions,
+}: {
+	icon: ReactNode;
+	tone?: "neutral" | "accent";
+	title: string;
+	subtitle: ReactNode;
+	actions?: ReactNode;
+}) {
 	return (
-		<div className="set-row">
-			<div className="set-label">
-				<span>{label}</span>
-				{hint && <span className="hint">{hint}</span>}
+		<header className="s-head">
+			<span className={`s-head-icon ${tone}`}>{icon}</span>
+			<div className="s-head-text">
+				<h2>{title}</h2>
+				<p>{subtitle}</p>
 			</div>
-			{children}
+			{actions && <div className="s-head-actions">{actions}</div>}
+		</header>
+	);
+}
+
+/** A titled card of rows. */
+function Group({
+	title,
+	description,
+	aside,
+	footer,
+	children,
+}: {
+	title: string;
+	description?: ReactNode;
+	aside?: ReactNode;
+	footer?: ReactNode;
+	children: ReactNode;
+}) {
+	return (
+		<section className="s-group">
+			<div className="s-group-head">
+				<div>
+					<h3>{title}</h3>
+					{description && <p>{description}</p>}
+				</div>
+				{aside}
+			</div>
+			<div className="s-card">{children}</div>
+			{footer && <p className="s-foot">{footer}</p>}
+		</section>
+	);
+}
+
+/** One row in a card: a label with an optional hint on the left, a control on the right. */
+function Item({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children?: ReactNode }) {
+	return (
+		<div className="s-row">
+			<div className="s-row-text">
+				<span className="s-label">{label}</span>
+				{hint && <span className="s-hint">{hint}</span>}
+			</div>
+			{children && <div className="s-row-control">{children}</div>}
 		</div>
 	);
 }
+
+const openFolder = (path: string) => void attempt(() => trivium.openPath(path));
 
 /* General */
 
@@ -47,23 +106,26 @@ function General() {
 		void attempt(() => trivium.appInfo()).then(setInfo);
 	}, []);
 	if (!settings) return null;
-	const folder = (label: string, hint: string, path: string | undefined) =>
+	const folder = (label: string, path: string | undefined) =>
 		path && (
-			<Row label={label} hint={hint}>
-				<span className="mono value" title={path}>
-					{shortPath(path)}
-				</span>
-				<button type="button" className="soft-btn" onClick={() => void attempt(() => trivium.openPath(path))}>
-					Open
+			<Item
+				label={label}
+				hint={
+					<span className="mono s-path" title={path}>
+						{shortPath(path)}
+					</span>
+				}
+			>
+				<button type="button" className="s-icon-btn" aria-label={`Open ${label} in Finder`} title="Open in Finder" onClick={() => openFolder(path)}>
+					<FolderIcon size={15} />
 				</button>
-			</Row>
+			</Item>
 		);
 	return (
 		<>
-			<h2 className="set-title">General</h2>
-			<section className="set-section">
-				<h3>Appearance</h3>
-				<Row label="Text size">
+			<PageHeader icon={<SlidersIcon size={18} />} title="General" subtitle="How Trivium looks, keeps sessions and gets your attention." />
+			<Group title="Appearance">
+				<Item label="Text size" hint="Scales the whole window">
 					<Dropdown
 						label="Text size"
 						value={String(settings.textSize)}
@@ -71,56 +133,99 @@ function General() {
 						align="right"
 						onChange={(value) => void updateSettings({ textSize: Number(value) })}
 					/>
-				</Row>
-			</section>
-			<section className="set-section">
-				<h3>Folders</h3>
-				{folder("Agent folder", "Logins, models and settings shared with the pi CLI", info?.agentDir)}
-				{folder("Session files", "pi JSONL files, grouped by project folder", info?.sessionsDir)}
-				{folder("App data", "App extensions, preferences and pending changes", info?.triviumDir)}
-			</section>
-			<section className="set-section">
-				<h3>Sessions</h3>
-				<Row label="Unload idle sessions after" hint="Unloaded sessions reload from disk when you open them">
+				</Item>
+			</Group>
+			<Group title="Sessions">
+				<Item label="Unload idle sessions" hint="Frees memory. An unloaded session reloads from disk when you open it.">
 					<Dropdown
 						label="Unload idle sessions after"
 						value={String(settings.idleMinutes)}
 						options={[
-							{ value: "10", label: "10 minutes" },
-							{ value: "30", label: "30 minutes" },
-							{ value: "120", label: "2 hours" },
+							{ value: "10", label: "After 10 minutes" },
+							{ value: "30", label: "After 30 minutes" },
+							{ value: "120", label: "After 2 hours" },
 							{ value: "0", label: "Never" },
 						]}
 						align="right"
 						onChange={(value) => void updateSettings({ idleMinutes: Number(value) })}
 					/>
-				</Row>
-			</section>
-			<section className="set-section">
-				<h3>Notifications</h3>
-				<Row label="When a run finishes while the app is in the background">
-					<Switch
-						on={settings.notifyDone}
-						label="Notify when a run finishes"
-						onChange={(on) => void updateSettings({ notifyDone: on })}
-					/>
-				</Row>
-				<Row label="When a session is waiting for your answer">
+				</Item>
+			</Group>
+			<Group title="Notifications" description="Only while Trivium is in the background.">
+				<Item label="A run finishes">
+					<Switch on={settings.notifyDone} label="Notify when a run finishes" onChange={(on) => void updateSettings({ notifyDone: on })} />
+				</Item>
+				<Item label="A session needs your answer" hint="A question or an approval from an extension">
 					<Switch
 						on={settings.notifyWaiting}
 						label="Notify when a session is waiting"
 						onChange={(on) => void updateSettings({ notifyWaiting: on })}
 					/>
-				</Row>
-			</section>
+				</Item>
+			</Group>
+			<Group title="Storage" description="Sessions, logins and settings are pi's own, shared with the pi CLI.">
+				{folder("Agent folder", info?.agentDir)}
+				{folder("Session files", info?.sessionsDir)}
+				{folder("Trivium data", info?.triviumDir)}
+			</Group>
 		</>
 	);
 }
 
 /* Models and logins */
 
+const loginLabel = (type: "api_key" | "oauth", configured: boolean) =>
+	type === "oauth" ? (configured ? "Log in again" : "Log in") : configured ? "Replace key" : "Add API key";
+
+function ProviderRow({
+	provider,
+	onLogin,
+	onLogout,
+}: {
+	provider: ProviderInfo;
+	onLogin: (type: "api_key" | "oauth") => void;
+	onLogout: () => void;
+}) {
+	return (
+		<div className="s-row s-provider">
+			<span className={`s-tile${provider.configured ? " on" : ""}`}>{provider.name.slice(0, 1).toUpperCase()}</span>
+			<div className="s-row-text">
+				<span className="s-label">{provider.name}</span>
+				{provider.configured && (
+					<span className="s-hint">
+						<span className="s-ok-dot" />
+						{provider.how}
+						{provider.models ? ` · ${provider.models} models` : ""}
+					</span>
+				)}
+			</div>
+			<div className="s-row-control">
+				{provider.logins.map((option) => (
+					<button
+						key={option.type}
+						type="button"
+						className={`s-btn${provider.configured ? "" : " soft"}`}
+						title={option.label}
+						onClick={() => onLogin(option.type)}
+					>
+						{loginLabel(option.type, provider.configured)}
+					</button>
+				))}
+				{provider.canLogout && (
+					<button type="button" className="s-btn" onClick={onLogout}>
+						Log out
+					</button>
+				)}
+			</div>
+		</div>
+	);
+}
+
+const PROVIDERS_SHOWN = 8;
+
 function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () => void }) {
 	const [info, setInfo] = useState<AppInfo>();
+	const [query, setQuery] = useState("");
 	const [showAll, setShowAll] = useState(false);
 	const login = useStore((s) => s.login);
 	useEffect(() => {
@@ -145,44 +250,33 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 		void refreshModels();
 	};
 	const connected = providers.filter((provider) => provider.configured);
-	const others = providers.filter((provider) => !provider.configured);
+	const others = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		const rest = providers.filter((provider) => !provider.configured);
+		return q ? rest.filter((provider) => provider.name.toLowerCase().includes(q) || provider.id.includes(q)) : rest;
+	}, [providers, query]);
+	const visible = query || showAll ? others : others.slice(0, PROVIDERS_SHOWN);
 	const row = (provider: ProviderInfo) => (
-		<div key={provider.id} className="provider">
-			<span className="tile">{provider.name.slice(0, 1).toUpperCase()}</span>
-			<div className="set-label">
-				<span style={{ fontWeight: 500 }}>{provider.name}</span>
-				<span className="hint">
-					{provider.how}
-					{provider.configured && provider.models ? ` · ${provider.models} models` : ""}
-				</span>
-			</div>
-			<span className={`status${provider.configured ? " ok" : ""}`}>
-				<span className="dot" />
-				{provider.configured ? "Connected" : "Not connected"}
-			</span>
-			{provider.logins.map((option) => (
-				<button key={option.type} type="button" className="soft-btn" onClick={() => startLogin(provider, option.type)}>
-					{provider.configured ? (option.type === "oauth" ? "Log in again" : "Replace key") : option.label}
-				</button>
-			))}
-			{provider.canLogout && (
-				<button type="button" className="soft-btn" onClick={() => void logout(provider)}>
-					Log out
-				</button>
-			)}
-		</div>
+		<ProviderRow
+			key={provider.id}
+			provider={provider}
+			onLogin={(type) => startLogin(provider, type)}
+			onLogout={() => void logout(provider)}
+		/>
 	);
 	return (
 		<>
-			<div>
-				<h2 className="set-title">Models and logins</h2>
-				<p className="set-sub">
-					Shared with the pi CLI through <span className="mono">{info ? shortPath(info.agentDir) : "~/.pi/agent"}</span>.
-				</p>
-			</div>
-			<section className="set-section">
-				<h3>Default model</h3>
-				<Row label="New sessions" hint="Used when an app has no model of its own. Saved in pi's settings.">
+			<PageHeader
+				icon={<KeyIcon size={18} />}
+				title="Models and logins"
+				subtitle={
+					<>
+						Shared with the pi CLI through <span className="mono">{info ? shortPath(info.agentDir) : "~/.pi/agent"}</span>
+					</>
+				}
+			/>
+			<Group title="Default model">
+				<Item label="New sessions" hint="Used when an app has no model of its own">
 					<ModelSelect
 						value={info?.defaultModel}
 						level={info?.defaultThinkingLevel}
@@ -193,17 +287,34 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 							setInfo(await attempt(() => trivium.appInfo()));
 						}}
 					/>
-				</Row>
-			</section>
-			<section className="set-section">
-				<h3>Providers</h3>
-				{connected.length ? connected.map(row) : <p className="set-sub">No provider is connected yet.</p>}
-				<button type="button" className="more-btn" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>
-					<Chevron open={showAll} />
-					{showAll ? "Hide other providers" : `Show ${others.length} other providers`}
-				</button>
-				{showAll && others.map(row)}
-			</section>
+				</Item>
+			</Group>
+			<Group title={`Connected${connected.length ? ` · ${connected.length}` : ""}`}>
+				{connected.length ? (
+					connected.map(row)
+				) : (
+					<div className="s-empty">No provider is connected yet. Add one below to start a session.</div>
+				)}
+			</Group>
+			<Group
+				title="Add a provider"
+				aside={
+					<label className="s-search">
+						<SearchIcon size={13} />
+						<span className="sr-only">Search providers</span>
+						<input value={query} placeholder="Search providers" onChange={(event) => setQuery(event.target.value)} />
+					</label>
+				}
+				footer={
+					!query && others.length > PROVIDERS_SHOWN ? (
+						<button type="button" className="s-link" onClick={() => setShowAll(!showAll)}>
+							{showAll ? "Show fewer" : `Show all ${others.length} providers`}
+						</button>
+					) : undefined
+				}
+			>
+				{visible.length ? visible.map(row) : <div className="s-empty">No provider matches “{query}”.</div>}
+			</Group>
 			{login && <LoginDialog />}
 		</>
 	);
@@ -211,40 +322,56 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 
 /* Apps */
 
+const APP_SUMMARY: Record<AppId, string> = {
+	code: "Builds and fixes software, with a shell and a Changes panel to review every edit.",
+	research: "Reads sources and writes notes without a shell, citing where each claim came from.",
+	write: "Edits documents in your project in small, reviewable steps, keeping your voice.",
+};
+
 const SOURCE_HINT: Record<ExtensionSource, string> = {
 	App: "In this app's folder",
-	Added: "Added to this app",
-	Global: "From ~/.pi/agent",
+	Added: "Added to this app from elsewhere",
+	Global: "From ~/.pi/agent, loaded by pi everywhere",
 	Project: "From the project's .pi folder",
 	Package: "From a pi package",
 	"Built-in": "Built into pi",
 	Dev: "Development only",
 };
 
-function ExtensionRow({ extension, order, onToggle }: { extension: ExtensionInfo; order: number; onToggle: () => void }) {
+function ExtensionRow({ extension, onToggle }: { extension: ExtensionInfo; onToggle: () => void }) {
+	const failed = Boolean(extension.error && extension.on);
 	return (
-		<div className="ext">
-			<span className="order mono">{extension.on ? order : "–"}</span>
-			<div className="ext-body">
-				<div className="ext-head">
-					<span style={{ fontWeight: 500 }}>{extension.name}</span>
-					<span className={`src src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={SOURCE_HINT[extension.source]}>
+		<div className={`s-row s-ext${extension.on ? "" : " off"}`}>
+			<div className="s-row-text">
+				<div className="s-ext-title">
+					<span className="s-label">{extension.name}</span>
+					<span className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={SOURCE_HINT[extension.source]}>
 						{extension.source}
 					</span>
-					{extension.error && extension.on && <span className="ext-error-tag">Failed to load</span>}
-					{!extension.on && <span className="hint">Off</span>}
+					{failed && <span className="s-tag error">Failed to load</span>}
 				</div>
-				<div className="ext-meta mono">
-					<span style={{ overflowWrap: "anywhere" }}>{extension.display}</span>
-					{extension.registers.map((item) => (
-						<span key={item} className="reg">
-							{item}
-						</span>
-					))}
-				</div>
-				{extension.error && extension.on && <div className="ext-error mono">{extension.error}</div>}
+				{extension.registers.length > 0 && (
+					<div className="s-chips">
+						{extension.registers.map((item) => (
+							<span key={item} className="s-chip mono">
+								{item}
+							</span>
+						))}
+					</div>
+				)}
+				<span className="mono s-path" title={extension.path}>
+					{extension.display}
+				</span>
+				{failed && (
+					<pre className="s-error mono" title={extension.error}>
+						{/* pi appends the require stack; the first line says what went wrong. */}
+						{extension.error?.split("\n")[0]}
+					</pre>
+				)}
 			</div>
-			<Switch on={extension.on} label={`Load ${extension.name}`} onChange={onToggle} />
+			<div className="s-row-control">
+				<Switch on={extension.on} label={`Load ${extension.name}`} onChange={onToggle} />
+			</div>
 		</div>
 	);
 }
@@ -295,116 +422,114 @@ function AppPage({ app }: { app: AppId }) {
 	const theme = THEMES[app];
 	const extensions = details?.extensions ?? [];
 	const onCount = extensions.filter((e) => e.on).length;
-	let order = 0;
 	return (
 		<>
-			<div className="app-head">
-				<span className="app-badge big">
-					<AppIcon app={app} size={18} />
-				</span>
-				<div className="set-label" style={{ flex: "1 1 240px" }}>
-					<h2 className="set-title">{theme.name}</h2>
-					<span className="hint">
-						<span className="mono">{details ? shortPath(details.extensionDir) : ""}</span>
-						{details && ` · ${details.running ? `${details.running} running` : "nothing running"}`}
+			<PageHeader
+				icon={<AppIcon app={app} size={18} />}
+				tone="accent"
+				title={theme.name}
+				subtitle={APP_SUMMARY[app]}
+				actions={
+					details && (
+						<button type="button" className="s-btn soft" onClick={() => openFolder(details.extensionDir)}>
+							<FolderIcon size={14} />
+							Open folder
+						</button>
+					)
+				}
+			/>
+
+			{details && (
+				<div className="s-stats">
+					<span>
+						<strong>{onCount}</strong> of {extensions.length} extensions on
 					</span>
+					<span>
+						<strong>{details.tools.length}</strong> tools
+					</span>
+					<span>
+						<strong>{details.skills}</strong> skills
+					</span>
+					<span>
+						<strong>{details.prompts}</strong> prompts
+					</span>
+					<span>{details.running ? <><strong>{details.running}</strong> running</> : "Nothing running"}</span>
 				</div>
-				<button type="button" className="soft-btn big" onClick={() => details && void attempt(() => trivium.openPath(details.extensionDir))}>
-					Open folder
-				</button>
-			</div>
+			)}
 
-			<ol className="pills">
-				<li>
-					<span className="mono">1</span>pi's own extensions, then this app's folder
-				</li>
-				<li aria-hidden="true">→</li>
-				<li>
-					<span className="mono">2</span>Switch off what {theme.name} should skip
-				</li>
-				<li aria-hidden="true">→</li>
-				<li>
-					<span className="mono">3</span>Applies when a session loads
-				</li>
-			</ol>
+			{touched && (
+				<div className="s-notice">
+					<span>
+						{details?.loaded
+							? `${details.loaded} open ${theme.name} ${details.loaded === 1 ? "session still uses" : "sessions still use"} the previous setup.`
+							: `Changes apply the next time a ${theme.name} session loads.`}
+					</span>
+					{Boolean(details?.loaded) && (
+						<button type="button" className="s-btn" onClick={() => void reload()} title="Running sessions keep their setup until they finish">
+							Reload idle sessions
+						</button>
+					)}
+				</div>
+			)}
 
-			<section className="set-section">
-				<div className="ext-title">
-					<h3 className="big">
-						Extensions <span className="hint">{details ? `${onCount} of ${extensions.length} on` : "Loading…"}</span>
-					</h3>
-					<button type="button" className="add-btn" onClick={() => void add()}>
-						<PlusIcon size={11} width={2.8} />
+			<Group
+				title="Extensions"
+				description="pi's own extensions load first, then this app's folder. Turn off anything this app should skip."
+				aside={
+					<button type="button" className="s-btn accent" onClick={() => void add()}>
+						<PlusIcon size={12} width={2.6} />
 						Add
 					</button>
-				</div>
+				}
+				footer={
+					details && (
+						<>
+							Project extensions come from <span className="mono">{shortPath(details.projectDir)}</span>, this app's most
+							recent project. Changes apply when a session loads.
+						</>
+					)
+				}
+			>
+				{!details && <div className="s-empty">Loading…</div>}
 				{details && !extensions.length && (
-					<p className="set-sub">
-						No extensions found. Put <span className="mono">.ts</span> files in this app's folder, or add one from
-						elsewhere.
-					</p>
+					<div className="s-empty">
+						No extensions yet. Put <span className="mono">.ts</span> files in this app's folder, or add one from elsewhere.
+					</div>
 				)}
 				{extensions.map((extension) => (
-					<ExtensionRow
-						key={extension.path}
-						extension={extension}
-						order={extension.on ? ++order : 0}
-						onToggle={() => void toggle(extension)}
-					/>
+					<ExtensionRow key={extension.path} extension={extension} onToggle={() => void toggle(extension)} />
 				))}
-				{details && (
-					<p className="set-sub small">
-						Project extensions are read from <span className="mono">{shortPath(details.projectDir)}</span>, this app's most
-						recent project.
-					</p>
-				)}
-			</section>
+			</Group>
 
-			<section className="set-section">
-				<h3 className="big">Model for new sessions</h3>
-				<Row label={`New ${theme.name} sessions`} hint="Open sessions keep the model they use">
+			<Group title="Model">
+				<Item label={`New ${theme.name} sessions`} hint="Open sessions keep the model they use">
 					<ModelSelect
 						value={appSettings.model}
 						level={appSettings.thinkingLevel}
 						emptyLabel="pi's default"
 						onChange={(key, level) => void saveApp({ model: key, thinkingLevel: key ? level : undefined })}
 					/>
-				</Row>
-			</section>
+				</Item>
+			</Group>
 
 			{details && (
-				<section className="facts">
-					<span className="k">Tools</span>
-					<span className="mono">{details.tools.join(", ")}</span>
-					<span className="k">Skills</span>
-					<span className="mono">{details.skills}</span>
-					<span className="k">Prompts</span>
-					<span className="mono">{details.prompts}</span>
-				</section>
+				<Group title="Tools" description="What the agent can call in this app. Extensions can add more.">
+					<div className="s-row">
+						<div className="s-chips big">
+							{details.tools.map((tool) => (
+								<span key={tool} className="s-chip mono">
+									{tool}
+								</span>
+							))}
+						</div>
+					</div>
+				</Group>
 			)}
 
 			{details?.systemPrompt && (
-				<section className="set-section">
-					<div className="prompt-block">
-						<div className="prompt-head">Added to the system prompt</div>
-						<pre>{details.systemPrompt}</pre>
-					</div>
-				</section>
-			)}
-
-			{touched && (
-				<div className="reload-note">
-					<span>
-						{details?.loaded
-							? `${details.loaded} loaded ${theme.name} ${details.loaded === 1 ? "session uses" : "sessions use"} the previous setup.`
-							: `Changes apply the next time a ${theme.name} session loads.`}
-					</span>
-					{Boolean(details?.loaded) && (
-						<button type="button" onClick={() => void reload()} title="Running sessions keep their setup until they finish">
-							Reload idle sessions
-						</button>
-					)}
-				</div>
+				<Group title="Instructions" description="Added to pi's system prompt for every session in this app.">
+					<pre className="s-prompt">{details.systemPrompt}</pre>
+				</Group>
 			)}
 		</>
 	);
@@ -419,19 +544,37 @@ function About() {
 	}, []);
 	return (
 		<>
-			<h2 className="set-title">About</h2>
+			<PageHeader
+				icon={<span className="s-logo">π</span>}
+				title="Trivium"
+				subtitle="A desktop workspace for coding, research and writing, built on pi."
+			/>
 			{info && (
-				<section className="facts">
-					<span className="k">App version</span>
-					<span className="mono">{info.version}</span>
-					<span className="k">pi</span>
-					<span className="mono">@earendil-works/pi-coding-agent {info.piVersion}</span>
-					<span className="k">Electron</span>
-					<span className="mono">{info.electron}</span>
-					<span className="k">Node</span>
-					<span className="mono">{info.node}</span>
-				</section>
+				<Group title="Versions">
+					<Item label="Trivium">
+						<span className="mono s-value">{info.version}</span>
+					</Item>
+					<Item label="pi" hint="@earendil-works/pi-coding-agent">
+						<span className="mono s-value">{info.piVersion}</span>
+					</Item>
+					<Item label="Electron">
+						<span className="mono s-value">{info.electron}</span>
+					</Item>
+					<Item label="Node">
+						<span className="mono s-value">{info.node}</span>
+					</Item>
+				</Group>
 			)}
+			<Group title="Project">
+				<Item label="Source code" hint="Issues and pull requests are welcome">
+					<a className="s-btn soft" href="https://github.com/SkarnerV/Trivium" target="_blank" rel="noreferrer">
+						GitHub
+					</a>
+				</Item>
+				<Item label="License" hint="Plugins you write are yours to license">
+					<span className="s-value">MIT</span>
+				</Item>
+			</Group>
 		</>
 	);
 }
@@ -457,14 +600,14 @@ export function SettingsPage() {
 	}, [loadProviders]);
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !document.querySelector(".scrim")) closeSettings();
+			if (event.key === "Escape" && !document.querySelector(".scrim, .dd.open")) closeSettings();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
 
 	const connected = providers.filter((p) => p.configured).length;
-	const item = (id: SettingsSection, label: string, dot: string, meta = "") => (
+	const item = (id: SettingsSection, label: string, icon: ReactNode, color?: string, meta?: ReactNode) => (
 		<button
 			key={id}
 			type="button"
@@ -472,9 +615,11 @@ export function SettingsPage() {
 			aria-current={section === id ? "page" : undefined}
 			onClick={() => setState({ settingsSection: id })}
 		>
-			<span className="swatch" style={{ background: dot }} />
-			{label}
-			<span className="meta">{meta}</span>
+			<span className="s-nav-icon" style={color ? { color, background: `color-mix(in srgb, ${color} 14%, #fff)` } : undefined}>
+				{icon}
+			</span>
+			<span className="s-nav-label">{label}</span>
+			{meta}
 		</button>
 	);
 	return (
@@ -486,15 +631,30 @@ export function SettingsPage() {
 					<span className="kbd">esc</span>
 				</button>
 				<h1>Settings</h1>
-				<div className="set-nav-head">App</div>
-				{item("general", "General", "#8B8D97")}
-				{item("models", "Models and logins", "#8B8D97", connected ? `${connected} connected` : "")}
+				{item("general", "General", <SlidersIcon />)}
+				{item(
+					"models",
+					"Models and logins",
+					<KeyIcon />,
+					undefined,
+					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
+				)}
 				<div className="set-nav-head">Apps</div>
 				{APP_IDS.map((id) =>
-					item(id, THEMES[id].name, THEMES[id].accent, errors[id] ? `${errors[id]} ${errors[id] === 1 ? "error" : "errors"}` : ""),
+					item(
+						id,
+						THEMES[id].name,
+						<AppIcon app={id} size={13} />,
+						THEMES[id].accent,
+						errors[id] ? (
+							<span className="s-nav-meta error" title={`${errors[id]} extension failed to load`}>
+								{errors[id]} {errors[id] === 1 ? "error" : "errors"}
+							</span>
+						) : undefined,
+					),
 				)}
-				<div className="set-nav-head" />
-				{item("about", "About", "#8B8D97")}
+				<span style={{ flex: 1 }} />
+				{item("about", "About", <InfoIcon />)}
 			</nav>
 			<div className="workspace">
 				<main className="card set-card">

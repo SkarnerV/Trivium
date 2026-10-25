@@ -62,7 +62,7 @@ export function ModelSelect({
 				options={options}
 				variant={variant}
 				align={align}
-				placeholder={emptyLabel ?? "No model"}
+				placeholder={emptyLabel ?? "Choose a model"}
 				onChange={(key) => {
 					const next = models.find((m) => m.key === key);
 					onChange(key || undefined, levelFor(next, level));

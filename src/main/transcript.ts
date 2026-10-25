@@ -31,6 +31,7 @@ interface ToolState {
 interface RunState {
 	id: string;
 	prompt: string;
+	attachments?: Run["attachments"];
 	segments: Segment[];
 	status: Run["status"];
 	startedAt?: number;
@@ -47,6 +48,21 @@ function textOf(content: unknown): string {
 		.filter((part): part is { type: "text"; text: string } => part?.type === "text" && typeof part.text === "string")
 		.map((part) => part.text)
 		.join("");
+}
+
+/**
+ * Splits the <file> tags pi's CLI and Trivium put in front of a prompt from the text the user typed.
+ * Text files have their content on the following lines; images have an empty tag or a short note.
+ */
+function splitAttachments(text: string): { prompt: string; attachments?: Run["attachments"] } {
+	const attachments: NonNullable<Run["attachments"]> = [];
+	let rest = text;
+	for (let match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest); match; match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest)) {
+		const name = match[1]!.split(/[\\/]/).pop() || match[1]!;
+		attachments.push({ name, kind: match[2]!.startsWith("\n") ? "file" : "image" });
+		rest = rest.slice(match[0].length);
+	}
+	return attachments.length ? { prompt: rest, attachments } : { prompt: text };
 }
 
 function timestampOf(message: AgentMessage): number | undefined {
@@ -229,7 +245,7 @@ export class RunTracker {
 			}
 			this.runs.push({
 				id: `r${this.runs.length}`,
-				prompt: textOf(message.content),
+				...splitAttachments(textOf(message.content)),
 				segments: [],
 				status: live ? "running" : "done",
 				startedAt: live ? Date.now() : timestamp,
@@ -328,6 +344,7 @@ export class RunTracker {
 		return {
 			id: run.id,
 			prompt: run.prompt,
+			attachments: run.attachments,
 			steps,
 			answer,
 			status: run.status,

@@ -1,8 +1,9 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
-import { CloseIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
-import { attempt, getState, setState, trivium } from "../store.ts";
+import { CloseIcon, PaperclipIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
+import { attempt, getState, setState, trivium, useStore } from "../store.ts";
+import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 
@@ -128,6 +129,14 @@ export function Composer({ view }: { view: SessionView }) {
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
 	const menu = useCommandMenu(view.path, text, setText);
+	const files = useAttachments();
+	const [dragging, setDragging] = useState(false);
+	const models = useStore((s) => s.models);
+	const model = models.find((m) => m.key === view.model);
+	const imageWarning =
+		model && !model.images && files.items.some((item) => item.kind === "image")
+			? `${model.name} can't read images. Pick another model to send them.`
+			: undefined;
 
 	useLayoutEffect(() => {
 		const area = ref.current;
@@ -142,10 +151,15 @@ export function Composer({ view }: { view: SessionView }) {
 
 	const send = async (mode: "prompt" | "steer" | "followUp") => {
 		const message = text.trim();
-		if (!message) return;
+		const attached = files.items;
+		if (!message && !attached.length) return;
 		setText("");
-		const result = await attempt(() => trivium.send(view.path, message, mode).then(() => true));
-		if (!result) setText(message);
+		const ids = files.takeIds();
+		const result = await attempt(() => trivium.send(view.path, message, mode, ids).then(() => true));
+		if (!result) {
+			setText(message);
+			files.restore(attached);
+		}
 	};
 
 	const stop = () => void attempt(() => trivium.abort(view.path));
@@ -177,7 +191,23 @@ export function Composer({ view }: { view: SessionView }) {
 						}}
 					/>
 				)}
-				<div className="composer">
+				<div
+					className={`composer${dragging ? " dropping" : ""}`}
+					onDragOver={(event) => {
+						if (!event.dataTransfer.types.includes("Files")) return;
+						event.preventDefault();
+						setDragging(true);
+					}}
+					onDragLeave={(event) => {
+						if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);
+					}}
+					onDrop={(event) => {
+						event.preventDefault();
+						setDragging(false);
+						files.addFiles([...event.dataTransfer.files]);
+					}}
+				>
+					<AttachmentChips items={files.items} pending={files.pending} warning={imageWarning} onRemove={files.remove} />
 					<label style={{ display: "block" }}>
 						<span className="sr-only">Message</span>
 						<textarea
@@ -186,10 +216,19 @@ export function Composer({ view }: { view: SessionView }) {
 							value={text}
 							placeholder={running ? "Message to steer the current run" : "Ask for the next change, or type / for commands"}
 							onChange={(event) => setText(event.target.value)}
+							onPaste={(event) => {
+								const pasted = [...event.clipboardData.files];
+								if (!pasted.length) return;
+								event.preventDefault();
+								files.addFiles(pasted);
+							}}
 							onKeyDown={onKeyDown}
 						/>
 					</label>
 					<div className="composer-bar">
+						<button type="button" className="icon-btn attach-btn" aria-label="Attach files" title="Attach files or images" onClick={files.pick}>
+							<PaperclipIcon />
+						</button>
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />
 						{running ? (
@@ -201,7 +240,7 @@ export function Composer({ view }: { view: SessionView }) {
 								type="button"
 								className="round-btn"
 								aria-label="Send"
-								disabled={!text.trim()}
+								disabled={!text.trim() && !files.items.length}
 								onClick={() => void send("prompt")}
 							>
 								<SendIcon />

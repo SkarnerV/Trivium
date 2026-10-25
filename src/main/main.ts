@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, Notification, shell } from "electron";
-import type { AppId, TriviumSettings, DialogAnswer, HostEvent, NewSessionInput } from "../shared/protocol.ts";
+import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
+import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
@@ -50,6 +51,7 @@ const host = new SessionHost({
 	settings,
 	onDone: (path, title) => alert("done", path, title),
 });
+const attachments = new AttachmentStore();
 const login = new LoginFlow(
 	(event) => send({ type: "login", event }),
 	(url) => void shell.openExternal(url),
@@ -76,9 +78,20 @@ function registerIpc(): void {
 	});
 	handle("trivium:openSession", (path: string) => host.openSession(path));
 	handle("trivium:newSession", (input: NewSessionInput) => host.newSession(input));
-	handle("trivium:send", (path: string, text: string, mode: "prompt" | "steer" | "followUp") =>
-		host.send(path, text, mode),
+	handle("trivium:send", async (path: string, text: string, mode: "prompt" | "steer" | "followUp", ids?: string[]) => {
+		await host.send(path, text, mode, ids?.length ? attachments.build(ids) : undefined);
+		if (ids?.length) attachments.drop(ids);
+	});
+	handle("trivium:pickAttachments", async () => {
+		const result = await dialog.showOpenDialog(window!, { title: "Attach files", properties: ["openFile", "multiSelections"] });
+		return result.canceled ? [] : attachments.fromPaths(result.filePaths);
+	});
+	handle("trivium:attachPaths", (paths: string[]) => attachments.fromPaths(paths));
+	handle("trivium:attachImageData", (name: string, mimeType: string, base64: string) =>
+		attachments.fromImageData(name, mimeType, base64),
 	);
+	handle("trivium:dropAttachments", (ids: string[]) => attachments.drop(ids));
+	handle("trivium:answerTrust", (id: string, choice: TrustChoice) => host.answerTrust(id, choice));
 	handle("trivium:abort", (path: string) => host.abort(path));
 	handle("trivium:commands", (path: string) => host.commands(path));
 	handle("trivium:completeCommand", (path: string, name: string, prefix: string) => host.completeCommand(path, name, prefix));

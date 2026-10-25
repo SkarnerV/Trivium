@@ -7,7 +7,7 @@ import { panelFor } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { ReviewPanel } from "./ReviewPanel.tsx";
-import { ConfirmDialog, NewSessionDialog, SearchOverlay } from "./Overlays.tsx";
+import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./Overlays.tsx";
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
@@ -116,6 +116,7 @@ export function App() {
 			{overlay === "new" && <NewSessionDialog />}
 			{overlay === "search" && <SearchOverlay />}
 			<ConfirmDialog />
+			<TrustDialog />
 			<Toasts />
 		</div>
 	);

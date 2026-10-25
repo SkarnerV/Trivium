@@ -23,7 +23,31 @@ export interface ModelOption {
 	name: string;
 	reasoning: boolean;
 	thinkingLevels: string[];
+	/** The model accepts images. */
+	images: boolean;
 }
+
+/** An attachment waiting in the message box. Its content stays in the main process until sent. */
+export interface AttachmentInfo {
+	id: string;
+	name: string;
+	kind: "image" | "file";
+	size: number;
+	/** A data URL, for images. */
+	preview?: string;
+	/** Something worth knowing, such as "Resized to 1568×1045". */
+	note?: string;
+}
+
+/** A project asking to load its own .pi settings and resources. */
+export interface TrustRequest {
+	id: string;
+	cwd: string;
+	/** What the project's .pi folder contains, such as "extensions" or "mcp.json". */
+	resources: string[];
+}
+
+export type TrustChoice = "trust" | "once" | "never";
 
 export type StepStatus = "running" | "done" | "error";
 
@@ -43,6 +67,8 @@ export interface Step {
 export interface Run {
 	id: string;
 	prompt: string;
+	/** Files and images sent with the prompt. */
+	attachments?: { name: string; kind: "image" | "file" }[];
 	steps: Step[];
 	/** Assistant text after the last tool call: the run's answer. */
 	answer: string;
@@ -138,7 +164,9 @@ export type HostEvent =
 	| { type: "notice"; notice: Notice }
 	| { type: "login"; event: LoginEvent }
 	| { type: "focus_session"; path: string }
-	| { type: "unloaded"; paths: string[] };
+	| { type: "unloaded"; paths: string[] }
+	| { type: "trust"; request: TrustRequest }
+	| { type: "trust_closed"; id: string };
 
 export interface NewSessionInput {
 	app: AppId;
@@ -262,7 +290,15 @@ export interface TriviumApi {
 	newSession(input: NewSessionInput): Promise<SessionView>;
 	/** Moves session files to the Trash. Returns the paths that were deleted. */
 	deleteSessions(paths: string[]): Promise<string[]>;
-	send(path: string, text: string, mode: "prompt" | "steer" | "followUp"): Promise<void>;
+	send(path: string, text: string, mode: "prompt" | "steer" | "followUp", attachments?: string[]): Promise<void>;
+	/** Shows the file picker and prepares what was chosen. */
+	pickAttachments(): Promise<AttachmentInfo[]>;
+	attachPaths(paths: string[]): Promise<AttachmentInfo[]>;
+	attachImageData(name: string, mimeType: string, base64: string): Promise<AttachmentInfo>;
+	dropAttachments(ids: string[]): Promise<void>;
+	/** The file path behind a dropped File, or "" when it has none. Synchronous; runs in the preload. */
+	pathForFile(file: File): string;
+	answerTrust(id: string, choice: TrustChoice): Promise<void>;
 	abort(path: string): Promise<void>;
 	commands(path: string): Promise<SlashCommand[]>;
 	/** Argument suggestions for `/name prefix`, or an empty list. */

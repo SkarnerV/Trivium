@@ -115,6 +115,24 @@ export const InfoIcon = (p: IconProps) => (
 		<path d="M12 8h.01" />
 	</Svg>
 );
+export const PaperclipIcon = (p: IconProps) => (
+	<Svg size={16} {...p}>
+		<path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />
+	</Svg>
+);
+export const ImageIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<rect x="3" y="4" width="18" height="16" rx="2.5" />
+		<circle cx="9" cy="10" r="1.6" />
+		<path d="m21 16-5-5-9 9" />
+	</Svg>
+);
+export const FileIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+		<path d="M14 3v5h5" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />

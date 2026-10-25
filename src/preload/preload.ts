@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { TriviumApi, HostEvent } from "../shared/protocol.ts";
 
 const call =
@@ -15,6 +15,18 @@ const api: TriviumApi = {
 	openSession: call("openSession") as TriviumApi["openSession"],
 	newSession: call("newSession") as TriviumApi["newSession"],
 	deleteSessions: call("deleteSessions") as TriviumApi["deleteSessions"],
+	pickAttachments: call("pickAttachments") as TriviumApi["pickAttachments"],
+	attachPaths: call("attachPaths") as TriviumApi["attachPaths"],
+	attachImageData: call("attachImageData") as TriviumApi["attachImageData"],
+	dropAttachments: call("dropAttachments") as TriviumApi["dropAttachments"],
+	answerTrust: call("answerTrust") as TriviumApi["answerTrust"],
+	pathForFile: (file) => {
+		try {
+			return webUtils.getPathForFile(file);
+		} catch {
+			return "";
+		}
+	},
 	send: call("send") as TriviumApi["send"],
 	abort: call("abort") as TriviumApi["abort"],
 	commands: call("commands") as TriviumApi["commands"],

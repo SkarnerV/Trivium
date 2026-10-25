@@ -4,7 +4,7 @@ import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { getSupportedThinkingLevels, type ImageContent } from "@earendil-works/pi-ai";
 import {
 	type AgentSession,
 	type AgentSessionEvent,
@@ -13,6 +13,8 @@ import {
 	createMcpExtension,
 	createToolSearchExtension,
 	type Extension,
+	hasTrustRequiringProjectResources,
+	ProjectTrustStore,
 	type InlineExtension,
 	DefaultResourceLoader,
 	getAgentDir,
@@ -36,6 +38,7 @@ import type {
 	SessionSummary,
 	SessionView,
 	SlashCommand,
+	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { profileFor, profileInfo, triviumDir } from "./apps.ts";
@@ -131,6 +134,12 @@ export class SessionHost {
 	private readonly settings: SettingsStore;
 	private readonly onDone: (path: string, title: string) => void;
 	private idleTimer: ReturnType<typeof setInterval> | undefined;
+	private trustStore!: ProjectTrustStore;
+	/** Decisions made for this run of the app only. */
+	private sessionTrust = new Map<string, boolean>();
+	/** One question per project, shared by sessions that start while it is open. */
+	private trustAsks = new Map<string, Promise<boolean>>();
+	private trustAnswers = new Map<string, { cwd: string; resolve: (choice: TrustChoice | undefined) => void }>();
 
 	constructor(options: {
 		emit: (event: HostEvent) => void;
@@ -153,6 +162,7 @@ export class SessionHost {
 
 	async init(): Promise<void> {
 		this.modelRuntime = await ModelRuntime.create();
+		this.trustStore = new ProjectTrustStore(this.agentDir);
 		this.idleTimer = setInterval(() => this.unloadIdle(), 60_000);
 		if (existsSync(this.indexFile)) {
 			try {
@@ -217,6 +227,7 @@ export class SessionHost {
 			name: model.name ?? model.id,
 			reasoning: Boolean((model as { reasoning?: boolean }).reasoning),
 			thinkingLevels: getSupportedThinkingLevels(model as Parameters<typeof getSupportedThinkingLevels>[0]),
+			images: Boolean((model as { input?: string[] }).input?.includes("image")),
 		}));
 	}
 
@@ -246,23 +257,31 @@ export class SessionHost {
 		return this.view(live, []);
 	}
 
-	async send(path: string, text: string, mode: "prompt" | "steer" | "followUp"): Promise<void> {
+	async send(
+		path: string,
+		text: string,
+		mode: "prompt" | "steer" | "followUp",
+		attachments?: { prefix: string; images: ImageContent[] },
+	): Promise<void> {
 		const live = this.require(path);
 		const { session } = live;
-		if (text.startsWith("/")) {
+		if (text.startsWith("/") && !attachments?.prefix) {
 			this.runCommand(live, text, mode);
 			return;
 		}
+		// Attached files go in front of the message as <file> tags, like pi's CLI sends them.
+		const message = (attachments?.prefix ?? "") + text;
+		const images = attachments?.images.length ? attachments.images : undefined;
 		if (mode === "steer" || (mode === "prompt" && live.running)) {
-			await session.steer(text);
+			await session.steer(message, images);
 			return;
 		}
 		if (mode === "followUp") {
-			await session.followUp(text);
+			await session.followUp(message, images);
 			return;
 		}
 		// prompt() resolves when the run finishes, so the run continues in the background.
-		void session.prompt(text).catch((error: unknown) => {
+		void session.prompt(message, { images }).catch((error: unknown) => {
 			this.notice(error instanceof Error ? error.message : String(error), "error");
 		});
 	}
@@ -467,12 +486,54 @@ export class SessionHost {
 		return paths;
 	}
 
+	/**
+	 * Whether to load a project's own .pi settings, extensions, skills, prompts and MCP servers.
+	 * Follows pi's CLI: a decision saved in pi's trust.json, then the defaultProjectTrust setting,
+	 * then a question. Projects with nothing in .pi need no decision.
+	 */
+	private projectTrusted(cwd: string, ask: boolean): Promise<boolean> {
+		if (!hasTrustRequiringProjectResources(cwd)) return Promise.resolve(true);
+		const known = this.sessionTrust.get(cwd) ?? this.trustStore.get(cwd);
+		if (known !== null && known !== undefined) return Promise.resolve(known);
+		const fallback = SettingsManager.create(homedir(), this.agentDir).getDefaultProjectTrust();
+		if (fallback === "always") return Promise.resolve(true);
+		if (fallback === "never" || !ask) return Promise.resolve(false);
+		const pending = this.trustAsks.get(cwd);
+		if (pending) return pending;
+		const id = randomUUID();
+		const asked = new Promise<boolean>((resolve) => {
+			this.trustAnswers.set(id, {
+				cwd,
+				resolve: (choice) => {
+					this.trustAnswers.delete(id);
+					this.trustAsks.delete(cwd);
+					this.emit({ type: "trust_closed", id });
+					if (choice === "trust") this.trustStore.set(cwd, true);
+					else if (choice === "never") this.trustStore.set(cwd, false);
+					else this.sessionTrust.set(cwd, choice === "once");
+					resolve(choice === "trust" || choice === "once");
+				},
+			});
+		});
+		this.trustAsks.set(cwd, asked);
+		const resources = ["settings.json", "mcp.json", "extensions", "skills", "prompts", "themes"].filter((entry) =>
+			existsSync(join(cwd, ".pi", entry)),
+		);
+		this.emit({ type: "trust", request: { id, cwd, resources } });
+		return asked;
+	}
+
+	answerTrust(id: string, choice: TrustChoice): void {
+		this.trustAnswers.get(id)?.resolve(choice);
+	}
+
 	/** What a new session in this app would load, with every extension pi finds, on or off. */
 	async describeApp(app: AppId): Promise<AppDetails> {
 		const projectDir = this.summaries.find((summary) => summary.app === app && summary.cwd)?.cwd ?? homedir();
-		const settingsManager = SettingsManager.create(projectDir, this.agentDir);
+		const settingsManager = SettingsManager.create(projectDir, this.agentDir, { projectTrusted: false });
 		const loader = this.resourceLoader(app, projectDir, settingsManager, { keepDisabled: true });
-		await loader.reload();
+		// Settings shows what would load without asking; an undecided project counts as untrusted.
+		await loader.reload({ resolveProjectTrust: () => this.projectTrusted(projectDir, false) });
 		const profile = profileInfo(app);
 		const appSettings = this.settings.app(app);
 		const disabled = new Set(appSettings.disabled);
@@ -528,6 +589,7 @@ export class SessionHost {
 
 	dispose(): void {
 		if (this.idleTimer) clearInterval(this.idleTimer);
+		for (const pending of [...this.trustAnswers.values()]) pending.resolve(undefined);
 		this.broker.cancelAll();
 		for (const live of this.live.values()) {
 			live.unsubscribe();
@@ -577,7 +639,8 @@ export class SessionHost {
 
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
-		const settingsManager = SettingsManager.create(cwd, this.agentDir);
+		// Untrusted until the reload hook below decides: project settings must not apply before that.
+		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
 		const changes = new ChangeTracker(join(triviumDir, "changes", `${sessionManager.getSessionId()}.json`), cwd);
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
 			factories: [
@@ -592,7 +655,8 @@ export class SessionHost {
 				},
 			],
 		});
-		await resourceLoader.reload();
+		// Global extensions load first; project resources only once the project is trusted.
+		await resourceLoader.reload({ resolveProjectTrust: () => this.projectTrusted(cwd, true) });
 		// A new session starts on the app's model when one is set; a reopened session keeps its own.
 		const appSettings = this.settings.app(app);
 		const slash = appSettings.model?.indexOf("/") ?? -1;
@@ -727,7 +791,9 @@ export class SessionHost {
 			title: this.titleFor(live),
 			runs: live.tracker.all(),
 			running: live.running,
-			model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,
+			// pi uses an "unknown" placeholder when no model is configured; show that as no model.
+			model:
+				session.model && session.model.provider !== "unknown" ? `${session.model.provider}/${session.model.id}` : undefined,
 			thinkingLevel: session.thinkingLevel,
 			context: this.contextOf(live),
 			queue: this.queueOf(live),

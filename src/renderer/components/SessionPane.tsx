@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import type { Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, PlusIcon } from "../icons.tsx";
+import { AppIcon, FileIcon, ImageIcon, PlusIcon } from "../icons.tsx";
 import { setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -14,7 +14,17 @@ import { Steps } from "./Steps.tsx";
 function RunBlock({ run, live }: { run: Run; live: boolean }) {
 	return (
 		<div className="run">
-			{run.prompt && <div className="bubble">{run.prompt}</div>}
+			{run.attachments?.length ? (
+				<div className="bubble-files">
+					{run.attachments.map((file, index) => (
+						<span key={index} className="bubble-file">
+							{file.kind === "image" ? <ImageIcon size={13} /> : <FileIcon size={13} />}
+							{file.name}
+						</span>
+					))}
+				</div>
+			) : null}
+			{run.prompt.trim() && <div className="bubble">{run.prompt.trim()}</div>}
 			<div className="agent">
 				<Steps run={run} live={live} />
 				{run.answer && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AppProfileInfo, SessionSummary } from "../../shared/protocol.ts";
+import type { AppProfileInfo, SessionSummary, TrustChoice } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
 import { AppIcon, Chevron, CloseIcon, FolderIcon } from "../icons.tsx";
 import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
@@ -228,6 +228,60 @@ export function ConfirmDialog() {
 					</button>
 					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
 						{request.confirmLabel}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/** pi's project trust question: whether to load the project's own .pi settings and code. */
+export function TrustDialog() {
+	const request = useStore((s) => s.trust[0]);
+	const trustButton = useRef<HTMLButtonElement>(null);
+	useEffect(() => trustButton.current?.focus(), [request?.id]);
+	if (!request) return null;
+	const answer = (choice: TrustChoice) => {
+		setState((s) => ({ trust: s.trust.filter((item) => item.id !== request.id) }));
+		void attempt(() => trivium.answerTrust(request.id, choice));
+	};
+	return (
+		<div className="scrim" onKeyDown={(event) => event.key === "Escape" && answer("never")}>
+			<div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="trust-title" style={{ width: 500, gap: 16 }}>
+				<div className="modal-head">
+					<span className="trust-icon">
+						<FolderIcon size={16} />
+					</span>
+					<h2 id="trust-title">Trust {baseName(request.cwd)}?</h2>
+				</div>
+				<p className="set-sub" style={{ margin: 0 }}>
+					This project has its own pi setup. Trusting it lets its settings apply and its extensions, MCP servers
+					and packages run on your computer. Only trust projects you know.
+				</p>
+				<div className="trust-box">
+					<span className="mono trust-path" title={request.cwd}>
+						{shortPath(request.cwd)}/.pi
+					</span>
+					{request.resources.length > 0 && (
+						<div className="s-chips">
+							{request.resources.map((resource) => (
+								<span key={resource} className="s-chip mono">
+									{resource}
+								</span>
+							))}
+						</div>
+					)}
+				</div>
+				<p className="trust-note">Saved in pi&apos;s trust list, so the pi CLI remembers it too. &ldquo;Just this time&rdquo; asks again next launch.</p>
+				<div className="modal-foot">
+					<button type="button" className="btn ghost" onClick={() => answer("never")}>
+						Don&apos;t trust
+					</button>
+					<button type="button" className="btn" onClick={() => answer("once")}>
+						Just this time
+					</button>
+					<button ref={trustButton} type="button" className="btn primary" onClick={() => answer("trust")}>
+						Trust
 					</button>
 				</div>
 			</div>

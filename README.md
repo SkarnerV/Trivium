@@ -57,6 +57,14 @@ you which app is still busy.
   <img src="docs/screenshots/ask.png" alt="A run paused on the agent's question, with numbered answers" width="85%">
 </p>
 
+### Attachments
+
+Attach files with the paperclip, drag them onto the message box, or paste a screenshot. Images are converted and resized the way pi's CLI does it; text files go in as `<file>` blocks. The conversation shows what was attached, and the message box warns when the chosen model can't read images.
+
+### Project trust
+
+A project with its own `.pi` folder (settings, extensions, skills, prompts, MCP servers) can run code. Trivium asks before loading it, like pi's CLI: **Trust**, **Just this time** or **Don't trust**. Decisions go to pi's `trust.json`, so the CLI remembers them too, and pi's `defaultProjectTrust` setting is respected.
+
 ### Commands and MCP
 
 - **Type `/` for commands.** The list shows extension commands, prompt templates and skills, plus Trivium's `/compact [instructions]` and `/name <title>`. Commands that offer suggestions, such as `/mcp login <server>`, complete their arguments too.

@@ -8,6 +8,7 @@ import type {
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
+	TrustRequest,
 	Notice,
 	SessionSummary,
 	SessionView,
@@ -42,6 +43,8 @@ export interface State {
 	settings?: TriviumSettings;
 	/** Text to put in a session's message box when it next shows. */
 	drafts: Record<string, string>;
+	/** Projects asking to load their .pi resources, oldest first. */
+	trust: TrustRequest[];
 	/** A question waiting for Confirm or Cancel. */
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */
@@ -83,6 +86,7 @@ let state: State = {
 	peek: false,
 	changesHidden: {},
 	drafts: {},
+	trust: [],
 	page: "main",
 	settingsSection: "general",
 	overlay: null,
@@ -201,6 +205,12 @@ function handleEvent(event: HostEvent): void {
 			break;
 		case "login":
 			setState((s) => (s.login ? { login: { ...s.login, events: [...s.login.events, event.event] } } : {}));
+			break;
+		case "trust":
+			setState((s) => ({ trust: [...s.trust, event.request] }));
+			break;
+		case "trust_closed":
+			setState((s) => ({ trust: s.trust.filter((request) => request.id !== event.id) }));
 			break;
 		case "focus_session":
 			setState({ page: "main" });

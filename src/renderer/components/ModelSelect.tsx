@@ -4,14 +4,14 @@ import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 
 const EFFORT_LABELS: Record<string, string> = {
 	off: "No thinking",
-	minimal: "Minimal effort",
-	low: "Low effort",
-	medium: "Medium effort",
-	high: "High effort",
-	xhigh: "Extra high effort",
+	minimal: "Minimal",
+	low: "Low",
+	medium: "Medium",
+	high: "High",
+	xhigh: "Extra high",
 };
 
-const effortLabel = (level: string) => EFFORT_LABELS[level] ?? `${level} effort`;
+const effortLabel = (level: string) => EFFORT_LABELS[level] ?? level;
 
 function levelsOf(model: ModelOption | undefined): string[] {
 	return model?.reasoning && model.thinkingLevels.length ? model.thinkingLevels : [];

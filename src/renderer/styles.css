@@ -80,6 +80,74 @@ button:disabled {
 	transition: background 0.2s;
 }
 
+.window-titlebar {
+	display: none;
+}
+
+.windows .shell {
+	position: relative;
+	padding-top: env(titlebar-area-height, 36px);
+}
+
+.windows .window-titlebar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 0 0 16px;
+	color: var(--secondary);
+	font-size: 12px;
+	font-weight: 500;
+	user-select: none;
+	z-index: 20;
+}
+
+.window-controls {
+	margin-left: auto;
+	align-self: stretch;
+	display: flex;
+	-webkit-app-region: no-drag;
+}
+
+.window-controls button {
+	width: 46px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--secondary);
+}
+
+.window-controls button:hover {
+	background: rgba(19, 20, 43, 0.08);
+}
+
+.window-controls button:active {
+	background: rgba(19, 20, 43, 0.14);
+}
+
+.window-controls .close:hover {
+	background: #c42b1c;
+	color: #fff;
+}
+
+.window-controls .close:active {
+	background: #b1271b;
+	color: #fff;
+}
+
+.window-mark {
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+}
+
 .drag {
 	-webkit-app-region: drag;
 }
@@ -162,22 +230,9 @@ button:disabled {
 	padding: 0 4px;
 }
 
-.logo {
-	width: 28px;
-	height: 28px;
-	flex: none;
-	display: grid;
-	place-items: center;
-	border-radius: 8px;
-	background: var(--ink);
-	color: #fff;
-	font-weight: 600;
-	font-size: 15px;
-}
-
 .app-name {
 	font-weight: 600;
-	font-size: 18px;
+	font-size: 20px;
 	letter-spacing: -0.02em;
 }
 
@@ -275,7 +330,7 @@ button:disabled {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 18px;
+	gap: 12px;
 	margin-right: -6px;
 	padding-right: 6px;
 }
@@ -283,7 +338,7 @@ button:disabled {
 .project {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: 2px;
 }
 
 .project-head {
@@ -291,7 +346,7 @@ button:disabled {
 	display: flex;
 	align-items: center;
 	gap: 2px;
-	min-height: 30px;
+	min-height: 32px;
 	margin-bottom: 2px;
 	padding-right: 4px;
 	border-radius: 8px;
@@ -375,8 +430,9 @@ button:disabled {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	min-height: 34px;
-	padding: 0 10px;
+	min-height: 36px;
+	/* Aligns sessions under the project name, not its icon. */
+	padding: 0 10px 0 33px;
 	border: 0;
 	border-radius: 9px;
 	background: transparent;

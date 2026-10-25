@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, Notification, shell } from "electron";
+import { appIconFilename } from "../shared/branding.ts";
 import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
@@ -15,7 +16,11 @@ import { SettingsStore } from "./settings.ts";
 
 const assets = fileURLToPath(new URL("./", import.meta.url));
 const page = pathToFileURL(join(assets, "index.html")).href;
+const appUserModelId = "com.coresmos.trivium";
 let window: BrowserWindow | undefined;
+
+app.setName("Trivium");
+if (process.platform === "win32") app.setAppUserModelId(appUserModelId);
 
 mkdirSync(triviumDir, { recursive: true });
 const settings = new SettingsStore(join(triviumDir, "settings.json"));
@@ -52,9 +57,12 @@ const host = new SessionHost({
 	onDone: (path, title) => alert("done", path, title),
 });
 const attachments = new AttachmentStore();
+// pi's login flow asks the host for this installation's device ID.
+const loginSettings = SettingsManager.create(homedir(), getAgentDir());
 const login = new LoginFlow(
 	(event) => send({ type: "login", event }),
 	(url) => void shell.openExternal(url),
+	() => loginSettings.getOrCreateDeviceId(),
 );
 
 /** Only the app's own page may call into the main process. */
@@ -67,7 +75,38 @@ function handle<T extends unknown[], R>(channel: string, fn: (...args: T) => R |
 	});
 }
 
+function setAppIcon(id: AppId): void {
+	if (!APP_IDS.includes(id)) throw new Error("Invalid app.");
+	const icon = join(assets, appIconFilename(id, process.platform === "win32" ? "ico" : "png"));
+	if (process.platform === "darwin") app.dock?.setIcon(icon);
+	else window?.setIcon(icon);
+	if (process.platform === "win32") {
+		window?.setAppDetails({
+			appId: appUserModelId,
+			appIconPath: icon,
+			appIconIndex: 0,
+			relaunchCommand: app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
+			relaunchDisplayName: "Trivium",
+		});
+	}
+}
+
 function registerIpc(): void {
+	handle("trivium:setWindowIcon", setAppIcon);
+	handle("trivium:setWindowChrome", (color: string) => {
+		if (process.platform !== "win32") return;
+		if (typeof color !== "string" || !/^#[\da-f]{6}$/i.test(color)) throw new Error("Invalid window color.");
+		window?.setBackgroundColor(color);
+	});
+	handle("trivium:windowMinimize", () => window?.minimize());
+	handle("trivium:windowToggleMaximize", () => {
+		if (!window) return false;
+		if (window.isMaximized()) window.unmaximize();
+		else window.maximize();
+		return window.isMaximized();
+	});
+	handle("trivium:windowClose", () => window?.close());
+	handle("trivium:windowIsMaximized", () => window?.isMaximized() ?? false);
 	handle("trivium:listSessions", () => host.listSessions());
 	handle("trivium:listModels", () => host.listModels());
 	handle("trivium:profiles", () => APP_IDS.map((id: AppId) => profileInfo(id)));
@@ -188,7 +227,12 @@ function createWindow(): void {
 		minWidth: 900,
 		minHeight: 600,
 		backgroundColor: "#EEEFFA",
+		icon: join(assets, appIconFilename("code", process.platform === "win32" ? "ico" : "png")),
 		titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+		...(process.platform === "win32" ? {
+			frame: false,
+			autoHideMenuBar: true,
+		} : {}),
 		trafficLightPosition: { x: 16, y: 18 },
 		show: false,
 		webPreferences: {
@@ -198,6 +242,7 @@ function createWindow(): void {
 			nodeIntegration: false,
 		},
 	});
+	setAppIcon("code");
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		if (/^https?:/.test(url)) void shell.openExternal(url);
 		return { action: "deny" };
@@ -206,6 +251,9 @@ function createWindow(): void {
 		if (url !== page) event.preventDefault();
 	});
 	window.once("ready-to-show", () => window?.show());
+	// The custom title bar's maximize button reflects the window state.
+	window.on("maximize", () => window?.webContents.send("trivium:maximize-changed", true));
+	window.on("unmaximize", () => window?.webContents.send("trivium:maximize-changed", false));
 	window.webContents.on("did-finish-load", () => window?.webContents.setZoomFactor(settings.get().textSize));
 	// Development aid: TRIVIUM_CAPTURE=/path/shot.png saves a screenshot after the first render.
 	const capture = process.env.TRIVIUM_CAPTURE;

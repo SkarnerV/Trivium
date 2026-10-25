@@ -281,6 +281,14 @@ export interface CompletionItem {
 }
 
 export interface TriviumApi {
+	setWindowIcon(app: AppId): Promise<void>;
+	setWindowChrome(color: string): Promise<void>;
+	windowMinimize(): Promise<void>;
+	/** Maximizes the window, or restores it when already maximized. Resolves to the resulting state. */
+	windowToggleMaximize(): Promise<boolean>;
+	windowClose(): Promise<void>;
+	windowIsMaximized(): Promise<boolean>;
+	onWindowMaximized(listener: (maximized: boolean) => void): () => void;
 	listSessions(): Promise<SessionSummary[]>;
 	listModels(): Promise<ModelOption[]>;
 	profiles(): Promise<AppProfileInfo[]>;

@@ -55,10 +55,12 @@ export class LoginFlow {
 	private abort: AbortController | undefined;
 	private readonly emit: (event: LoginEvent) => void;
 	private readonly openUrl: (url: string) => void;
+	private readonly getDeviceId: () => string;
 
-	constructor(emit: (event: LoginEvent) => void, openUrl: (url: string) => void) {
+	constructor(emit: (event: LoginEvent) => void, openUrl: (url: string) => void, getDeviceId: () => string) {
 		this.emit = emit;
 		this.openUrl = openUrl;
+		this.getDeviceId = getDeviceId;
 	}
 
 	async start(runtime: ModelRuntime, providerId: string, type: "api_key" | "oauth"): Promise<void> {
@@ -66,11 +68,16 @@ export class LoginFlow {
 		const abort = new AbortController();
 		this.abort = abort;
 		try {
-			await runtime.login(providerId, type, {
-				signal: abort.signal,
-				prompt: (prompt) => this.ask(prompt, abort.signal),
-				notify: (event) => this.notify(event),
-			});
+			await runtime.login(
+				providerId,
+				type,
+				{
+					signal: abort.signal,
+					prompt: (prompt) => this.ask(prompt, abort.signal),
+					notify: (event) => this.notify(event),
+				},
+				{ getDeviceId: this.getDeviceId },
+			);
 			this.emit({ type: "done", ok: true });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);

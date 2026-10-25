@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { appIconFilename } from "../../shared/branding.ts";
+import type { AppId } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { CloseIcon } from "../icons.tsx";
-import { dismissNotice, getState, notify, openSettings, setState, switchApp, useStore } from "../store.ts";
+import { CloseIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon } from "../icons.tsx";
+import { dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
 import { panelFor } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
@@ -11,6 +13,41 @@ import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./O
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
+
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
+
+function WindowTitleBar({ app }: { app: AppId }) {
+	const [maximized, setMaximized] = useState(false);
+	useEffect(() => {
+		if (!IS_WINDOWS) return;
+		void trivium.windowIsMaximized().then(setMaximized);
+		return trivium.onWindowMaximized(setMaximized);
+	}, []);
+	return (
+		<header className="window-titlebar drag" aria-label="Trivium window">
+			<span className="window-mark" aria-hidden="true"><TriviumIcon app={app} size={18} /></span>
+			<span>Trivium</span>
+			{IS_WINDOWS && (
+				<div className="window-controls">
+					<button type="button" aria-label="Minimize" title="Minimize" onClick={() => void trivium.windowMinimize()}>
+						<MinusIcon size={13} />
+					</button>
+					<button
+						type="button"
+						aria-label={maximized ? "Restore" : "Maximize"}
+						title={maximized ? "Restore" : "Maximize"}
+						onClick={() => void trivium.windowToggleMaximize()}
+					>
+						{maximized ? <RestoreIcon size={12} /> : <MaximizeIcon size={12} />}
+					</button>
+					<button type="button" className="close" aria-label="Close" title="Close" onClick={() => void trivium.windowClose()}>
+						<CloseIcon size={14} />
+					</button>
+				</div>
+			)}
+		</header>
+	);
+}
 
 function Toasts() {
 	const notices = useStore((s) => s.notices);
@@ -89,13 +126,23 @@ export function App() {
 	useShortcuts();
 	useDialogAlerts();
 	const sectionApp = section === "code" || section === "research" || section === "write" ? section : undefined;
+	const iconApp = page === "settings" ? sectionApp ?? "code" : app;
 	const vars = page === "settings" ? themeVars(sectionApp ?? NEUTRAL) : themeVars(app);
 	useEffect(() => {
+		const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+		if (favicon) favicon.href = appIconFilename(iconApp);
+		void trivium.setWindowIcon(iconApp).catch(console.error);
+	}, [iconApp]);
+	useEffect(() => {
 		document.body.style.background = vars["--chrome"]!;
+		if (document.documentElement.classList.contains("windows")) {
+			void trivium.setWindowChrome(vars["--chrome"]!).catch(console.error);
+		}
 	}, [vars["--chrome"]]);
 	if (page === "settings") {
 		return (
 			<div className="shell" style={vars}>
+				<WindowTitleBar app={iconApp} />
 				<SettingsPage />
 				<Toasts />
 			</div>
@@ -103,6 +150,7 @@ export function App() {
 	}
 	return (
 		<div className={`shell${folded ? " folded" : ""}`} style={vars}>
+			<WindowTitleBar app={iconApp} />
 			{folded ? <Rail /> : <Sidebar />}
 			<div className="workspace">
 				<div className="card">

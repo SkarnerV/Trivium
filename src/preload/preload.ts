@@ -7,6 +7,12 @@ const call =
 		ipcRenderer.invoke(`trivium:${channel}`, ...args);
 
 const api: TriviumApi = {
+	setWindowIcon: call("setWindowIcon") as TriviumApi["setWindowIcon"],
+	setWindowChrome: call("setWindowChrome") as TriviumApi["setWindowChrome"],
+	windowMinimize: call("windowMinimize") as TriviumApi["windowMinimize"],
+	windowToggleMaximize: call("windowToggleMaximize") as TriviumApi["windowToggleMaximize"],
+	windowClose: call("windowClose") as TriviumApi["windowClose"],
+	windowIsMaximized: call("windowIsMaximized") as TriviumApi["windowIsMaximized"],
 	listSessions: call("listSessions") as TriviumApi["listSessions"],
 	listModels: call("listModels") as TriviumApi["listModels"],
 	profiles: call("profiles") as TriviumApi["profiles"],
@@ -57,6 +63,11 @@ const api: TriviumApi = {
 		const wrapped = (_event: unknown, payload: HostEvent) => listener(payload);
 		ipcRenderer.on("trivium:event", wrapped);
 		return () => ipcRenderer.removeListener("trivium:event", wrapped);
+	},
+	onWindowMaximized(listener) {
+		const wrapped = (_event: unknown, maximized: boolean) => listener(maximized);
+		ipcRenderer.on("trivium:maximize-changed", wrapped);
+		return () => ipcRenderer.removeListener("trivium:maximize-changed", wrapped);
 	},
 };
 

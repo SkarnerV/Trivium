@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { appIconFilename } from "../shared/branding.ts";
 import type { AppId } from "../shared/protocol.ts";
 
 function Svg({ size = 16, width = 2, children }: { size?: number; width?: number; children: ReactNode }) {
@@ -20,6 +21,10 @@ function Svg({ size = 16, width = 2, children }: { size?: number; width?: number
 }
 
 type IconProps = { size?: number; width?: number };
+
+export const TriviumIcon = ({ app = "code", size = 28 }: { app?: AppId; size?: number }) => (
+	<img src={appIconFilename(app)} width={size} height={size} alt="" draggable={false} />
+);
 
 export const CodeIcon = (p: IconProps) => (
 	<Svg width={2.4} {...p}>
@@ -61,6 +66,22 @@ export const CloseIcon = (p: IconProps) => (
 	<Svg width={2.4} {...p}>
 		<path d="M6 6l12 12" />
 		<path d="M18 6 6 18" />
+	</Svg>
+);
+export const MinusIcon = (p: IconProps) => (
+	<Svg size={13} {...p}>
+		<path d="M5 12h14" />
+	</Svg>
+);
+export const MaximizeIcon = (p: IconProps) => (
+	<Svg size={12} {...p}>
+		<rect x="5" y="5" width="14" height="14" rx="1.5" />
+	</Svg>
+);
+export const RestoreIcon = (p: IconProps) => (
+	<Svg size={12} {...p}>
+		<rect x="4.5" y="8" width="11.5" height="11.5" rx="1.5" />
+		<path d="M8 4.5h9.5A2 2 0 0 1 19.5 6.5V16" />
 	</Svg>
 );
 export const Chevron = ({ open, size = 12, down = false }: { open: boolean; size?: number; down?: boolean }) => (

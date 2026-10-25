@@ -210,9 +210,6 @@ export function Sidebar() {
 				</div>
 			)}
 			<div className="sb-head drag">
-				<span className="logo" aria-hidden="true" title="Logo placeholder">
-					π
-				</span>
 				<span className="app-name ellipsis">{THEMES[app].name}</span>
 				{!IS_MAC && (
 					<>
@@ -225,12 +222,10 @@ export function Sidebar() {
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "search" })}>
 					<SearchIcon />
 					<span className="label">Search</span>
-					<span className="kbd">⌘K</span>
 				</button>
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "new" })}>
 					<PlusIcon />
 					<span className="label">New session</span>
-					<span className="kbd">⌘N</span>
 				</button>
 			</div>
 			<div className="sb-sessions">
@@ -239,7 +234,6 @@ export function Sidebar() {
 			<button type="button" className="sb-row" onClick={() => openSettings()}>
 				<GearIcon />
 				<span className="label">Settings</span>
-				<span className="kbd">⌘,</span>
 			</button>
 		</nav>
 	);

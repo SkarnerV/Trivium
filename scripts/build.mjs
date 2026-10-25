@@ -38,4 +38,10 @@ await Promise.all([
 	}),
 	copyFile(`${root}src/renderer/index.html`, `${dist}index.html`),
 	copyFile(`${root}src/renderer/styles.css`, `${dist}styles.css`),
+	copyFile(`${root}src/assets/trivium-icon.png`, `${dist}trivium-icon.png`),
+	copyFile(`${root}src/assets/trivium-icon-research.png`, `${dist}trivium-icon-research.png`),
+	copyFile(`${root}src/assets/trivium-icon-write.png`, `${dist}trivium-icon-write.png`),
+	copyFile(`${root}src/assets/trivium-icon.ico`, `${dist}trivium-icon.ico`),
+	copyFile(`${root}src/assets/trivium-icon-research.ico`, `${dist}trivium-icon-research.ico`),
+	copyFile(`${root}src/assets/trivium-icon-write.ico`, `${dist}trivium-icon-write.ico`),
 ]);

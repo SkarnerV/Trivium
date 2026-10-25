@@ -57,6 +57,11 @@ you which app is still busy.
   <img src="docs/screenshots/ask.png" alt="A run paused on the agent's question, with numbered answers" width="85%">
 </p>
 
+### Commands and MCP
+
+- **Type `/` for commands.** The list shows extension commands, prompt templates and skills, plus Trivium's `/compact [instructions]` and `/name <title>`. Commands that offer suggestions, such as `/mcp login <server>`, complete their arguments too.
+- **MCP servers work like in the CLI.** Trivium loads pi's built-in MCP, codemode and tool search extensions, so servers from `~/.pi/agent/mcp.json` and a trusted project's `.pi/mcp.json` connect when a session starts. `/mcp` shows their status.
+
 ### Questions and approvals inline
 
 When an extension asks something (`select`, `confirm`, `input`, `editor`), the question appears
@@ -112,6 +117,7 @@ pinned Electron runtime.
 | `⌘\` | Fold or unfold the sidebar |
 | `⌘,` | Settings |
 | `↵` / `⌥↵` | Send (steers while a run is going) / queue a follow-up |
+| `/` | Commands, with suggestions; `tab` completes |
 | `esc` | Stop the run, dismiss a question, close a dialog |
 
 ## How it works

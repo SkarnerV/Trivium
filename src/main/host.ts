@@ -9,6 +9,9 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	createAgentSession,
+	createCodemodeExtension,
+	createMcpExtension,
+	createToolSearchExtension,
 	type Extension,
 	type InlineExtension,
 	DefaultResourceLoader,
@@ -20,6 +23,7 @@ import {
 import type {
 	AppDetails,
 	AppId,
+	CompletionItem,
 	ContextInfo,
 	ExtensionInfo,
 	ExtensionSource,
@@ -30,6 +34,7 @@ import type {
 	QueueInfo,
 	SessionSummary,
 	SessionView,
+	SlashCommand,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { profileFor, profileInfo, triviumDir } from "./apps.ts";
@@ -67,6 +72,32 @@ function extensionName(path: string): string {
 	const file = basename(path).replace(/\.(ts|js|mjs)$/, "");
 	return file === "index" ? basename(join(path, "..")) : file;
 }
+
+/**
+ * The extensions the pi CLI loads on its own: codemode, tool search and MCP. SDK sessions only get
+ * them when asked. Marked built-in and replaceable like the CLI's, so pi's `extensions` setting can
+ * turn them off and a third-party MCP extension can take over. Fresh per session, since each keeps
+ * its own connections.
+ */
+function builtinExtensions(): InlineExtension[] {
+	return [
+		{ name: "codemode", factory: createCodemodeExtension(), replaceable: true, builtin: true },
+		{ name: "tool-search", factory: createToolSearchExtension(), replaceable: true, builtin: true },
+		{ name: "mcp", factory: createMcpExtension(), replaceable: true, builtin: true },
+	];
+}
+
+/** Commands Trivium handles itself, because pi's SDK leaves them to the terminal UI. */
+const TRIVIUM_COMMANDS: SlashCommand[] = [
+	{
+		name: "compact",
+		description: "Summarize the conversation so far to free up context",
+		argumentHint: "[instructions]",
+		source: "trivium",
+		completes: false,
+	},
+	{ name: "name", description: "Rename this session", argumentHint: "<title>", source: "trivium", completes: false },
+];
 
 function registers(extension: Extension): string[] {
 	return [
@@ -217,6 +248,10 @@ export class SessionHost {
 	async send(path: string, text: string, mode: "prompt" | "steer" | "followUp"): Promise<void> {
 		const live = this.require(path);
 		const { session } = live;
+		if (text.startsWith("/")) {
+			this.runCommand(live, text, mode);
+			return;
+		}
 		if (mode === "steer" || (mode === "prompt" && live.running)) {
 			await session.steer(text);
 			return;
@@ -229,6 +264,81 @@ export class SessionHost {
 		void session.prompt(text).catch((error: unknown) => {
 			this.notice(error instanceof Error ? error.message : String(error), "error");
 		});
+	}
+
+	/**
+	 * Trivium's own commands run here. Everything else starting with "/" goes through prompt(),
+	 * which runs extension commands at once, even mid-run, and expands prompt templates and skills.
+	 * steer() would reject an extension command.
+	 */
+	private runCommand(live: Live, text: string, mode: "prompt" | "steer" | "followUp"): void {
+		const { session } = live;
+		const [, name = "", args = ""] = /^\/(\S*)\s*([\s\S]*)$/.exec(text) ?? [];
+		const fail = (error: unknown) => this.notice(error instanceof Error ? error.message : String(error), "error");
+		if (name === "compact") {
+			if (live.running) throw new Error("Wait for the run to finish, or stop it, before compacting.");
+			this.notice("Compacting the conversation…", "info");
+			void session
+				.compact(args.trim() || undefined)
+				.then(() => {
+					this.emitStatus(live);
+					this.notice("Conversation compacted", "info");
+				})
+				.catch(fail);
+			return;
+		}
+		if (name === "name") {
+			if (!args.trim()) throw new Error("Give the session a name: /name <title>");
+			session.setSessionName(args.trim());
+			return;
+		}
+		const options = live.running ? { streamingBehavior: mode === "followUp" ? ("followUp" as const) : ("steer" as const) } : undefined;
+		void session.prompt(text, options).catch(fail);
+	}
+
+	commands(path: string): SlashCommand[] {
+		const { session } = this.require(path);
+		const commands: SlashCommand[] = [...TRIVIUM_COMMANDS];
+		const taken = new Set(commands.map((command) => command.name));
+		const add = (command: SlashCommand) => {
+			if (taken.has(command.name)) return;
+			taken.add(command.name);
+			commands.push(command);
+		};
+		for (const command of session.extensionRunner.getRegisteredCommands()) {
+			add({
+				name: command.invocationName,
+				description: command.description,
+				source: "extension",
+				completes: Boolean(command.getArgumentCompletions),
+			});
+		}
+		for (const template of session.promptTemplates) {
+			add({
+				name: template.name,
+				description: template.description,
+				argumentHint: template.argumentHint,
+				source: "prompt",
+				completes: false,
+			});
+		}
+		for (const skill of session.resourceLoader.getSkills().skills) {
+			add({ name: `skill:${skill.name}`, description: skill.description, source: "skill", completes: false });
+		}
+		return commands;
+	}
+
+	async completeCommand(path: string, name: string, prefix: string): Promise<CompletionItem[]> {
+		const { session } = this.require(path);
+		const command = session.extensionRunner.getRegisteredCommands().find((c) => c.invocationName === name);
+		if (!command?.getArgumentCompletions) return [];
+		try {
+			const items = await command.getArgumentCompletions(prefix);
+			return (items ?? []).map((item) => ({ value: item.value, label: item.label, description: item.description }));
+		} catch {
+			// A failing completion source only means no suggestions.
+			return [];
+		}
 	}
 
 	async abort(path: string): Promise<void> {
@@ -418,7 +528,7 @@ export class SessionHost {
 			settingsManager,
 			additionalExtensionPaths: extensions,
 			appendSystemPromptOverride: appendPrompt ? (base) => [...base, appendPrompt] : undefined,
-			extensionFactories: options.factories,
+			extensionFactories: [...builtinExtensions(), ...(options.factories ?? [])],
 			// Extensions turned off for this app still load from pi's discovery; drop them here.
 			extensionsOverride:
 				options.keepDisabled || disabled.size === 0

@@ -3,6 +3,7 @@ import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { CloseIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
 import { attempt, setState, trivium } from "../store.ts";
+import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
@@ -118,6 +119,7 @@ export function Composer({ view }: { view: SessionView }) {
 	const [text, setText] = useState("");
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
+	const menu = useCommandMenu(view.path, text, setText);
 
 	useLayoutEffect(() => {
 		const area = ref.current;
@@ -141,6 +143,7 @@ export function Composer({ view }: { view: SessionView }) {
 	const stop = () => void attempt(() => trivium.abort(view.path));
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (menu.onKeyDown(event)) return;
 		if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
 			event.preventDefault();
 			void send(running ? (event.altKey ? "followUp" : "steer") : "prompt");
@@ -154,6 +157,18 @@ export function Composer({ view }: { view: SessionView }) {
 		<div className="dock">
 			<div className="dock-inner">
 				{running && <Tray view={view} />}
+				{menu.open && (
+					<CommandMenu
+						items={menu.items}
+						active={menu.active}
+						argsMode={menu.argsMode}
+						onHover={menu.setActive}
+						onChoose={(item) => {
+							menu.choose(item);
+							ref.current?.focus();
+						}}
+					/>
+				)}
 				<div className="composer">
 					<label style={{ display: "block" }}>
 						<span className="sr-only">Message</span>
@@ -161,7 +176,7 @@ export function Composer({ view }: { view: SessionView }) {
 							ref={ref}
 							rows={1}
 							value={text}
-							placeholder={running ? "Message to steer the current run" : "Ask for the next change"}
+							placeholder={running ? "Message to steer the current run" : "Ask for the next change, or type / for commands"}
 							onChange={(event) => setText(event.target.value)}
 							onKeyDown={onKeyDown}
 						/>

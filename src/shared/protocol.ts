@@ -223,6 +223,22 @@ export type LoginEvent =
 	| { type: "device_code"; code: string; url: string }
 	| { type: "done"; ok: boolean; error?: string };
 
+export interface SlashCommand {
+	name: string;
+	description?: string;
+	/** Shown after the name, such as "<instructions>". */
+	argumentHint?: string;
+	source: "trivium" | "extension" | "prompt" | "skill";
+	/** The command can suggest its arguments. */
+	completes: boolean;
+}
+
+export interface CompletionItem {
+	value: string;
+	label: string;
+	description?: string;
+}
+
 export interface TriviumApi {
 	listSessions(): Promise<SessionSummary[]>;
 	listModels(): Promise<ModelOption[]>;
@@ -235,6 +251,9 @@ export interface TriviumApi {
 	deleteSessions(paths: string[]): Promise<string[]>;
 	send(path: string, text: string, mode: "prompt" | "steer" | "followUp"): Promise<void>;
 	abort(path: string): Promise<void>;
+	commands(path: string): Promise<SlashCommand[]>;
+	/** Argument suggestions for `/name prefix`, or an empty list. */
+	completeCommand(path: string, name: string, prefix: string): Promise<CompletionItem[]>;
 	clearQueue(path: string): Promise<QueueInfo>;
 	setModel(path: string, modelKey: string, thinkingLevel: string): Promise<void>;
 	answerDialog(id: string, answer: DialogAnswer): Promise<void>;

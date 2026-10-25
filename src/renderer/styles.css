@@ -1041,6 +1041,7 @@ button:disabled {
 }
 
 .dock-inner {
+	position: relative;
 	width: 100%;
 	max-width: 720px;
 	margin: 0 auto;
@@ -1644,7 +1645,8 @@ button:disabled {
 	gap: 10px;
 	max-width: 560px;
 	padding: 8px 8px 8px 14px;
-	border-radius: 999px;
+	border-radius: 18px;
+	white-space: pre-wrap;
 	background: var(--ink);
 	color: #f2f2f5;
 	box-shadow: 0 8px 24px rgba(22, 23, 27, 0.18);
@@ -2459,4 +2461,98 @@ button:disabled {
 	align-items: center;
 	gap: 4px;
 	min-width: 0;
+}
+
+/* Slash command menu */
+
+.cmd-menu {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: calc(100% + 8px);
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	padding: 4px;
+	border-radius: 14px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 16px 40px rgba(19, 20, 43, 0.16);
+	animation: dd-in 0.12s ease-out;
+}
+
+.cmd-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 10px 6px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.cmd-head .kbd {
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.cmd-list {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.cmd-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 36px;
+	padding: 0 10px;
+	border-radius: 9px;
+	cursor: pointer;
+}
+
+.cmd-item.active {
+	background: var(--soft);
+}
+
+.cmd-name {
+	flex: none;
+	color: var(--ink);
+	font-size: 12.5px;
+	font-weight: 500;
+}
+
+.cmd-item.active .cmd-name {
+	color: var(--accent-text);
+}
+
+.cmd-hint {
+	flex: none;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.cmd-desc {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ink-3);
+	font-size: 12.5px;
+}
+
+.cmd-tag {
+	flex: none;
+	padding: 0 7px;
+	border-radius: 999px;
+	background: var(--tray);
+	box-shadow: inset 0 0 0 1px var(--line);
+	color: var(--ink-3);
+	font-size: 10.5px;
+	font-weight: 500;
+	line-height: 18px;
 }

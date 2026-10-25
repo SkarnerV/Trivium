@@ -9,7 +9,7 @@ import type { AppId, AppProfileInfo } from "../shared/protocol.ts";
  */
 interface AppProfile {
 	id: AppId;
-	/** Tool allowlist. Undefined keeps pi's defaults. */
+	/** Changes to pi's default tools as "+name" and "-name" entries. Undefined keeps the defaults. */
 	tools?: string[];
 	appendSystemPrompt?: string;
 }
@@ -18,7 +18,8 @@ const PROFILES: Record<AppId, AppProfile> = {
 	code: { id: "code" },
 	research: {
 		id: "research",
-		tools: ["read", "write", "grep", "find", "ls", "web_*"],
+		// "+" and "-" adjust pi's defaults instead of replacing them, so extension and MCP tools stay available.
+		tools: ["-bash", "-edit", "+grep", "+find", "+ls"],
 		appendSystemPrompt: [
 			"You are working as a research assistant.",
 			"Search and read sources before concluding. Cite every claim with the URL or file it came from.",
@@ -27,7 +28,7 @@ const PROFILES: Record<AppId, AppProfile> = {
 	},
 	write: {
 		id: "write",
-		tools: ["read", "edit", "write", "grep", "find", "ls"],
+		tools: ["-bash", "+grep", "+find", "+ls"],
 		appendSystemPrompt: [
 			"You are working as a writing assistant for documents in this project.",
 			"Keep the author's voice and the project's style guide. Prefer small, reviewable edits over rewrites.",
@@ -50,6 +51,18 @@ function extensionFiles(app: AppId): string[] {
 		.map((entry) => join(dir, entry.name));
 }
 
+const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
+
+/** The built-in tools a profile ends up with. Extension and MCP tools come on top. */
+function resolveTools(changes: string[] | undefined): string[] {
+	const tools = new Set(DEFAULT_TOOLS);
+	for (const change of changes ?? []) {
+		if (change.startsWith("-")) tools.delete(change.slice(1));
+		else tools.add(change.replace(/^\+/, ""));
+	}
+	return [...tools];
+}
+
 export function profileFor(app: AppId): AppProfile & { extensions: string[] } {
 	return { ...PROFILES[app], extensions: extensionFiles(app) };
 }
@@ -58,7 +71,7 @@ export function profileInfo(app: AppId): AppProfileInfo {
 	const profile = profileFor(app);
 	return {
 		id: app,
-		tools: profile.tools ?? ["read", "bash", "edit", "write"],
+		tools: resolveTools(profile.tools),
 		extensionDir: extensionDir(app),
 		extensions: profile.extensions,
 	};

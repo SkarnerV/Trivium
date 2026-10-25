@@ -119,6 +119,8 @@ button:disabled {
 
 .sidebar {
 	flex: 0 0 272px;
+	/* Without this, a long session title widens the sidebar to fit it. */
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
@@ -1557,6 +1559,7 @@ button:disabled {
 
 .set-nav {
 	flex: 0 0 272px;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 2px;

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { CloseIcon, ExternalIcon } from "../icons.tsx";
-import { attempt, desk, setState } from "../store.ts";
+import { attempt, trivium, setState } from "../store.ts";
 
 function totals(changes: FileChange[]): { adds: number; dels: number } {
 	return changes.reduce((sum, change) => ({ adds: sum.adds + change.adds, dels: sum.dels + change.dels }), { adds: 0, dels: 0 });
@@ -58,7 +58,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 	const apply = async (action: "keep" | "revert") => {
 		setBusy(true);
 		const next = await attempt(() =>
-			action === "keep" ? desk.keepChanges(view.path) : desk.revertChanges(view.path),
+			action === "keep" ? trivium.keepChanges(view.path) : trivium.revertChanges(view.path),
 		);
 		setBusy(false);
 		setConfirmRevert(false);
@@ -131,7 +131,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 						className="btn square"
 						aria-label="Open in editor"
 						title="Open in VS Code"
-						onClick={() => void attempt(() => desk.openInEditor(current.path, firstChangedLine(current)))}
+						onClick={() => void attempt(() => trivium.openInEditor(current.path, firstChangedLine(current)))}
 					>
 						<ExternalIcon />
 					</button>

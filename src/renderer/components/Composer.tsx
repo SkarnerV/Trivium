@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from
 import type { ContextInfo, ModelOption, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { CloseIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
-import { attempt, desk, setState, useStore } from "../store.ts";
+import { attempt, trivium, setState, useStore } from "../store.ts";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
 	const [open, setOpen] = useState(false);
@@ -81,7 +81,7 @@ function ModelPicker({ view, models }: { view: SessionView; models: ModelOption[
 	const known = models.some((model) => model.key === view.model);
 	const change = async (next: string) => {
 		const [key, level] = next.split("|") as [string, string];
-		const ok = await attempt(() => desk.setModel(view.path, key, level).then(() => true));
+		const ok = await attempt(() => trivium.setModel(view.path, key, level).then(() => true));
 		if (!ok) return;
 		setState((s) => {
 			const current = s.views[view.path];
@@ -112,7 +112,7 @@ function Tray({ view }: { view: SessionView }) {
 	const { steering, followUp } = view.queue;
 	if (!steering.length && !followUp.length) return null;
 	const clear = async () => {
-		const queue = await attempt(() => desk.clearQueue(view.path));
+		const queue = await attempt(() => trivium.clearQueue(view.path));
 		if (queue) setState((s) => ({ views: { ...s.views, [view.path]: { ...view, queue } } }));
 	};
 	const row = (kind: "steer" | "queue", text: string, index: number) => (
@@ -157,11 +157,11 @@ export function Composer({ view }: { view: SessionView }) {
 		const message = text.trim();
 		if (!message) return;
 		setText("");
-		const result = await attempt(() => desk.send(view.path, message, mode).then(() => true));
+		const result = await attempt(() => trivium.send(view.path, message, mode).then(() => true));
 		if (!result) setText(message);
 	};
 
-	const stop = () => void attempt(() => desk.abort(view.path));
+	const stop = () => void attempt(() => trivium.abort(view.path));
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {

@@ -32,7 +32,7 @@ import type {
 	SessionView,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
-import { deskDir, profileFor, profileInfo } from "./apps.ts";
+import { triviumDir, profileFor, profileInfo } from "./apps.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -381,7 +381,7 @@ export class SessionHost {
 		const profile = profileFor(app);
 		const appSettings = this.settings.app(app);
 		const extensions = [...profile.extensions, ...appSettings.added.filter((path) => existsSync(path))];
-		if (process.env.DESK_DEV_FAUX) extensions.push(devFaux);
+		if (process.env.TRIVIUM_DEV_FAUX) extensions.push(devFaux);
 		const disabled = new Set(appSettings.disabled);
 		const appendPrompt = profile.appendSystemPrompt;
 		return new DefaultResourceLoader({
@@ -414,7 +414,7 @@ export class SessionHost {
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
 		const settingsManager = SettingsManager.create(cwd, this.agentDir);
-		const changes = new ChangeTracker(join(deskDir, "changes", `${sessionManager.getSessionId()}.json`), cwd);
+		const changes = new ChangeTracker(join(triviumDir, "changes", `${sessionManager.getSessionId()}.json`), cwd);
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
 			factories: [
 				(pi) => {

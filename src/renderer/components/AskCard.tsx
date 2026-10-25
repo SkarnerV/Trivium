@@ -1,11 +1,11 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { DialogAnswer, DialogRequest } from "../../shared/protocol.ts";
 import { WarnIcon } from "../icons.tsx";
-import { attempt, desk, setState } from "../store.ts";
+import { attempt, trivium, setState } from "../store.ts";
 
 function answer(id: string, value: DialogAnswer): void {
 	setState((s) => ({ dialogs: s.dialogs.filter((d) => d.id !== id) }));
-	void attempt(() => desk.answerDialog(id, value));
+	void attempt(() => trivium.answerDialog(id, value));
 }
 
 function Waiting() {

@@ -150,7 +150,7 @@ export interface AppSettings {
 	added: string[];
 }
 
-export interface DeskSettings {
+export interface TriviumSettings {
 	/** Window zoom factor, 1 = 100%. */
 	textSize: number;
 	/** Minutes before an idle, unviewed session is unloaded. 0 keeps sessions loaded. */
@@ -208,7 +208,7 @@ export interface AppInfo {
 	node: string;
 	agentDir: string;
 	sessionsDir: string;
-	deskDir: string;
+	triviumDir: string;
 	defaultModel?: string;
 	defaultThinkingLevel?: string;
 }
@@ -223,7 +223,7 @@ export type LoginEvent =
 	| { type: "device_code"; code: string; url: string }
 	| { type: "done"; ok: boolean; error?: string };
 
-export interface DeskApi {
+export interface TriviumApi {
 	listSessions(): Promise<SessionSummary[]>;
 	listModels(): Promise<ModelOption[]>;
 	profiles(): Promise<AppProfileInfo[]>;
@@ -241,8 +241,8 @@ export interface DeskApi {
 	/** Restores files to their state before the agent touched them; all files when `files` is omitted. */
 	revertChanges(path: string, files?: string[]): Promise<FileChange[]>;
 	openInEditor(file: string, line?: number): Promise<void>;
-	getSettings(): Promise<DeskSettings>;
-	updateSettings(patch: Partial<DeskSettings>): Promise<DeskSettings>;
+	getSettings(): Promise<TriviumSettings>;
+	updateSettings(patch: Partial<TriviumSettings>): Promise<TriviumSettings>;
 	appDetails(app: AppId): Promise<AppDetails>;
 	addExtension(app: AppId): Promise<AppDetails | undefined>;
 	reloadApp(app: AppId): Promise<string[]>;

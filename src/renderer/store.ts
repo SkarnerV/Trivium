@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type {
 	AppId,
-	DeskApi,
-	DeskSettings,
+	TriviumApi,
+	TriviumSettings,
 	LoginEvent,
 	DialogRequest,
 	HostEvent,
@@ -15,11 +15,11 @@ import type {
 
 declare global {
 	interface Window {
-		desk: DeskApi;
+		trivium: TriviumApi;
 	}
 }
 
-export const desk = window.desk;
+export const trivium = window.trivium;
 
 export interface State {
 	app: AppId;
@@ -37,14 +37,14 @@ export interface State {
 	overlay: "new" | "search" | null;
 	page: "main" | "settings";
 	settingsSection: SettingsSection;
-	settings?: DeskSettings;
+	settings?: TriviumSettings;
 	/** The provider login in progress, and what it last reported. */
 	login?: { providerId: string; name: string; events: LoginEvent[] };
 }
 
 export type SettingsSection = "general" | "models" | AppId | "about";
 
-const PREFS_KEY = "desk.prefs";
+const PREFS_KEY = "trivium.prefs";
 
 function loadPrefs(): Pick<State, "app" | "folded" | "selected"> {
 	try {
@@ -200,12 +200,12 @@ function handleEvent(event: HostEvent): void {
 }
 
 export async function refreshSessions(): Promise<void> {
-	const sessions = await attempt(() => desk.listSessions());
+	const sessions = await attempt(() => trivium.listSessions());
 	if (sessions) setState({ sessions });
 }
 
 export async function openSession(path: string): Promise<void> {
-	const view = await attempt(() => desk.openSession(path));
+	const view = await attempt(() => trivium.openSession(path));
 	if (!view) return;
 	setState((s) => ({
 		views: { ...s.views, [path]: view },
@@ -220,12 +220,12 @@ export async function openSession(path: string): Promise<void> {
 
 export async function refreshModels(): Promise<void> {
 	// Extensions can register providers when a session starts, so the list can grow.
-	const models = await attempt(() => desk.listModels());
+	const models = await attempt(() => trivium.listModels());
 	if (models) setState({ models });
 }
 
 export async function startSession(input: NewSessionInput): Promise<SessionView | undefined> {
-	const view = await attempt(() => desk.newSession(input));
+	const view = await attempt(() => trivium.newSession(input));
 	if (!view) return undefined;
 	setState((s) => ({
 		views: { ...s.views, [view.path]: view },
@@ -255,14 +255,14 @@ export function closeSettings(): void {
 	if (path && !views[path]) void openSession(path);
 }
 
-export async function updateSettings(patch: Partial<DeskSettings>): Promise<void> {
-	const next = await attempt(() => desk.updateSettings(patch));
+export async function updateSettings(patch: Partial<TriviumSettings>): Promise<void> {
+	const next = await attempt(() => trivium.updateSettings(patch));
 	if (next) setState({ settings: next });
 }
 
 export async function init(): Promise<void> {
-	desk.onEvent(handleEvent);
-	const settings = await attempt(() => desk.getSettings());
+	trivium.onEvent(handleEvent);
+	const settings = await attempt(() => trivium.getSettings());
 	if (settings) setState({ settings });
 	await refreshSessions();
 	await refreshModels();
@@ -271,5 +271,5 @@ export async function init(): Promise<void> {
 	if (path && sessions.some((session) => session.path === path)) await openSession(path);
 }
 
-// Lets development scripts (DESK_EVAL) drive the UI the same way the components do.
-Object.assign(window, { deskDebug: { getState, setState, openSession, startSession, switchApp, openSettings } });
+// Lets development scripts (TRIVIUM_EVAL) drive the UI the same way the components do.
+Object.assign(window, { triviumDebug: { getState, setState, openSession, startSession, switchApp, openSettings } });

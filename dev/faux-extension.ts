@@ -1,13 +1,13 @@
 // Development only: a scripted model so the UI can be exercised without a real provider.
-// Loaded into every session when DESK_DEV_FAUX=1.
+// Loaded into every session when TRIVIUM_DEV_FAUX=1.
 import { createFauxCore, fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {
 	const core = createFauxCore({
-		provider: "desk-faux",
-		api: "desk-faux",
+		provider: "trivium-faux",
+		api: "trivium-faux",
 		models: [{ id: "scripted", name: "Scripted", reasoning: true, contextWindow: 200_000, maxTokens: 8000 }],
 		tokensPerSecond: 80,
 	});
@@ -55,11 +55,11 @@ export default function (pi: ExtensionAPI) {
 	];
 	core.setResponses(Array.from({ length: 30 }, (_, index) => () => script[index % script.length]!()));
 
-	pi.registerProvider("desk-faux", {
-		name: "Desk dev",
+	pi.registerProvider("trivium-faux", {
+		name: "Trivium dev",
 		baseUrl: "http://localhost",
 		apiKey: "faux",
-		api: "desk-faux",
+		api: "trivium-faux",
 		models: [
 			{
 				id: "scripted",

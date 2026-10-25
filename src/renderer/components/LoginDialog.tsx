@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CloseIcon } from "../icons.tsx";
-import { attempt, desk, setState, useStore } from "../store.ts";
+import { attempt, trivium, setState, useStore } from "../store.ts";
 
 /** Shows a provider login as pi drives it: links to open, codes to enter, and questions to answer. */
 export function LoginDialog() {
@@ -29,7 +29,7 @@ export function LoginDialog() {
 		if (!prompt) return;
 		answered.current.add(prompt.id);
 		setValue("");
-		void attempt(() => desk.answerLogin(prompt.id, text));
+		void attempt(() => trivium.answerLogin(prompt.id, text));
 	};
 	const close = () => {
 		if (prompt) answer(undefined);

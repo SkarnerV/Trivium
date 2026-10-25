@@ -1,44 +1,44 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DeskApi, HostEvent } from "../shared/protocol.ts";
+import type { TriviumApi, HostEvent } from "../shared/protocol.ts";
 
 const call =
 	(channel: string) =>
 	(...args: unknown[]) =>
-		ipcRenderer.invoke(`desk:${channel}`, ...args);
+		ipcRenderer.invoke(`trivium:${channel}`, ...args);
 
-const api: DeskApi = {
-	listSessions: call("listSessions") as DeskApi["listSessions"],
-	listModels: call("listModels") as DeskApi["listModels"],
-	profiles: call("profiles") as DeskApi["profiles"],
-	recentProjects: call("recentProjects") as DeskApi["recentProjects"],
-	pickFolder: call("pickFolder") as DeskApi["pickFolder"],
-	openSession: call("openSession") as DeskApi["openSession"],
-	newSession: call("newSession") as DeskApi["newSession"],
-	send: call("send") as DeskApi["send"],
-	abort: call("abort") as DeskApi["abort"],
-	clearQueue: call("clearQueue") as DeskApi["clearQueue"],
-	setModel: call("setModel") as DeskApi["setModel"],
-	answerDialog: call("answerDialog") as DeskApi["answerDialog"],
-	keepChanges: call("keepChanges") as DeskApi["keepChanges"],
-	revertChanges: call("revertChanges") as DeskApi["revertChanges"],
-	openInEditor: call("openInEditor") as DeskApi["openInEditor"],
-	getSettings: call("getSettings") as DeskApi["getSettings"],
-	updateSettings: call("updateSettings") as DeskApi["updateSettings"],
-	appDetails: call("appDetails") as DeskApi["appDetails"],
-	addExtension: call("addExtension") as DeskApi["addExtension"],
-	reloadApp: call("reloadApp") as DeskApi["reloadApp"],
-	providers: call("providers") as DeskApi["providers"],
-	login: call("login") as DeskApi["login"],
-	answerLogin: call("answerLogin") as DeskApi["answerLogin"],
-	logout: call("logout") as DeskApi["logout"],
-	setDefaultModel: call("setDefaultModel") as DeskApi["setDefaultModel"],
-	appInfo: call("appInfo") as DeskApi["appInfo"],
-	openPath: call("openPath") as DeskApi["openPath"],
+const api: TriviumApi = {
+	listSessions: call("listSessions") as TriviumApi["listSessions"],
+	listModels: call("listModels") as TriviumApi["listModels"],
+	profiles: call("profiles") as TriviumApi["profiles"],
+	recentProjects: call("recentProjects") as TriviumApi["recentProjects"],
+	pickFolder: call("pickFolder") as TriviumApi["pickFolder"],
+	openSession: call("openSession") as TriviumApi["openSession"],
+	newSession: call("newSession") as TriviumApi["newSession"],
+	send: call("send") as TriviumApi["send"],
+	abort: call("abort") as TriviumApi["abort"],
+	clearQueue: call("clearQueue") as TriviumApi["clearQueue"],
+	setModel: call("setModel") as TriviumApi["setModel"],
+	answerDialog: call("answerDialog") as TriviumApi["answerDialog"],
+	keepChanges: call("keepChanges") as TriviumApi["keepChanges"],
+	revertChanges: call("revertChanges") as TriviumApi["revertChanges"],
+	openInEditor: call("openInEditor") as TriviumApi["openInEditor"],
+	getSettings: call("getSettings") as TriviumApi["getSettings"],
+	updateSettings: call("updateSettings") as TriviumApi["updateSettings"],
+	appDetails: call("appDetails") as TriviumApi["appDetails"],
+	addExtension: call("addExtension") as TriviumApi["addExtension"],
+	reloadApp: call("reloadApp") as TriviumApi["reloadApp"],
+	providers: call("providers") as TriviumApi["providers"],
+	login: call("login") as TriviumApi["login"],
+	answerLogin: call("answerLogin") as TriviumApi["answerLogin"],
+	logout: call("logout") as TriviumApi["logout"],
+	setDefaultModel: call("setDefaultModel") as TriviumApi["setDefaultModel"],
+	appInfo: call("appInfo") as TriviumApi["appInfo"],
+	openPath: call("openPath") as TriviumApi["openPath"],
 	onEvent(listener) {
 		const wrapped = (_event: unknown, payload: HostEvent) => listener(payload);
-		ipcRenderer.on("desk:event", wrapped);
-		return () => ipcRenderer.removeListener("desk:event", wrapped);
+		ipcRenderer.on("trivium:event", wrapped);
+		return () => ipcRenderer.removeListener("trivium:event", wrapped);
 	},
 };
 
-contextBridge.exposeInMainWorld("desk", api);
+contextBridge.exposeInMainWorld("trivium", api);

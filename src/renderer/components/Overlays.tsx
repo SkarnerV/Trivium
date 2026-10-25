@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppProfileInfo, SessionSummary } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
 import { AppIcon, Chevron, CloseIcon, FolderIcon } from "../icons.tsx";
-import { attempt, desk, getState, openSession, setState, startSession, useStore } from "../store.ts";
+import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 
 const close = () => setState({ overlay: null });
@@ -20,18 +20,18 @@ export function NewSessionDialog() {
 
 	useEffect(() => {
 		ref.current?.focus();
-		void attempt(() => desk.recentProjects()).then((list) => {
+		void attempt(() => trivium.recentProjects()).then((list) => {
 			// Prefer projects this app has used, then the rest.
 			const own = [...new Set(getState().sessions.filter((s) => s.app === app).map((s) => s.cwd))];
 			const merged = [...new Set([...own, ...(list ?? [])])].filter(Boolean).slice(0, 6);
 			setProjects(merged);
 			setCwd((current) => current ?? merged[0]);
 		});
-		void attempt(() => desk.profiles()).then((list) => setProfile(list?.find((p) => p.id === app)));
+		void attempt(() => trivium.profiles()).then((list) => setProfile(list?.find((p) => p.id === app)));
 	}, [app]);
 
 	const pickFolder = async () => {
-		const folder = await attempt(() => desk.pickFolder());
+		const folder = await attempt(() => trivium.pickFolder());
 		if (!folder) return;
 		setProjects((list) => [folder, ...list.filter((p) => p !== folder)].slice(0, 6));
 		setCwd(folder);

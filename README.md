@@ -1,4 +1,4 @@
-# Desk
+# Trivium
 
 A desktop workspace for coding, research and writing, built on the pi SDK
 (`@earendil-works/pi-coding-agent`). Each app (Code, Research, Write) is its own agent
@@ -25,14 +25,14 @@ npm start
   to the window. `apps.ts` defines the three profiles. `changes.ts` records each file before the
   agent's first `edit` or `write` so the Code app's Changes panel can show net diffs, keep them,
   or revert them (changes made through `bash` are not tracked).
-- `src/preload/` the `window.desk` bridge.
+- `src/preload/` the `window.trivium` bridge.
 - `src/renderer/` React UI.
-- `~/.desk/apps/<app>/extensions/` extensions loaded only for that app, on top of `~/.pi/agent`.
-- `~/.desk/session-apps.json` which app each session belongs to. Sessions started elsewhere show under Code.
-- `~/.desk/settings.json` app preferences: text size, idle unloading, notifications, and per app
+- `~/.trivium/apps/<app>/extensions/` extensions loaded only for that app, on top of `~/.pi/agent`.
+- `~/.trivium/session-apps.json` which app each session belongs to. Sessions started elsewhere show under Code.
+- `~/.trivium/settings.json` app preferences: text size, idle unloading, notifications, and per app
   a model for new sessions plus extensions turned off or added. pi's own settings, logins and
   default model stay in `~/.pi/agent`.
-- `~/.desk/changes/<session-id>.json` the pre-change file contents for the Changes panel, until you keep or revert.
+- `~/.trivium/changes/<session-id>.json` the pre-change file contents for the Changes panel, until you keep or revert.
 
 ## Settings
 
@@ -49,8 +49,8 @@ In the composer: `↵` send (steers while a run is going), `⌥↵` queue a foll
 
 ## Development
 
-`DESK_DEV_FAUX=1` loads `dev/faux-extension.ts`, a scripted model (`desk-faux/scripted`) that
+`TRIVIUM_DEV_FAUX=1` loads `dev/faux-extension.ts`, a scripted model (`trivium-faux/scripted`) that
 reads a file, runs bash and asks a question, without a real provider. Combine with
-`PI_CODING_AGENT_DIR=/tmp/somewhere` and `DESK_HOME=/tmp/elsewhere` to keep test sessions out of
-your real storage. `DESK_EVAL` runs a script in the page after load and `DESK_CAPTURE=shot.png`
+`PI_CODING_AGENT_DIR=/tmp/somewhere` and `TRIVIUM_HOME=/tmp/elsewhere` to keep test sessions out of
+your real storage. `TRIVIUM_EVAL` runs a script in the page after load and `TRIVIUM_CAPTURE=shot.png`
 saves a screenshot.

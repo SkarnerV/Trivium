@@ -36,10 +36,10 @@ const PROFILES: Record<AppId, AppProfile> = {
 	},
 };
 
-export const deskDir = process.env.DESK_HOME ?? join(homedir(), ".desk");
+export const triviumDir = process.env.TRIVIUM_HOME ?? join(homedir(), ".trivium");
 
 function extensionDir(app: AppId): string {
-	return join(deskDir, "apps", app, "extensions");
+	return join(triviumDir, "apps", app, "extensions");
 }
 
 function extensionFiles(app: AppId): string[] {

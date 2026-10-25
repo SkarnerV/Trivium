@@ -6,7 +6,7 @@ import { AppIcon, BackIcon, Chevron, PlusIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
-	desk,
+	trivium,
 	refreshModels,
 	type SettingsSection,
 	setState,
@@ -43,7 +43,7 @@ function General() {
 	const settings = useStore((s) => s.settings);
 	const [info, setInfo] = useState<AppInfo>();
 	useEffect(() => {
-		void attempt(() => desk.appInfo()).then(setInfo);
+		void attempt(() => trivium.appInfo()).then(setInfo);
 	}, []);
 	if (!settings) return null;
 	const folder = (label: string, hint: string, path: string | undefined) =>
@@ -52,7 +52,7 @@ function General() {
 				<span className="mono value" title={path}>
 					{shortPath(path)}
 				</span>
-				<button type="button" className="soft-btn" onClick={() => void attempt(() => desk.openPath(path))}>
+				<button type="button" className="soft-btn" onClick={() => void attempt(() => trivium.openPath(path))}>
 					Open
 				</button>
 			</Row>
@@ -80,7 +80,7 @@ function General() {
 				<h3>Folders</h3>
 				{folder("Agent folder", "Logins, models and settings shared with the pi CLI", info?.agentDir)}
 				{folder("Session files", "pi JSONL files, grouped by project folder", info?.sessionsDir)}
-				{folder("App data", "App extensions, preferences and pending changes", info?.deskDir)}
+				{folder("App data", "App extensions, preferences and pending changes", info?.triviumDir)}
 			</section>
 			<section className="set-section">
 				<h3>Sessions</h3>
@@ -125,7 +125,7 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 	const [showAll, setShowAll] = useState(false);
 	const login = useStore((s) => s.login);
 	useEffect(() => {
-		void attempt(() => desk.appInfo()).then(setInfo);
+		void attempt(() => trivium.appInfo()).then(setInfo);
 	}, []);
 	// Refresh once a login finishes, whatever the outcome.
 	const loginDone = login?.events.some((event) => event.type === "done");
@@ -138,10 +138,10 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 
 	const startLogin = (provider: ProviderInfo, type: "api_key" | "oauth") => {
 		setState({ login: { providerId: provider.id, name: provider.name, events: [] } });
-		void attempt(() => desk.login(provider.id, type));
+		void attempt(() => trivium.login(provider.id, type));
 	};
 	const logout = async (provider: ProviderInfo) => {
-		await attempt(() => desk.logout(provider.id));
+		await attempt(() => trivium.logout(provider.id));
 		reload();
 		void refreshModels();
 	};
@@ -190,8 +190,8 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 						emptyLabel="Not set"
 						onChange={async (key, level) => {
 							if (!key) return;
-							await attempt(() => desk.setDefaultModel(key, level));
-							setInfo(await attempt(() => desk.appInfo()));
+							await attempt(() => trivium.setDefaultModel(key, level));
+							setInfo(await attempt(() => trivium.appInfo()));
 						}}
 					/>
 				</Row>
@@ -255,7 +255,7 @@ function AppPage({ app }: { app: AppId }) {
 	const [details, setDetails] = useState<AppDetails>();
 	const [touched, setTouched] = useState(false);
 	const load = useCallback(() => {
-		void attempt(() => desk.appDetails(app)).then(setDetails);
+		void attempt(() => trivium.appDetails(app)).then(setDetails);
 	}, [app]);
 	useEffect(() => {
 		setDetails(undefined);
@@ -281,15 +281,15 @@ function AppPage({ app }: { app: AppId }) {
 		await saveApp({ disabled });
 	};
 	const add = async () => {
-		const next = await attempt(() => desk.addExtension(app));
+		const next = await attempt(() => trivium.addExtension(app));
 		if (next) {
 			setDetails(next);
 			setTouched(true);
-			setState({ settings: await desk.getSettings() });
+			setState({ settings: await trivium.getSettings() });
 		}
 	};
 	const reload = async () => {
-		await attempt(() => desk.reloadApp(app));
+		await attempt(() => trivium.reloadApp(app));
 		setTouched(false);
 		load();
 	};
@@ -310,7 +310,7 @@ function AppPage({ app }: { app: AppId }) {
 						{details && ` · ${details.running ? `${details.running} running` : "nothing running"}`}
 					</span>
 				</div>
-				<button type="button" className="soft-btn big" onClick={() => details && void attempt(() => desk.openPath(details.extensionDir))}>
+				<button type="button" className="soft-btn big" onClick={() => details && void attempt(() => trivium.openPath(details.extensionDir))}>
 					Open folder
 				</button>
 			</div>
@@ -416,7 +416,7 @@ function AppPage({ app }: { app: AppId }) {
 function About() {
 	const [info, setInfo] = useState<AppInfo>();
 	useEffect(() => {
-		void attempt(() => desk.appInfo()).then(setInfo);
+		void attempt(() => trivium.appInfo()).then(setInfo);
 	}, []);
 	return (
 		<>
@@ -445,12 +445,12 @@ export function SettingsPage() {
 	const [providers, setProviders] = useState<ProviderInfo[]>([]);
 	const [errors, setErrors] = useState<Partial<Record<AppId, number>>>({});
 	const loadProviders = useCallback(() => {
-		void attempt(() => desk.providers()).then((list) => list && setProviders(list));
+		void attempt(() => trivium.providers()).then((list) => list && setProviders(list));
 	}, []);
 	useEffect(() => {
 		loadProviders();
 		for (const id of APP_IDS) {
-			void attempt(() => desk.appDetails(id)).then(
+			void attempt(() => trivium.appDetails(id)).then(
 				(details) =>
 					details && setErrors((current) => ({ ...current, [id]: details.extensions.filter((e) => e.on && e.error).length })),
 			);

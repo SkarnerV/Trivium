@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, Notification, shell } from "electron";
-import type { AppId, DeskSettings, DialogAnswer, HostEvent, NewSessionInput } from "../shared/protocol.ts";
+import type { AppId, TriviumSettings, DialogAnswer, HostEvent, NewSessionInput } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
-import { deskDir, profileInfo } from "./apps.ts";
+import { triviumDir, profileInfo } from "./apps.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
@@ -16,11 +16,11 @@ const assets = fileURLToPath(new URL("./", import.meta.url));
 const page = pathToFileURL(join(assets, "index.html")).href;
 let window: BrowserWindow | undefined;
 
-mkdirSync(deskDir, { recursive: true });
-const settings = new SettingsStore(join(deskDir, "settings.json"));
+mkdirSync(triviumDir, { recursive: true });
+const settings = new SettingsStore(join(triviumDir, "settings.json"));
 
 function send(event: HostEvent): void {
-	if (window && !window.isDestroyed()) window.webContents.send("desk:event", event);
+	if (window && !window.isDestroyed()) window.webContents.send("trivium:event", event);
 }
 
 /** A system notification, only while the window is in the background. Clicking it opens the session. */
@@ -46,7 +46,7 @@ const broker = new DialogBroker(emit);
 const host = new SessionHost({
 	emit,
 	broker,
-	indexFile: join(deskDir, "session-apps.json"),
+	indexFile: join(triviumDir, "session-apps.json"),
 	settings,
 	onDone: (path, title) => alert("done", path, title),
 });
@@ -66,33 +66,33 @@ function handle<T extends unknown[], R>(channel: string, fn: (...args: T) => R |
 }
 
 function registerIpc(): void {
-	handle("desk:listSessions", () => host.listSessions());
-	handle("desk:listModels", () => host.listModels());
-	handle("desk:profiles", () => APP_IDS.map((id: AppId) => profileInfo(id)));
-	handle("desk:recentProjects", () => host.recentProjects());
-	handle("desk:pickFolder", async () => {
+	handle("trivium:listSessions", () => host.listSessions());
+	handle("trivium:listModels", () => host.listModels());
+	handle("trivium:profiles", () => APP_IDS.map((id: AppId) => profileInfo(id)));
+	handle("trivium:recentProjects", () => host.recentProjects());
+	handle("trivium:pickFolder", async () => {
 		const result = await dialog.showOpenDialog(window!, { properties: ["openDirectory", "createDirectory"] });
 		return result.canceled ? undefined : result.filePaths[0];
 	});
-	handle("desk:openSession", (path: string) => host.openSession(path));
-	handle("desk:newSession", (input: NewSessionInput) => host.newSession(input));
-	handle("desk:send", (path: string, text: string, mode: "prompt" | "steer" | "followUp") =>
+	handle("trivium:openSession", (path: string) => host.openSession(path));
+	handle("trivium:newSession", (input: NewSessionInput) => host.newSession(input));
+	handle("trivium:send", (path: string, text: string, mode: "prompt" | "steer" | "followUp") =>
 		host.send(path, text, mode),
 	);
-	handle("desk:abort", (path: string) => host.abort(path));
-	handle("desk:clearQueue", (path: string) => host.clearQueue(path));
-	handle("desk:setModel", (path: string, key: string, level: string) => host.setModel(path, key, level));
-	handle("desk:answerDialog", (id: string, answer: DialogAnswer) => broker.answer(id, answer));
-	handle("desk:keepChanges", (path: string, files?: string[]) => host.keepChanges(path, files));
-	handle("desk:revertChanges", (path: string, files?: string[]) => host.revertChanges(path, files));
-	handle("desk:getSettings", () => settings.get());
-	handle("desk:updateSettings", async (patch: Partial<DeskSettings>) => {
+	handle("trivium:abort", (path: string) => host.abort(path));
+	handle("trivium:clearQueue", (path: string) => host.clearQueue(path));
+	handle("trivium:setModel", (path: string, key: string, level: string) => host.setModel(path, key, level));
+	handle("trivium:answerDialog", (id: string, answer: DialogAnswer) => broker.answer(id, answer));
+	handle("trivium:keepChanges", (path: string, files?: string[]) => host.keepChanges(path, files));
+	handle("trivium:revertChanges", (path: string, files?: string[]) => host.revertChanges(path, files));
+	handle("trivium:getSettings", () => settings.get());
+	handle("trivium:updateSettings", async (patch: Partial<TriviumSettings>) => {
 		const next = await settings.update(patch);
 		if (patch.textSize) window?.webContents.setZoomFactor(next.textSize);
 		return next;
 	});
-	handle("desk:appDetails", (id: AppId) => host.describeApp(id));
-	handle("desk:addExtension", async (id: AppId) => {
+	handle("trivium:appDetails", (id: AppId) => host.describeApp(id));
+	handle("trivium:addExtension", async (id: AppId) => {
 		const result = await dialog.showOpenDialog(window!, {
 			title: "Add an extension",
 			properties: ["openFile", "openDirectory"],
@@ -106,22 +106,22 @@ function registerIpc(): void {
 		}
 		return host.describeApp(id);
 	});
-	handle("desk:reloadApp", (id: AppId) => host.reloadApp(id));
-	handle("desk:providers", () => listProviders(host.runtime));
-	handle("desk:login", (providerId: string, type: "api_key" | "oauth") => {
+	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
+	handle("trivium:providers", () => listProviders(host.runtime));
+	handle("trivium:login", (providerId: string, type: "api_key" | "oauth") => {
 		// The flow reports progress through events; the call returns at once.
 		void login.start(host.runtime, providerId, type);
 	});
-	handle("desk:answerLogin", (id: string, value: string | undefined) => login.answer(id, value));
-	handle("desk:logout", (providerId: string) => host.runtime.logout(providerId));
-	handle("desk:setDefaultModel", async (key: string, level: string) => {
+	handle("trivium:answerLogin", (id: string, value: string | undefined) => login.answer(id, value));
+	handle("trivium:logout", (providerId: string) => host.runtime.logout(providerId));
+	handle("trivium:setDefaultModel", async (key: string, level: string) => {
 		const slash = key.indexOf("/");
 		const manager = SettingsManager.create(homedir(), getAgentDir());
 		manager.setDefaultModelAndProvider(key.slice(0, slash), key.slice(slash + 1));
 		manager.setDefaultThinkingLevel(level as Parameters<SettingsManager["setDefaultThinkingLevel"]>[0]);
 		await manager.flush();
 	});
-	handle("desk:appInfo", () => {
+	handle("trivium:appInfo", () => {
 		const manager = SettingsManager.create(homedir(), getAgentDir());
 		const provider = manager.getDefaultProvider();
 		const model = manager.getDefaultModel();
@@ -132,17 +132,17 @@ function registerIpc(): void {
 			node: process.versions.node,
 			agentDir: getAgentDir(),
 			sessionsDir: join(getAgentDir(), "sessions"),
-			deskDir,
+			triviumDir,
 			defaultModel: provider && model ? `${provider}/${model}` : undefined,
 			defaultThinkingLevel: manager.getDefaultThinkingLevel(),
 		};
 	});
-	handle("desk:openPath", async (path: string) => {
+	handle("trivium:openPath", async (path: string) => {
 		mkdirSync(path, { recursive: true });
 		const error = await shell.openPath(path);
 		if (error) throw new Error(error);
 	});
-	handle("desk:openInEditor", async (file: string, line?: number) => {
+	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		// VS Code's URL handler opens the file at a line; fall back to the system default app.
 		const url = `vscode://file${encodeURI(file)}${line ? `:${line}` : ""}`;
 		try {
@@ -180,17 +180,17 @@ function createWindow(): void {
 	});
 	window.once("ready-to-show", () => window?.show());
 	window.webContents.on("did-finish-load", () => window?.webContents.setZoomFactor(settings.get().textSize));
-	// Development aid: DESK_CAPTURE=/path/shot.png saves a screenshot after the first render.
-	const capture = process.env.DESK_CAPTURE;
+	// Development aid: TRIVIUM_CAPTURE=/path/shot.png saves a screenshot after the first render.
+	const capture = process.env.TRIVIUM_CAPTURE;
 	if (capture) {
 		window.webContents.on("console-message", (event) => console.log(`[page] ${event.message}`));
 		window.webContents.once("did-finish-load", () => {
-			// DESK_EVAL runs a script in the page first, to put the UI into the state being checked.
-			if (process.env.DESK_EVAL) void window?.webContents.executeJavaScript(process.env.DESK_EVAL).catch(console.error);
+			// TRIVIUM_EVAL runs a script in the page first, to put the UI into the state being checked.
+			if (process.env.TRIVIUM_EVAL) void window?.webContents.executeJavaScript(process.env.TRIVIUM_EVAL).catch(console.error);
 			setTimeout(async () => {
 				const image = await window?.webContents.capturePage();
 				if (image) writeFileSync(capture, image.toPNG());
-			}, Number(process.env.DESK_CAPTURE_DELAY ?? 3000));
+			}, Number(process.env.TRIVIUM_CAPTURE_DELAY ?? 3000));
 		});
 	}
 	void window.loadURL(page);

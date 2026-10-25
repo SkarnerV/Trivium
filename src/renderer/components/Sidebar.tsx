@@ -8,6 +8,7 @@ import { askConfirm, deleteSessions, getState, notify, openSession, openSettings
 import { THEMES } from "../theme.ts";
 
 const IS_MAC = navigator.userAgent.includes("Mac");
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
 
 interface ProjectGroup {
 	cwd: string;
@@ -161,7 +162,7 @@ export function SessionGroups() {
 	);
 }
 
-function Switcher() {
+export function AppSwitcher() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
@@ -186,37 +187,47 @@ function Switcher() {
 	);
 }
 
+function SidebarToggle({ rail = false }: { rail?: boolean }) {
+	const folded = useStore((s) => s.folded);
+	return (
+		<button
+			type="button"
+			className={rail ? "rail-btn panel" : "icon-btn sidebar-toggle"}
+			aria-label={folded ? "Expand sidebar" : "Fold sidebar"}
+			aria-expanded={!folded}
+			title={folded ? "Sessions · click to keep open ⌘\\" : "Fold sidebar ⌘\\"}
+			onMouseEnter={() => {
+				if (!folded) return;
+				cancelPeekClose();
+				setState({ peek: true });
+			}}
+			onMouseLeave={() => {
+				if (folded) schedulePeekClose();
+			}}
+			onClick={() => {
+				cancelPeekClose();
+				setState((s) => ({ folded: !s.folded, peek: false }));
+			}}
+		>
+			<PanelIcon size={rail ? 17 : 16} />
+		</button>
+	);
+}
 
 export function Sidebar() {
 	const app = useStore((s) => s.app);
-	const fold = (
-		<button
-			type="button"
-			className="icon-btn"
-			aria-label="Fold sidebar"
-			title="Fold sidebar ⌘\"
-			onClick={() => setState({ folded: true, peek: false })}
-		>
-			<PanelIcon />
-		</button>
-	);
 	return (
 		<nav className="sidebar" aria-label="Apps and sessions">
-			{/* On macOS the switcher and fold button share the title bar row with the window buttons. */}
+			{/* On macOS the app switcher shares the title bar row with the window buttons. */}
 			{IS_MAC && (
 				<div className="sb-titlebar drag">
-					<Switcher />
-					{fold}
+					<AppSwitcher />
 				</div>
 			)}
 			<div className="sb-head drag">
 				<span className="app-name ellipsis">{THEMES[app].name}</span>
-				{!IS_MAC && (
-					<>
-						<Switcher />
-						{fold}
-					</>
-				)}
+				{!IS_MAC && !IS_WINDOWS && <AppSwitcher />}
+				<SidebarToggle />
 			</div>
 			<div className="sb-rows">
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "search" })}>
@@ -251,42 +262,31 @@ export function Rail() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
-		<nav className="rail drag" aria-label="Apps and tools" onMouseLeave={schedulePeekClose}>
-			<button
-				type="button"
-				className="rail-btn panel"
-				aria-label="Show sessions. Click to keep the sidebar open"
-				title="Sessions · click to keep open ⌘\"
-				onMouseEnter={() => {
-					cancelPeekClose();
-					setState({ peek: true });
-				}}
-				onClick={() => {
-					cancelPeekClose();
-					setState({ folded: false, peek: false });
-				}}
-			>
-				<PanelIcon size={17} />
-			</button>
+		<nav className="rail drag" aria-label={IS_WINDOWS ? "Tools" : "Apps and tools"} onMouseLeave={schedulePeekClose}>
+			<SidebarToggle rail />
 			<span className="rail-sep" aria-hidden="true" />
-			{APP_IDS.map((id, index) => {
-				const busy = id !== app && sessions.some((session) => session.app === id && session.running);
-				return (
-					<button
-						key={id}
-						type="button"
-						className="rail-btn app"
-						aria-label={THEMES[id].name}
-						aria-current={id === app ? "page" : undefined}
-						title={`${THEMES[id].name} ⌘${index + 1}`}
-						onClick={() => switchApp(id)}
-					>
-						<AppIcon app={id} size={16} />
-						{busy && <span className="busy-dot" style={{ background: THEMES[id].accent, borderColor: "var(--chrome)" }} />}
-					</button>
-				);
-			})}
-			<span className="rail-sep" aria-hidden="true" />
+			{!IS_WINDOWS && (
+				<>
+					{APP_IDS.map((id, index) => {
+						const busy = id !== app && sessions.some((session) => session.app === id && session.running);
+						return (
+							<button
+								key={id}
+								type="button"
+								className="rail-btn app"
+								aria-label={THEMES[id].name}
+								aria-current={id === app ? "page" : undefined}
+								title={`${THEMES[id].name} ⌘${index + 1}`}
+								onClick={() => switchApp(id)}
+							>
+								<AppIcon app={id} size={16} />
+								{busy && <span className="busy-dot" style={{ background: THEMES[id].accent, borderColor: "var(--chrome)" }} />}
+							</button>
+						);
+					})}
+					<span className="rail-sep" aria-hidden="true" />
+				</>
+			)}
 			<button type="button" className="rail-btn" aria-label="Search" title="Search ⌘K" onClick={() => setState({ overlay: "search" })}>
 				<SearchIcon size={17} />
 			</button>

@@ -27,7 +27,7 @@
 	"main": "dist/main.mjs",
 	"scripts": {
 		"build": "node scripts/build.mjs",
-		"start": "node scripts/build.mjs && electron .",
+		"start": "node scripts/build.mjs && node scripts/start.mjs",
 		"check": "tsc --noEmit -p tsconfig.json"
 	},
 	"dependencies": {
@@ -44,6 +44,7 @@
 		"esbuild": "0.28.2",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
+		"resedit": "3.1.0",
 		"typescript": "5.9.3"
 	},
 	"engines": {

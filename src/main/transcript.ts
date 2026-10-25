@@ -196,6 +196,7 @@ export class RunTracker {
 			case "tool_execution_update": {
 				const tool = this.ensureTool(event.toolCallId, event.toolName, event.args);
 				const text = textOf((event.partialResult as { content?: unknown } | undefined)?.content);
+				tool.result = text;
 				tool.tail = text.split("\n").slice(-8).join("\n");
 				return true;
 			}
@@ -321,6 +322,7 @@ export class RunTracker {
 					id: segment.key,
 					tool: segment.kind === "think" ? "think" : "note",
 					target: firstLine(segment.text),
+					content: segment.text,
 					meta: "",
 					tone: "plain",
 					status: segment.kind === "think" && segment.durationMs === undefined && run.status === "running" ? "running" : "done",
@@ -338,6 +340,8 @@ export class RunTracker {
 				status,
 				startedAt: tool.startedAt,
 				durationMs: tool.durationMs,
+				input: JSON.stringify(tool.args, null, 2),
+				output: tool.result,
 				tail: tool.tail,
 			});
 		});

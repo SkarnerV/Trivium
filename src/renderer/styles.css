@@ -85,8 +85,9 @@ button:disabled {
 }
 
 .windows .shell {
+	--window-titlebar-height: 44px;
 	position: relative;
-	padding-top: env(titlebar-area-height, 36px);
+	padding-top: var(--window-titlebar-height);
 }
 
 .windows .window-titlebar {
@@ -94,7 +95,7 @@ button:disabled {
 	top: 0;
 	left: 0;
 	width: 100%;
-	height: 36px;
+	height: var(--window-titlebar-height);
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -104,6 +105,15 @@ button:disabled {
 	font-weight: 500;
 	user-select: none;
 	z-index: 20;
+}
+
+.window-app-switcher {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 14px;
+	flex: none;
+	-webkit-app-region: no-drag;
 }
 
 .window-controls {
@@ -170,6 +180,10 @@ button:disabled {
 	padding-left: 0;
 }
 
+.windows .workspace {
+	padding-top: 0;
+}
+
 .card {
 	flex: 1;
 	min-width: 0;
@@ -230,7 +244,12 @@ button:disabled {
 	padding: 0 4px;
 }
 
+.sb-head .sidebar-toggle {
+	margin-left: auto;
+}
+
 .app-name {
+	color: var(--accent);
 	font-weight: 600;
 	font-size: 20px;
 	letter-spacing: -0.02em;
@@ -742,11 +761,67 @@ button:disabled {
 }
 
 .step {
+	min-width: 0;
+}
+
+.step-summary {
 	display: grid;
-	grid-template-columns: 12px var(--tool-w, 48px) minmax(0, 1fr) auto 40px;
+	grid-template-columns: 12px var(--tool-w, 48px) minmax(0, 1fr) auto 40px 12px;
 	align-items: center;
 	column-gap: 10px;
 	min-height: 26px;
+	border-radius: 4px;
+	cursor: pointer;
+	list-style: none;
+}
+
+.step-summary::-webkit-details-marker {
+	display: none;
+}
+
+.step-summary:hover {
+	background: var(--tray);
+}
+
+.step-chevron {
+	display: flex;
+	color: var(--ink-4);
+}
+
+.step details[open] > .step-summary .step-chevron {
+	transform: rotate(90deg);
+}
+
+.step-detail {
+	min-width: 0;
+	margin: 4px 0 10px 22px;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--tray);
+	overflow-wrap: anywhere;
+}
+
+.step-detail-label {
+	margin-bottom: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--ink-3);
+}
+
+.step-detail pre {
+	max-height: 360px;
+	margin: 0 0 12px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.step-detail > :last-child {
+	margin-bottom: 0;
 }
 
 .step .mark {

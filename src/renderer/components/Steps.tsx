@@ -3,6 +3,7 @@ import type { Run } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { Chevron } from "../icons.tsx";
+import { Markdown } from "./Markdown.tsx";
 
 export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const [open, setOpen] = useState(false);
@@ -36,14 +37,31 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 									: "";
 						const tone = step.status === "error" ? "error" : step.status === "running" ? "running" : step.tone;
 						return (
-							<li key={step.id} className={`step ${tone}`} title={step.target}>
-								<span className="mark" aria-hidden="true" />
-								<span className="tool">{step.tool}</span>
-								<span className={`target ellipsis${step.tool === "think" || step.tool === "note" ? " prose" : ""}`}>
-									{step.target}
-								</span>
-								<span className="meta">{step.meta}</span>
-								<span className="time">{time}</span>
+							<li key={step.id} className={`step ${tone}`}>
+								<details>
+									<summary className="step-summary" title={step.target}>
+										<span className="mark" aria-hidden="true" />
+										<span className="tool">{step.tool}</span>
+										<span className={`target ellipsis${step.tool === "think" || step.tool === "note" ? " prose" : ""}`}>
+											{step.target}
+										</span>
+										<span className="meta">{step.meta}</span>
+										<span className="time">{time}</span>
+										<span className="step-chevron"><Chevron open={false} /></span>
+									</summary>
+									<div className="step-detail">
+										{step.tool === "think" || step.tool === "note" ? (
+											<Markdown text={step.content ?? step.target} />
+										) : (
+											<>
+												<div className="step-detail-label">Input</div>
+												<pre>{step.input ?? step.target}</pre>
+												<div className="step-detail-label">Output</div>
+												<pre>{step.output || step.tail || (step.status === "running" ? "Waiting for output…" : "No text output.")}</pre>
+											</>
+										)}
+									</div>
+								</details>
 							</li>
 						);
 					})}

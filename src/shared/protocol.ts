@@ -60,6 +60,11 @@ export interface Step {
 	status: StepStatus;
 	startedAt?: number;
 	durationMs?: number;
+	/** Full thinking or commentary text, before the collapsed preview is shortened. */
+	content?: string;
+	/** Serialized tool arguments and available text output for the expanded step. */
+	input?: string;
+	output?: string;
 	/** Last lines of live output, shown for a running bash step. */
 	tail?: string;
 }

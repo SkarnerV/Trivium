@@ -120,6 +120,15 @@ npm start
 `npm install --ignore-scripts` skips dependency install scripts; the second command downloads the
 pinned Electron runtime.
 
+On Windows, `npm start` creates and caches a private `Trivium.exe` runtime under
+`dist/runtime/`, with Trivium's executable icon and product name. It does not modify the
+Electron installation in `node_modules`. Use `npm start` rather than `electron .` to avoid
+Electron's default executable/taskbar icon. This development runtime is unsigned; it is not
+an installer or a signed release build. On startup, Trivium registers its Start Menu shortcut
+and migrates old Trivium-owned shortcuts and taskbar identity away from the default Electron
+branding. Other Electron applications' shortcuts are left untouched. Close existing Trivium
+windows before restarting so the old taskbar group can exit.
+
 ### Keyboard shortcuts
 
 | Keys | Action |

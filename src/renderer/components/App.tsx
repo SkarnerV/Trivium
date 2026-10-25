@@ -12,11 +12,11 @@ import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./Overlays.tsx";
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
 import { SettingsPage } from "./Settings.tsx";
-import { PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
+import { AppSwitcher, PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
 
 const IS_WINDOWS = navigator.userAgent.includes("Windows");
 
-function WindowTitleBar({ app }: { app: AppId }) {
+function WindowTitleBar({ app, showAppSwitcher = false }: { app: AppId; showAppSwitcher?: boolean }) {
 	const [maximized, setMaximized] = useState(false);
 	useEffect(() => {
 		if (!IS_WINDOWS) return;
@@ -27,6 +27,11 @@ function WindowTitleBar({ app }: { app: AppId }) {
 		<header className="window-titlebar drag" aria-label="Trivium window">
 			<span className="window-mark" aria-hidden="true"><TriviumIcon app={app} size={18} /></span>
 			<span>Trivium</span>
+			{IS_WINDOWS && showAppSwitcher && (
+				<div className="window-app-switcher">
+					<AppSwitcher />
+				</div>
+			)}
 			{IS_WINDOWS && (
 				<div className="window-controls">
 					<button type="button" aria-label="Minimize" title="Minimize" onClick={() => void trivium.windowMinimize()}>
@@ -150,7 +155,7 @@ export function App() {
 	}
 	return (
 		<div className={`shell${folded ? " folded" : ""}`} style={vars}>
-			<WindowTitleBar app={iconApp} />
+			<WindowTitleBar app={iconApp} showAppSwitcher />
 			{folded ? <Rail /> : <Sidebar />}
 			<div className="workspace">
 				<div className="card">

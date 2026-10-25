@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, Notification, shell } from "electron";
-import { appIconFilename } from "../shared/branding.ts";
+import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
@@ -13,14 +13,14 @@ import { LoginFlow, listProviders } from "./auth.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
 import { SettingsStore } from "./settings.ts";
+import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
 
 const assets = fileURLToPath(new URL("./", import.meta.url));
 const page = pathToFileURL(join(assets, "index.html")).href;
-const appUserModelId = "com.coresmos.trivium";
 let window: BrowserWindow | undefined;
 
 app.setName("Trivium");
-if (process.platform === "win32") app.setAppUserModelId(appUserModelId);
+if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
 
 mkdirSync(triviumDir, { recursive: true });
 const settings = new SettingsStore(join(triviumDir, "settings.json"));
@@ -82,10 +82,11 @@ function setAppIcon(id: AppId): void {
 	else window?.setIcon(icon);
 	if (process.platform === "win32") {
 		window?.setAppDetails({
-			appId: appUserModelId,
+			appId: APP_USER_MODEL_ID,
 			appIconPath: icon,
 			appIconIndex: 0,
-			relaunchCommand: app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
+			// A renamed development runtime reports isPackaged=true, but still needs the project argument.
+			relaunchCommand: process.defaultApp ? `"${process.execPath}" "${app.getAppPath()}"` : `"${process.execPath}"`,
 			relaunchDisplayName: "Trivium",
 		});
 	}
@@ -278,6 +279,20 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+	if (process.platform === "win32") {
+		try {
+			const repaired = registerWindowsShortcuts(shell, {
+				appData: app.getPath("appData"),
+				appPath: app.getAppPath(),
+				executable: process.execPath,
+				icon: join(assets, appIconFilename("code", "ico")),
+				packaged: !process.defaultApp && app.isPackaged,
+			});
+			if (repaired.length) await refreshWindowsIcons();
+		} catch (error) {
+			console.error("Could not refresh Windows application branding:", error);
+		}
+	}
 	Menu.setApplicationMenu(
 		Menu.buildFromTemplate([
 			{ role: "appMenu" },

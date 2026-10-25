@@ -1,0 +1,39 @@
+export function duration(ms: number | undefined): string {
+	if (ms === undefined || ms < 0) return "";
+	if (ms < 100) return "<0.1s";
+	if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`;
+	if (ms < 10_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, "")}s`;
+	const seconds = Math.round(ms / 1000);
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+export function relativeTime(timestamp: number, now = Date.now()): string {
+	const minutes = Math.floor((now - timestamp) / 60_000);
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h`;
+	const date = new Date(timestamp);
+	const days = Math.floor(hours / 24);
+	if (days < 2) return "Yesterday";
+	if (days < 7) return date.toLocaleDateString(undefined, { weekday: "short" });
+	return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export function tokens(count: number): string {
+	if (count < 1000) return String(count);
+	if (count < 100_000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+	return `${Math.round(count / 1000)}k`;
+}
+
+export function baseName(path: string): string {
+	return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+}
+
+export function shortPath(path: string): string {
+	const home = /^(\/Users\/[^/]+|\/home\/[^/]+)/.exec(path)?.[1];
+	return home ? `~${path.slice(home.length)}` : path;
+}

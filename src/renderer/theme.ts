@@ -1,0 +1,114 @@
+import type { AppId } from "../shared/protocol.ts";
+
+export interface AppTheme {
+	name: string;
+	/** Window chrome around the white card. */
+	chrome: string;
+	/** Switcher track, rail button and progress track. */
+	tab: string;
+	border: string;
+	muted: string;
+	secondary: string;
+	accent: string;
+	/** Text on light accent backgrounds. */
+	accentText: string;
+	/** Light accent fill: user bubbles, selected rows, inline code. */
+	soft: string;
+	/** Hairline around the card and the composer. */
+	edge: string;
+	/** Separators inside the card. */
+	line: string;
+	/** Tray and side panel background. */
+	tray: string;
+	ringTrack: string;
+	dot: string;
+}
+
+export const THEMES: Record<AppId, AppTheme> = {
+	code: {
+		name: "Code",
+		chrome: "#EEEFFA",
+		tab: "#E2E3F6",
+		border: "#D9DBF0",
+		muted: "#5C6091",
+		secondary: "#34374F",
+		accent: "#5457E8",
+		accentText: "#3B3EC4",
+		soft: "#EEEFFC",
+		edge: "#DEDFF3",
+		line: "#E8E9F8",
+		tray: "#F7F7FE",
+		ringTrack: "#E6E7F7",
+		dot: "#8F92FF",
+	},
+	research: {
+		name: "Research",
+		chrome: "#EAF4F1",
+		tab: "#DBEBE7",
+		border: "#CFE3DE",
+		muted: "#4A6A64",
+		secondary: "#2D403C",
+		accent: "#0B7A6E",
+		accentText: "#075E55",
+		soft: "#E4F2EF",
+		edge: "#D3E6E1",
+		line: "#E2EFEC",
+		tray: "#F4FAF8",
+		ringTrack: "#DCEDE9",
+		dot: "#4FB3A6",
+	},
+	write: {
+		name: "Write",
+		chrome: "#F6F0E6",
+		tab: "#ECE2D2",
+		border: "#E2D5C1",
+		muted: "#735F48",
+		secondary: "#43382B",
+		accent: "#A65A08",
+		accentText: "#844705",
+		soft: "#FAF0E3",
+		edge: "#E6DACA",
+		line: "#F0E7DA",
+		tray: "#FBF7F1",
+		ringTrack: "#ECE2D2",
+		dot: "#D9964A",
+	},
+};
+
+/** For Settings pages that are not about one app. */
+export const NEUTRAL: AppTheme = {
+	name: "Settings",
+	chrome: "#F1F1F3",
+	tab: "#E6E6EA",
+	border: "#DCDCE1",
+	muted: "#5E616B",
+	secondary: "#34363D",
+	accent: "#16171B",
+	accentText: "#16171B",
+	soft: "#F2F2F5",
+	edge: "#E4E4E9",
+	line: "#F0F0F3",
+	tray: "#F7F7F9",
+	ringTrack: "#E6E6EA",
+	dot: "#8B8D97",
+};
+
+export function themeVars(app: AppId | AppTheme): Record<string, string> {
+	const theme = typeof app === "string" ? THEMES[app] : app;
+	return {
+		"--chrome": theme.chrome,
+		"--tab": theme.tab,
+		"--border": theme.border,
+		"--muted": theme.muted,
+		"--secondary": theme.secondary,
+		"--accent": theme.accent,
+		"--accent-text": theme.accentText,
+		"--accent-ring": `${theme.accent}2E`,
+		"--soft": theme.soft,
+		"--edge": theme.edge,
+		"--line": theme.line,
+		"--tray": theme.tray,
+		"--ring-track": theme.ringTrack,
+		"--dot": theme.dot,
+	};
+}

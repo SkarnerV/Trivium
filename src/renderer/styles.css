@@ -264,21 +264,88 @@ button:disabled {
 }
 
 .project-head {
+	position: relative;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	padding: 0 10px 6px;
-	color: var(--muted);
-	font-size: 11px;
+	gap: 2px;
+	min-height: 30px;
+	margin-bottom: 2px;
+	padding-right: 4px;
+	border-radius: 8px;
+	color: var(--secondary);
+}
+
+.project-head:hover {
+	background: var(--tab);
+}
+
+.peek .project-head:hover {
+	background: var(--soft);
+}
+
+.project-toggle {
+	flex: 1;
+	min-width: 0;
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 6px 0 10px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font-size: 12.5px;
 	font-weight: 500;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
+	text-align: left;
+}
+
+.project-toggle svg {
+	flex: none;
+	color: var(--muted);
+}
+
+.project-head:hover .project-toggle svg {
+	color: var(--accent);
 }
 
 .project-head .count {
+	padding: 0 6px;
 	font-family: var(--mono);
-	text-transform: none;
-	letter-spacing: 0;
+	font-size: 11px;
+	color: var(--muted);
+}
+
+/* The heading's actions replace its count only while the heading itself is hovered or focused. */
+.project-action {
+	width: 24px;
+	height: 24px;
+	flex: none;
+	display: none;
+	place-items: center;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--muted);
+}
+
+.project-head:hover .project-action,
+.project-head:focus-within .project-action {
+	display: grid;
+}
+
+.project-head:hover .count,
+.project-head:focus-within .count {
+	display: none;
+}
+
+.project-action:hover {
+	background: #fff;
+	color: var(--ink);
+}
+
+.project-action[aria-label^="Delete"]:hover {
+	color: var(--del);
 }
 
 .session-row {
@@ -311,6 +378,48 @@ button:disabled {
 }
 
 .peek .session-row:hover {
+	background: var(--soft);
+}
+
+.session-item {
+	position: relative;
+}
+
+/* The delete button takes the place of the time while the row is hovered. */
+.row-action {
+	position: absolute;
+	top: 50%;
+	right: 6px;
+	width: 24px;
+	height: 24px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--muted);
+	opacity: 0;
+	transform: translateY(-50%);
+	transition: opacity 0.12s;
+}
+
+.session-item:hover .row-action,
+.row-action:focus-visible {
+	opacity: 1;
+}
+
+.session-item:not(.running):hover .session-meta,
+.session-item:not(.running):hover .unread-dot,
+.session-item:has(.row-action:focus-visible) .session-meta {
+	visibility: hidden;
+}
+
+.row-action:hover {
+	background: var(--tab);
+	color: var(--del);
+}
+
+.peek .row-action:hover {
 	background: var(--soft);
 }
 
@@ -1088,7 +1197,7 @@ button:disabled {
 .tooltip .num {
 	font-family: var(--mono);
 	font-size: 11px;
-	color: #a9abd6;
+	color: #b4b6c2;
 }
 
 .tooltip .bar {
@@ -1114,27 +1223,16 @@ button:disabled {
 }
 
 .tooltip .note {
-	color: #a9abd6;
+	padding-top: 2px;
+	border-top: 1px solid #2a2b33;
+	color: #9a9ca7;
 	font-size: 11px;
 }
 
-.model-pick {
-	min-height: 30px;
-	max-width: 220px;
-	padding: 0 6px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--ink-2);
-	font-size: 12px;
-	cursor: pointer;
-	appearance: none;
-	field-sizing: content;
-}
-
-.model-pick:hover,
-.model-pick:focus-visible {
-	background: var(--soft);
+/* Context parts on the dark tooltip: a light neutral and the theme's bright tint stay apart in every app. */
+.tooltip {
+	--ctx-system: #c9cad3;
+	--ctx-conversation: var(--dot);
 }
 
 .round-btn {
@@ -1281,6 +1379,12 @@ button:disabled {
 .btn.primary {
 	border: 0;
 	background: var(--accent);
+	color: #fff;
+}
+
+.btn.danger {
+	border: 0;
+	background: var(--del);
 	color: #fff;
 }
 
@@ -1759,17 +1863,6 @@ button:disabled {
 	font-size: 13px;
 }
 
-.soft-select {
-	min-height: 30px;
-	max-width: 320px;
-	padding: 0 8px;
-	border: 0;
-	border-radius: 8px;
-	background: var(--soft);
-	color: var(--ink);
-	font-size: 12.5px;
-}
-
 .switch {
 	position: relative;
 	flex: none;
@@ -2091,4 +2184,182 @@ button:disabled {
 	margin-top: 6px;
 	font-size: 22px;
 	letter-spacing: 0.12em;
+}
+
+/* Dropdown */
+
+.dd {
+	position: relative;
+	display: inline-flex;
+	min-width: 0;
+}
+
+.dd-trigger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	min-height: 30px;
+	padding: 0 8px 0 10px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--ink);
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+
+.dd-trigger svg {
+	flex: none;
+	color: var(--ink-3);
+	transition: transform 0.15s;
+}
+
+.dd.open .dd-trigger svg:last-child {
+	transform: rotate(180deg);
+}
+
+.dd-value {
+	min-width: 0;
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dd-soft .dd-trigger:hover,
+.dd-soft.open .dd-trigger {
+	background: var(--tab);
+}
+
+.dd-ghost .dd-trigger {
+	padding: 0 6px 0 8px;
+	background: transparent;
+	color: var(--ink-2);
+	font-size: 12px;
+}
+
+.dd-ghost .dd-trigger:hover,
+.dd-ghost.open .dd-trigger {
+	background: var(--soft);
+}
+
+.dd-menu {
+	position: absolute;
+	z-index: 60;
+	min-width: 100%;
+	width: max-content;
+	max-width: 320px;
+	display: flex;
+	flex-direction: column;
+	padding: 4px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 12px 32px rgba(19, 20, 43, 0.16);
+	animation: dd-in 0.12s ease-out;
+}
+
+.dd-menu.down {
+	top: calc(100% + 6px);
+}
+
+.dd-menu.up {
+	bottom: calc(100% + 6px);
+}
+
+.dd-menu.left {
+	left: 0;
+}
+
+.dd-menu.right {
+	right: 0;
+}
+
+@keyframes dd-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
+	}
+}
+
+.dd-search {
+	margin: 2px 2px 4px;
+	min-height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--edge);
+	border-radius: 8px;
+	outline: none;
+	font-size: 12.5px;
+}
+
+.dd-search:focus {
+	border-color: var(--accent);
+}
+
+.dd-list {
+	max-height: 280px;
+	overflow-y: auto;
+	outline: none;
+}
+
+.dd-group {
+	padding: 8px 10px 4px;
+	font-size: 10.5px;
+	font-weight: 500;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.dd-option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	padding: 0 10px 0 6px;
+	border-radius: 8px;
+	color: var(--ink);
+	font-size: 12.5px;
+	cursor: pointer;
+}
+
+.dd-option.active {
+	background: var(--soft);
+}
+
+.dd-option[aria-selected="true"] {
+	font-weight: 500;
+}
+
+.dd-check {
+	width: 14px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	color: var(--accent);
+}
+
+.dd-label {
+	flex: 1;
+	white-space: nowrap;
+}
+
+.dd-hint {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.dd-empty {
+	padding: 10px;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.model-select {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
 }

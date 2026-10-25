@@ -4,7 +4,7 @@ import { CloseIcon } from "../icons.tsx";
 import { dismissNotice, getState, notify, openSettings, setState, switchApp, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
-import { NewSessionDialog, SearchOverlay } from "./Overlays.tsx";
+import { ConfirmDialog, NewSessionDialog, SearchOverlay } from "./Overlays.tsx";
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
@@ -110,6 +110,7 @@ export function App() {
 			</div>
 			{overlay === "new" && <NewSessionDialog />}
 			{overlay === "search" && <SearchOverlay />}
+			<ConfirmDialog />
 			<Toasts />
 		</div>
 	);

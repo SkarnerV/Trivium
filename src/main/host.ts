@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +32,7 @@ import type {
 	SessionView,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
-import { triviumDir, profileFor, profileInfo } from "./apps.ts";
+import { profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -270,6 +270,34 @@ export class SessionHost {
 		return changes;
 	}
 
+	/**
+	 * Deletes sessions: unloads them, moves their files with `trash` (the system Trash),
+	 * and drops Trivium's own records of them. Refuses while any of them is running.
+	 */
+	async deleteSessions(paths: string[], trash: (path: string) => Promise<void>): Promise<string[]> {
+		for (const path of paths) {
+			const live = this.live.get(path);
+			if (live?.running) throw new Error(`"${this.titleFor(live)}" is still running. Stop it before deleting.`);
+		}
+		const deleted: string[] = [];
+		for (const path of paths) {
+			const live = this.live.get(path);
+			const id = live?.session.sessionId ?? this.summaries.find((summary) => summary.path === path)?.id;
+			if (live) this.unload(live);
+			if (this.viewing === path) this.viewing = undefined;
+			// A new session has no file until its first message.
+			if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
+			if (id) {
+				delete this.appIndex[id];
+				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
+			}
+			deleted.push(path);
+		}
+		await this.saveIndex();
+		this.scheduleList();
+		return deleted;
+	}
+
 	/** Unloads a session from memory. Its file stays; opening it again reloads it. */
 	private unload(live: Live): void {
 		this.broker.cancelAll(live.path);
@@ -362,7 +390,7 @@ export class SessionHost {
 		};
 	}
 
-	async dispose(): Promise<void> {
+	dispose(): void {
 		if (this.idleTimer) clearInterval(this.idleTimer);
 		this.broker.cancelAll();
 		for (const live of this.live.values()) {

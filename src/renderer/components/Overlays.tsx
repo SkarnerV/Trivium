@@ -198,3 +198,39 @@ export function SearchOverlay() {
 		</div>
 	);
 }
+
+export function ConfirmDialog() {
+	const request = useStore((s) => s.confirm);
+	const confirmButton = useRef<HTMLButtonElement>(null);
+	useEffect(() => confirmButton.current?.focus(), [request]);
+	if (!request) return null;
+	return (
+		<div
+			className="scrim"
+			onMouseDown={(event) => event.target === event.currentTarget && request.resolve(false)}
+			onKeyDown={(event) => {
+				if (event.key === "Escape") {
+					event.preventDefault();
+					request.resolve(false);
+				}
+			}}
+		>
+			<div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message" style={{ width: 440, gap: 14 }}>
+				<h2 id="confirm-title" style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+					{request.title}
+				</h2>
+				<p id="confirm-message" className="set-sub" style={{ margin: 0 }}>
+					{request.message}
+				</p>
+				<div className="modal-foot">
+					<button type="button" className="btn ghost" onClick={() => request.resolve(false)}>
+						Cancel <span className="kbd">esc</span>
+					</button>
+					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
+						{request.confirmLabel}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}

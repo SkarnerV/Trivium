@@ -2,9 +2,9 @@ import { useEffect } from "react";
 import type { AppId, SessionSummary } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon } from "../icons.tsx";
+import { AppIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
-import { openSession, openSettings, setState, switchApp, useStore } from "../store.ts";
+import { askConfirm, deleteSessions, getState, notify, openSession, openSettings, setState, startSession, switchApp, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 
 interface ProjectGroup {
@@ -29,29 +29,63 @@ function groupByProject(sessions: SessionSummary[], app: AppId): ProjectGroup[] 
 	return [...groups.values()];
 }
 
+function confirmDelete(sessions: SessionSummary[], what: string, title?: string): void {
+	const running = sessions.filter((session) => session.running);
+	if (running.length) {
+		notify(`Stop "${running[0]!.title}" before deleting it.`, "warning");
+		return;
+	}
+	// Deleting drops the undo point for changes nobody kept or reverted yet.
+	const views = getState().views;
+	const pending = sessions.reduce((sum, session) => sum + (views[session.path]?.changes.length ?? 0), 0);
+	const changesNote = pending
+		? ` ${pending === 1 ? "1 changed file stays as it is" : `${pending} changed files stay as they are`}, but can no longer be reverted from Trivium.`
+		: "";
+	void askConfirm({
+		title: title ?? (sessions.length === 1 ? "Delete this session?" : `Delete ${sessions.length} sessions?`),
+		message: `${what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.${changesNote}`,
+		confirmLabel: sessions.length === 1 ? "Delete session" : `Delete ${sessions.length} sessions`,
+	}).then((ok) => {
+		if (ok) void deleteSessions(sessions.map((session) => session.path));
+	});
+}
+
 function SessionRow({ session, active, startedAt }: { session: SessionSummary; active: boolean; startedAt?: number }) {
 	const now = useNow(session.running ? 1000 : 60_000);
 	return (
-		<button
-			type="button"
-			className="session-row"
-			aria-current={active ? "page" : undefined}
-			onClick={() => void openSession(session.path)}
-			title={session.title}
-		>
-			<span className="title ellipsis">{session.title}</span>
-			{session.running ? (
-				<span className="running-meta">
-					<span className="live-dot" />
-					{startedAt ? duration(now - startedAt) : ""}
-				</span>
-			) : (
-				<>
-					{session.unread && <span className="unread-dot" aria-label="Unread" />}
-					<span className="session-meta">{relativeTime(session.modified, now)}</span>
-				</>
+		<div className={`session-item${session.running ? " running" : ""}`}>
+			<button
+				type="button"
+				className="session-row"
+				aria-current={active ? "page" : undefined}
+				onClick={() => void openSession(session.path)}
+				title={session.title}
+			>
+				<span className="title ellipsis">{session.title}</span>
+				{session.running ? (
+					<span className="running-meta">
+						<span className="live-dot" />
+						{startedAt ? duration(now - startedAt) : ""}
+					</span>
+				) : (
+					<>
+						{session.unread && <span className="unread-dot" aria-label="Unread" />}
+						<span className="session-meta">{relativeTime(session.modified, now)}</span>
+					</>
+				)}
+			</button>
+			{!session.running && (
+				<button
+					type="button"
+					className="row-action"
+					aria-label={`Delete ${session.title}`}
+					title="Delete session"
+					onClick={() => confirmDelete([session], `"${session.title}"`)}
+				>
+					<TrashIcon />
+				</button>
 			)}
-		</button>
+		</div>
 	);
 }
 
@@ -60,6 +94,7 @@ export function SessionGroups() {
 	const sessions = useStore((s) => s.sessions);
 	const selected = useStore((s) => s.selected[s.app]);
 	const views = useStore((s) => s.views);
+	const collapsed = useStore((s) => s.collapsed);
 	const groups = groupByProject(sessions, app);
 	if (!groups.length) {
 		return <p className="sb-empty">No {THEMES[app].name} sessions yet.</p>;
@@ -69,10 +104,48 @@ export function SessionGroups() {
 			{groups.map((group) => (
 				<section key={group.cwd} className="project" aria-label={group.name}>
 					<div className="project-head" title={group.cwd}>
-						<span className="ellipsis">{group.name}</span>
+						<button
+							type="button"
+							className="project-toggle"
+							aria-expanded={!collapsed[`${app}:${group.cwd}`]}
+							onClick={() =>
+								setState((s) => ({
+									collapsed: { ...s.collapsed, [`${app}:${group.cwd}`]: !s.collapsed[`${app}:${group.cwd}`] },
+								}))
+							}
+						>
+							{collapsed[`${app}:${group.cwd}`] ? <FolderIcon size={15} /> : <FolderOpenIcon size={15} />}
+							<span className="ellipsis">{group.name}</span>
+						</button>
 						<span className="count">{group.sessions.length}</span>
+						<button
+							type="button"
+							className="project-action"
+							aria-label={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
+							title={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
+							onClick={() =>
+								confirmDelete(
+									group.sessions,
+									group.sessions.length === 1
+										? `The ${THEMES[app].name} session in ${group.name}`
+										: `Every ${THEMES[app].name} session in ${group.name} (${group.sessions.length})`,
+									`Delete ${group.name} from ${THEMES[app].name}?`,
+								)
+							}
+						>
+							<TrashIcon size={12} />
+						</button>
+						<button
+							type="button"
+							className="project-action"
+							aria-label={`New session in ${group.name}`}
+							title={`New session in ${group.name}`}
+							onClick={() => void startSession({ app, cwd: group.cwd })}
+						>
+							<PlusIcon size={13} />
+						</button>
 					</div>
-					{group.sessions.slice(0, PER_PROJECT).map((session) => (
+					{!collapsed[`${app}:${group.cwd}`] && group.sessions.slice(0, PER_PROJECT).map((session) => (
 						<SessionRow
 							key={session.path}
 							session={session}

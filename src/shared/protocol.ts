@@ -231,6 +231,8 @@ export interface TriviumApi {
 	pickFolder(): Promise<string | undefined>;
 	openSession(path: string): Promise<SessionView>;
 	newSession(input: NewSessionInput): Promise<SessionView>;
+	/** Moves session files to the Trash. Returns the paths that were deleted. */
+	deleteSessions(paths: string[]): Promise<string[]>;
 	send(path: string, text: string, mode: "prompt" | "steer" | "followUp"): Promise<void>;
 	abort(path: string): Promise<void>;
 	clearQueue(path: string): Promise<QueueInfo>;

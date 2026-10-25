@@ -32,26 +32,42 @@ export interface State {
 	models: ModelOption[];
 	folded: boolean;
 	peek: boolean;
+	/** Project groups folded in the sidebar, keyed "app:cwd". */
+	collapsed: Record<string, boolean>;
 	/** Sessions whose Changes panel the user closed. */
 	changesHidden: Record<string, boolean>;
 	overlay: "new" | "search" | null;
 	page: "main" | "settings";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
+	/** A question waiting for Confirm or Cancel. */
+	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */
 	login?: { providerId: string; name: string; events: LoginEvent[] };
+}
+
+export interface ConfirmRequest {
+	title: string;
+	message: string;
+	confirmLabel: string;
+	resolve: (ok: boolean) => void;
 }
 
 export type SettingsSection = "general" | "models" | AppId | "about";
 
 const PREFS_KEY = "trivium.prefs";
 
-function loadPrefs(): Pick<State, "app" | "folded" | "selected"> {
+function loadPrefs(): Pick<State, "app" | "folded" | "selected" | "collapsed"> {
 	try {
 		const parsed = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<State>;
-		return { app: parsed.app ?? "code", folded: parsed.folded ?? false, selected: parsed.selected ?? {} };
+		return {
+			app: parsed.app ?? "code",
+			folded: parsed.folded ?? false,
+			selected: parsed.selected ?? {},
+			collapsed: parsed.collapsed ?? {},
+		};
 	} catch {
-		return { app: "code", folded: false, selected: {} };
+		return { app: "code", folded: false, selected: {}, collapsed: {} };
 	}
 }
 
@@ -78,11 +94,11 @@ export function getState(): State {
 export function setState(patch: Partial<State> | ((current: State) => Partial<State>)): void {
 	const next = typeof patch === "function" ? patch(state) : patch;
 	state = { ...state, ...next };
-	if ("app" in next || "folded" in next || "selected" in next) {
+	if ("app" in next || "folded" in next || "selected" in next || "collapsed" in next) {
 		try {
 			localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ app: state.app, folded: state.folded, selected: state.selected }),
+				JSON.stringify({ app: state.app, folded: state.folded, selected: state.selected, collapsed: state.collapsed }),
 			);
 		} catch {
 			// Preferences are a convenience; the app works without them.
@@ -242,6 +258,37 @@ export function switchApp(app: AppId): void {
 	setState({ app, peek: false, page: "main" });
 	const path = getState().selected[app];
 	if (path && !getState().views[path]) void openSession(path);
+}
+
+/** Shows a confirm dialog and resolves with the answer. */
+export function askConfirm(request: Omit<ConfirmRequest, "resolve">): Promise<boolean> {
+	return new Promise((resolve) => {
+		getState().confirm?.resolve(false);
+		setState({
+			confirm: {
+				...request,
+				resolve: (ok) => {
+					setState({ confirm: undefined });
+					resolve(ok);
+				},
+			},
+		});
+	});
+}
+
+/** Moves sessions to the Trash and forgets them everywhere in the UI. */
+export async function deleteSessions(paths: string[]): Promise<void> {
+	const deleted = await attempt(() => trivium.deleteSessions(paths));
+	if (!deleted?.length) return;
+	const gone = new Set(deleted);
+	setState((s) => ({
+		sessions: s.sessions.filter((session) => !gone.has(session.path)),
+		views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))),
+		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),
+		dialogs: s.dialogs.filter((dialog) => !gone.has(dialog.sessionPath)),
+		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
+	}));
+	notify(deleted.length === 1 ? "Session moved to the Trash" : `${deleted.length} sessions moved to the Trash`, "info");
 }
 
 export function openSettings(section?: SettingsSection): void {

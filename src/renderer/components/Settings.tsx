@@ -14,6 +14,7 @@ import {
 	useStore,
 } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { Dropdown } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 
@@ -63,17 +64,13 @@ function General() {
 			<section className="set-section">
 				<h3>Appearance</h3>
 				<Row label="Text size">
-					<select
-						className="soft-select"
-						value={settings.textSize}
-						onChange={(event) => void updateSettings({ textSize: Number(event.target.value) })}
-					>
-						{[0.9, 1, 1.1, 1.25].map((size) => (
-							<option key={size} value={size}>
-								{Math.round(size * 100)}%
-							</option>
-						))}
-					</select>
+					<Dropdown
+						label="Text size"
+						value={String(settings.textSize)}
+						options={[0.9, 1, 1.1, 1.25].map((size) => ({ value: String(size), label: `${Math.round(size * 100)}%` }))}
+						align="right"
+						onChange={(value) => void updateSettings({ textSize: Number(value) })}
+					/>
 				</Row>
 			</section>
 			<section className="set-section">
@@ -85,16 +82,18 @@ function General() {
 			<section className="set-section">
 				<h3>Sessions</h3>
 				<Row label="Unload idle sessions after" hint="Unloaded sessions reload from disk when you open them">
-					<select
-						className="soft-select"
-						value={settings.idleMinutes}
-						onChange={(event) => void updateSettings({ idleMinutes: Number(event.target.value) })}
-					>
-						<option value={10}>10 minutes</option>
-						<option value={30}>30 minutes</option>
-						<option value={120}>2 hours</option>
-						<option value={0}>Never</option>
-					</select>
+					<Dropdown
+						label="Unload idle sessions after"
+						value={String(settings.idleMinutes)}
+						options={[
+							{ value: "10", label: "10 minutes" },
+							{ value: "30", label: "30 minutes" },
+							{ value: "120", label: "2 hours" },
+							{ value: "0", label: "Never" },
+						]}
+						align="right"
+						onChange={(value) => void updateSettings({ idleMinutes: Number(value) })}
+					/>
 				</Row>
 			</section>
 			<section className="set-section">

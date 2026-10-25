@@ -68,6 +68,15 @@ export const Chevron = ({ open, size = 12, down = false }: { open: boolean; size
 		<path d={open ? (down ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6") : down ? "m6 9 6 6 6-6" : "m9 6 6 6-6 6"} />
 	</Svg>
 );
+export const TrashIcon = (p: IconProps) => (
+	<Svg size={13} {...p}>
+		<path d="M4 7h16" />
+		<path d="M10 11v6" />
+		<path d="M14 11v6" />
+		<path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+		<path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />
@@ -89,6 +98,12 @@ export const QueueIcon = (p: IconProps) => (
 export const FolderIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+	</Svg>
+);
+export const FolderOpenIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M3 18V6a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v2" />
+		<path d="M3 18l2.4-6.6A2 2 0 0 1 7.3 10H21a1 1 0 0 1 .95 1.3l-2 6.3A2 2 0 0 1 18 19H4a1 1 0 0 1-1-1z" />
 	</Svg>
 );
 export const WarnIcon = (p: IconProps) => (

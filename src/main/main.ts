@@ -107,6 +107,7 @@ function registerIpc(): void {
 		return host.describeApp(id);
 	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
+	handle("trivium:deleteSessions", (paths: string[]) => host.deleteSessions(paths, (path) => shell.trashItem(path)));
 	handle("trivium:providers", () => listProviders(host.runtime));
 	handle("trivium:login", (providerId: string, type: "api_key" | "oauth") => {
 		// The flow reports progress through events; the call returns at once.
@@ -220,10 +221,5 @@ app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit();
 });
 
-let quitting = false;
-app.on("before-quit", (event) => {
-	if (quitting) return;
-	quitting = true;
-	event.preventDefault();
-	void host.dispose().finally(() => app.quit());
-});
+// Cleanup is synchronous, so it runs here without holding up the quit.
+app.on("will-quit", () => host.dispose());

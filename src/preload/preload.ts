@@ -14,6 +14,7 @@ const api: TriviumApi = {
 	pickFolder: call("pickFolder") as TriviumApi["pickFolder"],
 	openSession: call("openSession") as TriviumApi["openSession"],
 	newSession: call("newSession") as TriviumApi["newSession"],
+	deleteSessions: call("deleteSessions") as TriviumApi["deleteSessions"],
 	send: call("send") as TriviumApi["send"],
 	abort: call("abort") as TriviumApi["abort"],
 	clearQueue: call("clearQueue") as TriviumApi["clearQueue"],

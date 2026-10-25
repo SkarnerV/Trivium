@@ -1,8 +1,9 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ContextInfo, ModelOption, SessionView } from "../../shared/protocol.ts";
+import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { CloseIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
-import { attempt, trivium, setState, useStore } from "../store.ts";
+import { attempt, setState, trivium } from "../store.ts";
+import { ModelSelect } from "./ModelSelect.tsx";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
 	const [open, setOpen] = useState(false);
@@ -48,14 +49,14 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 						</span>
 					</div>
 					<div className="bar">
-						<span style={{ width: share(system), background: "var(--dot)" }} />
-						<span style={{ width: share(conversation), background: "var(--accent)" }} />
+						<span style={{ width: share(system), background: "var(--ctx-system)" }} />
+						<span style={{ width: share(conversation), background: "var(--ctx-conversation)" }} />
 					</div>
 					<div className="legend">
-						<span className="swatch" style={{ background: "var(--dot)" }} />
+						<span className="swatch" style={{ background: "var(--ctx-system)" }} />
 						<span>System prompt and tools</span>
 						<span className="num">~{tokens(system)}</span>
-						<span className="swatch" style={{ background: "var(--accent)" }} />
+						<span className="swatch" style={{ background: "var(--ctx-conversation)" }} />
 						<span>Conversation</span>
 						<span className="num">{context.tokens === null ? "?" : tokens(conversation)}</span>
 					</div>
@@ -72,15 +73,9 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 	);
 }
 
-function levelsOf(model: ModelOption): string[] {
-	return model.reasoning && model.thinkingLevels.length ? model.thinkingLevels : ["off"];
-}
-
-function ModelPicker({ view, models }: { view: SessionView; models: ModelOption[] }) {
-	const value = `${view.model ?? ""}|${view.thinkingLevel}`;
-	const known = models.some((model) => model.key === view.model);
-	const change = async (next: string) => {
-		const [key, level] = next.split("|") as [string, string];
+function ModelPicker({ view }: { view: SessionView }) {
+	const change = async (key: string | undefined, level: string) => {
+		if (!key) return;
 		const ok = await attempt(() => trivium.setModel(view.path, key, level).then(() => true));
 		if (!ok) return;
 		setState((s) => {
@@ -88,24 +83,7 @@ function ModelPicker({ view, models }: { view: SessionView; models: ModelOption[
 			return current ? { views: { ...s.views, [view.path]: { ...current, model: key, thinkingLevel: level } } } : {};
 		});
 	};
-	return (
-		<label style={{ display: "flex" }}>
-			<span className="sr-only">Model and thinking</span>
-			<select className="model-pick" value={value} onChange={(event) => void change(event.target.value)}>
-				{!known && <option value={value}>{view.model ? `${view.model.split("/").pop()} · ${view.thinkingLevel}` : "No model"}</option>}
-				{models.map((model) => (
-					<optgroup key={model.key} label={`${model.name} (${model.provider})`}>
-						{levelsOf(model).map((level) => (
-							<option key={level} value={`${model.key}|${level}`}>
-								{model.name}
-								{level === "off" && !model.reasoning ? "" : ` · ${level}`}
-							</option>
-						))}
-					</optgroup>
-				))}
-			</select>
-		</label>
-	);
+	return <ModelSelect value={view.model} level={view.thinkingLevel} variant="ghost" align="right" onChange={(k, l) => void change(k, l)} />;
 }
 
 function Tray({ view }: { view: SessionView }) {
@@ -137,7 +115,6 @@ function Tray({ view }: { view: SessionView }) {
 }
 
 export function Composer({ view }: { view: SessionView }) {
-	const models = useStore((s) => s.models);
 	const [text, setText] = useState("");
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
@@ -192,7 +169,7 @@ export function Composer({ view }: { view: SessionView }) {
 					<div className="composer-bar">
 						{running && <span className="composer-hint">↵ steer · ⌥↵ queue · esc stop</span>}
 						<ContextRing context={view.context} />
-						<ModelPicker view={view} models={models} />
+						<ModelPicker view={view} />
 						{running ? (
 							<button type="button" className="round-btn" aria-label="Stop" title="Stop (esc)" onClick={stop}>
 								<StopIcon />

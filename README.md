@@ -13,6 +13,7 @@ extensions and model, so the agent fixing your code is not the one citing your s
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS-16171B?style=flat-square&logo=apple&logoColor=white)](#requirements)
 [![Status](https://img.shields.io/badge/status-early%20preview-A65A08?style=flat-square)](#roadmap)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0B7A6E?style=flat-square)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/SkarnerV/Trivium?style=flat-square&color=0B7A6E)](https://github.com/SkarnerV/Trivium/stargazers)
 
 [Features](#features) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Extensions](#extensions) · [Roadmap](#roadmap) · [Contributing](#contributing)
@@ -223,7 +224,7 @@ request, and include a screenshot for UI changes. The scripted model makes those
 
 ## License
 
-No license has been chosen yet. Until one is added, the code is all rights reserved.
+[MIT](LICENSE) © SkarnerV. Plugins and extensions you write for Trivium are yours to license as you like.
 
 ## Acknowledgements
 

@@ -4,6 +4,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "Desktop workspace for coding, research and writing, built on the pi SDK",
+	"license": "MIT",
 	"keywords": [
 		"ai-agent",
 		"coding-agent",

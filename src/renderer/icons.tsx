@@ -98,6 +98,16 @@ export const KeyIcon = (p: IconProps) => (
 		<path d="m14 9 2 2" />
 	</Svg>
 );
+export const KeyboardIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+		<path d="M6.5 10h.01" />
+		<path d="M10.5 10h.01" />
+		<path d="M14.5 10h.01" />
+		<path d="M18 10h.01" />
+		<path d="M8 14h8" />
+	</Svg>
+);
 export const InfoIcon = (p: IconProps) => (
 	<Svg size={14} {...p}>
 		<circle cx="12" cy="12" r="9" />

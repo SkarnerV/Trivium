@@ -161,7 +161,6 @@ export function CommandMenu({
 		<div className="cmd-menu" role="listbox" aria-label={argsMode ? "Suggestions" : "Commands"}>
 			<div className="cmd-head">
 				<span>{argsMode ? "Suggestions" : "Commands"}</span>
-				<span className="kbd">↑↓ choose · tab complete · esc close</span>
 			</div>
 			<div className="cmd-list" ref={list}>
 				{items.map((item, index) => (

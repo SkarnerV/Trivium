@@ -182,7 +182,6 @@ export function Composer({ view }: { view: SessionView }) {
 						/>
 					</label>
 					<div className="composer-bar">
-						{running && <span className="composer-hint">↵ steer · ⌥↵ queue · esc stop</span>}
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />
 						{running ? (

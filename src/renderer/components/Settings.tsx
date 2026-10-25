@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, ProviderInfo } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
-import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
@@ -535,6 +535,105 @@ function AppPage({ app }: { app: AppId }) {
 	);
 }
 
+/* Shortcuts */
+
+/** Each entry is a list of alternatives; each alternative is the keys pressed together. */
+type Shortcut = [label: string, keys: string[][], hint?: string];
+
+const SHORTCUTS: [title: string, description: string | undefined, rows: Shortcut[]][] = [
+	[
+		"Anywhere",
+		undefined,
+		[
+			["Switch to Code, Research or Write", [["⌘", "1"], ["–"], ["⌘", "3"]]],
+			["New session", [["⌘", "N"]]],
+			["Search sessions in every app", [["⌘", "K"]]],
+			["Fold or unfold the sidebar", [["⌘", "\\"]]],
+			["Open or close Settings", [["⌘", ","]]],
+		],
+	],
+	[
+		"Message box",
+		undefined,
+		[
+			["Send", [["↵"]], "While a run is going, this steers it"],
+			["New line", [["⇧", "↵"]]],
+			["Queue a follow-up for after the run", [["⌥", "↵"]]],
+			["Stop the run", [["esc"]]],
+			["Commands", [["/"]], "Prompt templates, skills and extension commands"],
+		],
+	],
+	[
+		"Command menu",
+		undefined,
+		[
+			["Move through the list", [["↑"], ["↓"]]],
+			["Complete the command or suggestion", [["tab"]]],
+			["Complete, or send a command typed in full", [["↵"]]],
+			["Close the menu", [["esc"]]],
+		],
+	],
+	[
+		"Questions from the agent",
+		"Shown in the conversation when an extension asks something.",
+		[
+			["Pick an option", [["1"], ["–"], ["9"]]],
+			["Move between options", [["↑"], ["↓"]]],
+			["Pick the highlighted option or send an answer", [["↵"]]],
+			["Allow, or send a long answer", [["⌘", "↵"]]],
+			["Dismiss or decline", [["esc"]]],
+		],
+	],
+	[
+		"Dialogs and lists",
+		undefined,
+		[
+			["Start the new session", [["⌘", "↵"]]],
+			["Pick a project in New session", [["⌘", "1"], ["–"], ["⌘", "6"]]],
+			["Move through search results and dropdowns", [["↑"], ["↓"]]],
+			["Jump to the first or last dropdown option", [["home"], ["end"]]],
+			["Close", [["esc"]]],
+		],
+	],
+];
+
+function Keys({ keys }: { keys: string[][] }) {
+	return (
+		<span className="s-keys">
+			{keys.map((combo, index) =>
+				combo.length === 1 && combo[0] === "–" ? (
+					<span key={index} className="s-keys-sep">
+						to
+					</span>
+				) : (
+					<span key={index} className="s-combo">
+						{combo.map((key) => (
+							<kbd key={key}>{key}</kbd>
+						))}
+					</span>
+				),
+			)}
+		</span>
+	);
+}
+
+function Shortcuts() {
+	return (
+		<>
+			<PageHeader icon={<KeyboardIcon size={18} />} title="Keyboard shortcuts" subtitle="Everything Trivium does from the keyboard." />
+			{SHORTCUTS.map(([title, description, rows]) => (
+				<Group key={title} title={title} description={description}>
+					{rows.map(([label, keys, hint]) => (
+						<Item key={label} label={label} hint={hint}>
+							<Keys keys={keys} />
+						</Item>
+					))}
+				</Group>
+			))}
+		</>
+	);
+}
+
 /* About */
 
 function About() {
@@ -639,6 +738,7 @@ export function SettingsPage() {
 					undefined,
 					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
 				)}
+				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />)}
 				<div className="set-nav-head">Apps</div>
 				{APP_IDS.map((id) =>
 					item(
@@ -661,6 +761,7 @@ export function SettingsPage() {
 					<div className="set-content">
 						{section === "general" && <General />}
 						{section === "models" && <Models providers={providers} reload={loadProviders} />}
+						{section === "shortcuts" && <Shortcuts />}
 						{(section === "code" || section === "research" || section === "write") && <AppPage app={section} />}
 						{section === "about" && <About />}
 					</div>

@@ -54,10 +54,6 @@ function SelectCard({ request }: { request: Extract<DialogRequest, { kind: "sele
 					</button>
 				))}
 			</div>
-			<div className="ask-keys">
-				<span>1–{Math.min(9, request.options.length)} choose</span>
-				<span>esc dismiss</span>
-			</div>
 		</div>
 	);
 }

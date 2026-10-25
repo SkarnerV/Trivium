@@ -7,6 +7,8 @@ import { useNow } from "../hooks.ts";
 import { askConfirm, deleteSessions, getState, notify, openSession, openSettings, setState, startSession, switchApp, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 
+const IS_MAC = navigator.userAgent.includes("Mac");
+
 interface ProjectGroup {
 	cwd: string;
 	name: string;
@@ -187,23 +189,37 @@ function Switcher() {
 
 export function Sidebar() {
 	const app = useStore((s) => s.app);
+	const fold = (
+		<button
+			type="button"
+			className="icon-btn"
+			aria-label="Fold sidebar"
+			title="Fold sidebar ⌘\"
+			onClick={() => setState({ folded: true, peek: false })}
+		>
+			<PanelIcon />
+		</button>
+	);
 	return (
 		<nav className="sidebar" aria-label="Apps and sessions">
+			{/* On macOS the switcher and fold button share the title bar row with the window buttons. */}
+			{IS_MAC && (
+				<div className="sb-titlebar drag">
+					<Switcher />
+					{fold}
+				</div>
+			)}
 			<div className="sb-head drag">
 				<span className="logo" aria-hidden="true" title="Logo placeholder">
 					π
 				</span>
 				<span className="app-name ellipsis">{THEMES[app].name}</span>
-				<Switcher />
-				<button
-					type="button"
-					className="icon-btn"
-					aria-label="Fold sidebar"
-					title="Fold sidebar ⌘\"
-					onClick={() => setState({ folded: true, peek: false })}
-				>
-					<PanelIcon />
-				</button>
+				{!IS_MAC && (
+					<>
+						<Switcher />
+						{fold}
+					</>
+				)}
 			</div>
 			<div className="sb-rows">
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "search" })}>
@@ -241,7 +257,7 @@ export function Rail() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
-		<nav className="rail" aria-label="Apps and tools" onMouseLeave={schedulePeekClose}>
+		<nav className="rail drag" aria-label="Apps and tools" onMouseLeave={schedulePeekClose}>
 			<button
 				type="button"
 				className="rail-btn panel"

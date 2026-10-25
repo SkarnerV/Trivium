@@ -128,8 +128,31 @@ button:disabled {
 	min-height: 0;
 }
 
+/*
+ * macOS: the window buttons sit at the top left, centered 25px from the top (see trafficLightPosition).
+ * The sidebar's first row shares that line, so it holds the app switcher and the fold button.
+ */
 .mac .sidebar {
-	padding-top: 44px;
+	padding-top: 0;
+	gap: 14px;
+}
+
+.mac .sidebar .sb-head {
+	margin-top: -6px;
+}
+
+.sb-titlebar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	height: 50px;
+	padding: 0 0 0 80px;
+}
+
+.sb-titlebar .switcher {
+	margin-left: 0;
 }
 
 .sb-head {
@@ -476,8 +499,10 @@ button:disabled {
 	color: var(--secondary);
 }
 
+/* Folded on macOS, the strip is wide enough to hold the window buttons above its icons. */
 .mac .rail {
-	padding-top: 44px;
+	flex-basis: 80px;
+	padding-top: 50px;
 }
 
 .rail-btn {
@@ -1660,8 +1685,14 @@ button:disabled {
 	overflow-y: auto;
 }
 
+/* On macOS, "Back to …" sits on the window buttons' line. */
 .mac .set-nav {
-	padding-top: 44px;
+	padding-top: 9px;
+}
+
+.mac .set-nav .back {
+	margin-left: 72px;
+	margin-bottom: 14px;
 }
 
 .set-nav .back {

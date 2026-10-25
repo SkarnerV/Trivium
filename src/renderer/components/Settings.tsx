@@ -723,7 +723,7 @@ export function SettingsPage() {
 	);
 	return (
 		<>
-			<nav className="set-nav" aria-label="Settings sections">
+			<nav className="set-nav drag" aria-label="Settings sections">
 				<button type="button" className="back" onClick={closeSettings}>
 					<BackIcon />
 					Back to {THEMES[app].name}

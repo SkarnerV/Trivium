@@ -217,6 +217,9 @@ function createWindow(): void {
 			setTimeout(async () => {
 				const image = await window?.webContents.capturePage();
 				if (image) writeFileSync(capture, image.toPNG());
+				// The page capture leaves out the native window buttons; tests capture this rectangle of the screen.
+				const bounds = window?.getBounds();
+				if (bounds) console.log(`[bounds] ${bounds.x},${bounds.y},${bounds.width},${bounds.height}`);
 			}, Number(process.env.TRIVIUM_CAPTURE_DELAY ?? 3000));
 		});
 	}

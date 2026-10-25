@@ -145,6 +145,17 @@ function registerIpc(): void {
 		const error = await shell.openPath(path);
 		if (error) throw new Error(error);
 	});
+	handle("trivium:openFile", async (file: string) => {
+		const error = await shell.openPath(file);
+		if (error) throw new Error(error);
+	});
+	handle("trivium:readChangedFile", (path: string, file: string) => host.readChangedFile(path, file));
+	handle("trivium:reviewFile", (path: string, file: string) => host.reviewFile(path, file));
+	handle(
+		"trivium:resolveChange",
+		(path: string, file: string, id: number, action: "accept" | "reject", expect: { del: string; ins: string }) =>
+			host.resolveChange(path, file, id, action, expect),
+	);
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		// VS Code's URL handler opens the file at a line; fall back to the system default app.
 		const url = `vscode://file${encodeURI(file)}${line ? `:${line}` : ""}`;

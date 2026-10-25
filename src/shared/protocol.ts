@@ -85,6 +85,19 @@ export interface FileChange {
 	tooLarge: boolean;
 }
 
+/** A file as text with the agent's changes marked, for reviewing one change at a time. */
+export type ReviewSegment =
+	| { kind: "same"; text: string }
+	/** `del` is the original text, `ins` the agent's version. Either can be empty. */
+	| { kind: "change"; id: number; del: string; ins: string };
+
+export interface FileReview {
+	path: string;
+	rel: string;
+	segments: ReviewSegment[];
+	pending: number;
+}
+
 export interface SessionView {
 	path: string;
 	id: string;
@@ -262,6 +275,19 @@ export interface TriviumApi {
 	/** Restores files to their state before the agent touched them; all files when `files` is omitted. */
 	revertChanges(path: string, files?: string[]): Promise<FileChange[]>;
 	openInEditor(file: string, line?: number): Promise<void>;
+	/** Opens a file with its default app. */
+	openFile(file: string): Promise<void>;
+	/** Current text of a file this session changed. */
+	readChangedFile(path: string, file: string): Promise<string>;
+	reviewFile(path: string, file: string): Promise<FileReview>;
+	/** Accepts or rejects one change. `expect` is the change as shown, so a stale view is refused. */
+	resolveChange(
+		path: string,
+		file: string,
+		id: number,
+		action: "accept" | "reject",
+		expect: { del: string; ins: string },
+	): Promise<FileReview>;
 	getSettings(): Promise<TriviumSettings>;
 	updateSettings(patch: Partial<TriviumSettings>): Promise<TriviumSettings>;
 	appDetails(app: AppId): Promise<AppDetails>;

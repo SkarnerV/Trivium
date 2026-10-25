@@ -40,6 +40,8 @@ export interface State {
 	page: "main" | "settings";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
+	/** Text to put in a session's message box when it next shows. */
+	drafts: Record<string, string>;
 	/** A question waiting for Confirm or Cancel. */
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */
@@ -80,6 +82,7 @@ let state: State = {
 	models: [],
 	peek: false,
 	changesHidden: {},
+	drafts: {},
 	page: "main",
 	settingsSection: "general",
 	overlay: null,
@@ -240,10 +243,12 @@ export async function refreshModels(): Promise<void> {
 	if (models) setState({ models });
 }
 
-export async function startSession(input: NewSessionInput): Promise<SessionView | undefined> {
+/** Starts a session and shows it. `draft` goes into its message box, unsent. */
+export async function startSession(input: NewSessionInput, draft?: string): Promise<SessionView | undefined> {
 	const view = await attempt(() => trivium.newSession(input));
 	if (!view) return undefined;
 	setState((s) => ({
+		drafts: draft ? { ...s.drafts, [view.path]: draft } : s.drafts,
 		views: { ...s.views, [view.path]: view },
 		selected: { ...s.selected, [input.app]: view.path },
 		app: input.app,

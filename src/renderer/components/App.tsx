@@ -3,7 +3,10 @@ import { APP_IDS } from "../../shared/protocol.ts";
 import { CloseIcon } from "../icons.tsx";
 import { dismissNotice, getState, notify, openSettings, setState, switchApp, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
+import { panelFor } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
+import { NotePanel } from "./NotePanel.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay } from "./Overlays.tsx";
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
 import { SettingsPage } from "./Settings.tsx";
@@ -80,7 +83,7 @@ export function App() {
 	const path = useStore((s) => s.selected[s.app]);
 	const view = useStore((s) => (path ? s.views[path] : undefined));
 	const changesHidden = useStore((s) => (path ? Boolean(s.changesHidden[path]) : false));
-	const showChanges = app === "code" && view !== undefined && view.changes.length > 0 && !changesHidden;
+	const panel = view && !changesHidden ? panelFor(app, view) : undefined;
 	const page = useStore((s) => s.page);
 	const section = useStore((s) => s.settingsSection);
 	useShortcuts();
@@ -105,7 +108,9 @@ export function App() {
 				<div className="card">
 					{folded && peek && <PeekPanel />}
 					{view ? <SessionPane view={view} /> : <EmptyPane />}
-					{showChanges && <ChangesPanel view={view} />}
+					{view && panel === "changes" && <ChangesPanel view={view} />}
+					{view && panel === "note" && <NotePanel view={view} />}
+					{view && panel === "review" && <ReviewPanel view={view} />}
 				</div>
 			</div>
 			{overlay === "new" && <NewSessionDialog />}

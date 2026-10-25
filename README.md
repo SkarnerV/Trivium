@@ -75,6 +75,11 @@ the net diff of the whole session, per file. **Keep changes** accepts them. **Re
 file back and removes files and folders the agent created. Open any file in VS Code at the first
 changed line.
 
+### Notes and tracked changes
+
+- **Research shows the note it writes.** A panel renders the Markdown note as a document, tables included, and a Sources tab lists every link it cites. **Open in Write** starts a Write session in the same project, ready to revise the note.
+- **Write shows its edits as tracked changes.** The document appears with each change in place: deleted text struck through, new text underlined. Accept or reject each change, or all at once. Rejecting puts your original text back in the file.
+
 ### Make each app yours
 
 <p align="center">
@@ -215,8 +220,8 @@ dev/          The scripted development model
 - [x] Inline extension dialogs and system notifications
 - [x] Changes panel with keep and revert
 - [x] Settings: logins, default and per-app models, per-app extensions
-- [ ] Research: note preview panel with sources
-- [ ] Write: document panel with tracked changes to accept or reject
+- [x] Research: note preview panel with sources
+- [x] Write: document panel with tracked changes to accept or reject
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`
 - [ ] Dark theme
 - [ ] Signed builds for macOS, Windows and Linux

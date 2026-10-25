@@ -28,6 +28,7 @@ import type {
 	ExtensionInfo,
 	ExtensionSource,
 	FileChange,
+	FileReview,
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
@@ -372,6 +373,31 @@ export class SessionHost {
 		if (live.running) throw new Error("Stop the run before reverting its changes.");
 		await live.changes.revert(files);
 		return this.emitChanges(live);
+	}
+
+	async readChangedFile(path: string, file: string): Promise<string> {
+		const live = this.require(path);
+		// Only files this session changed, so the renderer cannot read arbitrary paths.
+		if (!live.changes.has(file)) throw new Error("This session did not change that file.");
+		return existsSync(file) ? readFile(file, "utf8") : "";
+	}
+
+	reviewFile(path: string, file: string): Promise<FileReview> {
+		return this.require(path).changes.review(file);
+	}
+
+	async resolveChange(
+		path: string,
+		file: string,
+		id: number,
+		action: "accept" | "reject",
+		expect: { del: string; ins: string },
+	): Promise<FileReview> {
+		const live = this.require(path);
+		if (live.running && action === "reject") throw new Error("Stop the run before rejecting changes.");
+		const review = await live.changes.resolve(file, id, action, expect);
+		await this.emitChanges(live);
+		return review;
 	}
 
 	private async emitChanges(live: Live): Promise<FileChange[]> {

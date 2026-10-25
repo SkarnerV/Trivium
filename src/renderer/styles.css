@@ -2574,3 +2574,253 @@ button:disabled {
 	font-weight: 500;
 	line-height: 18px;
 }
+
+/* Side panels: Research notes and Write review */
+
+.side-panel {
+	flex: 0 1 min(50%, 640px);
+	min-width: 360px;
+	display: flex;
+	flex-direction: column;
+	background: var(--tray);
+	border-left: 1px solid var(--line);
+}
+
+.side-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 58px;
+	padding: 14px 12px 10px 16px;
+}
+
+.side-head h2 {
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--ink-2);
+}
+
+.side-actions {
+	margin-left: auto;
+	display: flex;
+	gap: 6px;
+}
+
+.side-actions .btn {
+	min-height: 30px;
+	padding: 0 12px;
+	font-size: 12px;
+}
+
+.seg {
+	margin-left: auto;
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 9px;
+	background: var(--tab);
+}
+
+.seg button {
+	min-height: 28px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.seg button[aria-selected="true"] {
+	background: #fff;
+	color: var(--ink);
+	font-weight: 500;
+	box-shadow: 0 1px 2px rgba(22, 23, 27, 0.08);
+}
+
+.side-body {
+	flex: 1;
+	min-height: 0;
+	margin: 0 12px;
+	border-radius: 12px;
+	background: #fff;
+	border: 1px solid var(--line);
+	overflow: auto;
+}
+
+.review-panel .side-body {
+	margin-bottom: 12px;
+}
+
+.side-foot {
+	display: flex;
+	gap: 6px;
+	padding: 12px;
+}
+
+.side-foot .btn {
+	min-height: 36px;
+}
+
+.side-empty {
+	margin: 0;
+	padding: 28px;
+	color: var(--ink-3);
+	text-align: center;
+}
+
+.pending-pill {
+	flex: none;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--accent) 12%, #fff);
+	color: var(--accent-text);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+/* Documents read like documents: serif text at a comfortable measure. */
+.doc {
+	padding: 28px 32px;
+	font-family: "Source Serif 4", Georgia, serif;
+	font-size: 15.5px;
+	line-height: 1.68;
+	color: var(--ink);
+}
+
+.doc h1,
+.doc h2 {
+	margin: 0 0 14px;
+	font-size: 24px;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+}
+
+.doc h3,
+.doc h4 {
+	margin: 22px 0 6px;
+	font-size: 18px;
+}
+
+.doc code,
+.doc pre {
+	font-family: var(--mono);
+}
+
+.doc a {
+	color: var(--accent-text);
+}
+
+.md-table {
+	overflow-x: auto;
+	margin: 0 0 18px;
+}
+
+.md-table table {
+	width: 100%;
+	border-collapse: collapse;
+	font-family: Geist, Inter, system-ui, sans-serif;
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+
+.md-table th {
+	padding: 8px 10px 8px 0;
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+	font-weight: 600;
+}
+
+.md-table td {
+	padding: 9px 10px 9px 0;
+	border-bottom: 1px solid var(--line);
+	vertical-align: top;
+}
+
+.md-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.sources {
+	margin: 0;
+	padding: 18px 20px 18px 40px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.sources li {
+	padding-left: 4px;
+}
+
+.sources a {
+	color: var(--accent-text);
+	font-weight: 500;
+	overflow-wrap: anywhere;
+}
+
+.sources .host {
+	color: var(--ink-3);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+/* A tracked change in the Write review */
+
+.tracked {
+	margin: 0 -14px 18px;
+	padding: 10px 14px;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--accent) 5%, #fff);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, #fff);
+}
+
+.tracked p {
+	margin: 0;
+	white-space: pre-wrap;
+}
+
+.tracked del,
+.tracked .del-only {
+	color: #8e1d23;
+	background: #fdeeee;
+	text-decoration: line-through;
+	text-decoration-color: rgba(142, 29, 35, 0.5);
+}
+
+.tracked ins,
+.tracked .ins-only {
+	color: #0f5530;
+	background: #e9f7ef;
+	text-decoration: none;
+	border-bottom: 1.5px solid #3e9b67;
+}
+
+.tracked .del-only + .ins-only {
+	margin-top: 8px;
+}
+
+.tracked-bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 10px;
+	font-family: Geist, Inter, system-ui, sans-serif;
+	font-size: 12px;
+	color: var(--ink-3);
+}
+
+.tracked-bar span {
+	flex: 1;
+}
+
+.tracked-bar .btn {
+	min-height: 28px;
+	padding: 0 10px;
+	font-size: 12px;
+}

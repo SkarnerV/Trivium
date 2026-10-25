@@ -5,6 +5,7 @@ import { AppIcon, PlusIcon } from "../icons.tsx";
 import { setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
+import { panelFor } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -59,16 +60,24 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
-				{app === "code" && view.changes.length > 0 && (
+				{panelFor(app, view) && (
 					<button
 						type="button"
 						className="changes-toggle"
 						aria-pressed={!changesHidden}
-						title={changesHidden ? "Show changes" : "Hide changes"}
+						title={changesHidden ? "Show panel" : "Hide panel"}
 						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: !changesHidden } }))}
 					>
-						<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>
-						<ChangeCount changes={view.changes} />
+						{panelFor(app, view) === "changes" ? (
+							<>
+								<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>
+								<ChangeCount changes={view.changes} />
+							</>
+						) : panelFor(app, view) === "note" ? (
+							<span>Note</span>
+						) : (
+							<span>Review</span>
+						)}
 					</button>
 				)}
 			</header>
@@ -82,7 +91,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					))}
 				</div>
 			</div>
-			<Composer view={view} />
+			<Composer key={view.path} view={view} />
 		</main>
 	);
 }

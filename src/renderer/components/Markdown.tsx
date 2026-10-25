@@ -60,6 +60,43 @@ export function Markdown({ text }: { text: string }) {
 			i++;
 			continue;
 		}
+		// A pipe table: a header row, then a separator row like |---|:--:|.
+		if (/^\s*\|/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] ?? "")) {
+			const cells = (row: string) =>
+				row
+					.trim()
+					.replace(/^\|/, "")
+					.replace(/\|$/, "")
+					.split("|")
+					.map((cell) => cell.trim());
+			const head = cells(line);
+			i += 2;
+			const body: string[][] = [];
+			while (i < lines.length && /^\s*\|/.test(lines[i]!)) body.push(cells(lines[i++]!));
+			blocks.push(
+				<div key={key} className="md-table">
+					<table>
+						<thead>
+							<tr>
+								{head.map((cell, index) => (
+									<th key={index}>{inline(cell, `${key}-h${index}`)}</th>
+								))}
+							</tr>
+						</thead>
+						<tbody>
+							{body.map((row, r) => (
+								<tr key={r}>
+									{row.map((cell, c) => (
+										<td key={c}>{inline(cell, `${key}-${r}-${c}`)}</td>
+									))}
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>,
+			);
+			continue;
+		}
 		const heading = /^(#{1,4})\s+(.*)$/.exec(line);
 		if (heading) {
 			const Tag = `h${heading[1]!.length}` as "h1" | "h2" | "h3" | "h4";
@@ -86,14 +123,24 @@ export function Markdown({ text }: { text: string }) {
 				i++;
 			}
 			const children = items.map((item, index) => <li key={`${key}-${index}`}>{withBreaks(item, `${key}-${index}`)}</li>);
-			blocks.push(ordered ? <ol key={key}>{children}</ol> : <ul key={key}>{children}</ul>);
+			// Keep the list's own first number, such as a citation list that continues at 4.
+			const start = ordered ? Number.parseInt(listMatch[1]!, 10) : 1;
+			blocks.push(
+				ordered ? (
+					<ol key={key} start={start}>
+						{children}
+					</ol>
+				) : (
+					<ul key={key}>{children}</ul>
+				),
+			);
 			continue;
 		}
 		const body: string[] = [];
 		while (
 			i < lines.length &&
 			lines[i]!.trim() &&
-			!/^\s*(```|~~~|#{1,4}\s|>|[-*+]\s|\d+[.)]\s)/.test(lines[i]!)
+			!/^\s*(```|~~~|#{1,4}\s|>|[-*+]\s|\d+[.)]\s|\|)/.test(lines[i]!)
 		) {
 			body.push(lines[i++]!);
 		}

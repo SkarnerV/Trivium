@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { structuredPatch } from "diff";
-import type { DiffLine, FileChange } from "../shared/protocol.ts";
+import { diffLines as lineParts, structuredPatch } from "diff";
+import type { DiffLine, FileChange, FileReview, ReviewSegment } from "../shared/protocol.ts";
 
 /** Files bigger than this are listed without a diff. */
 const MAX_DIFF_BYTES = 512 * 1024;
@@ -129,6 +129,66 @@ export class ChangeTracker {
 			});
 		}
 		return changes.sort((a, b) => a.rel.localeCompare(b.rel));
+	}
+
+	has(path: string): boolean {
+		return this.baselines.has(path);
+	}
+
+	/** The file split into unchanged text and changes, compared paragraph by paragraph with its baseline. */
+	async review(path: string): Promise<FileReview> {
+		const { segments } = await this.segments(path);
+		return {
+			path,
+			rel: relative(this.cwd, path),
+			segments,
+			pending: segments.filter((segment) => segment.kind === "change").length,
+		};
+	}
+
+	private async segments(path: string): Promise<{ segments: ReviewSegment[]; after: string | null }> {
+		await this.loaded;
+		if (!this.baselines.has(path)) throw new Error("This session did not change that file.");
+		const before = this.baselines.get(path) ?? "";
+		const after = await readOrNull(path);
+		const segments: ReviewSegment[] = [];
+		let id = 0;
+		for (const part of lineParts(before, after ?? "")) {
+			const last = segments.at(-1);
+			if (!part.added && !part.removed) {
+				segments.push({ kind: "same", text: part.value });
+			} else if (last?.kind === "change" && !(part.removed && last.ins)) {
+				// A removal followed by an addition is one replacement.
+				if (part.added) last.ins += part.value;
+				else last.del += part.value;
+			} else {
+				segments.push({ kind: "change", id: id++, del: part.removed ? part.value : "", ins: part.added ? part.value : "" });
+			}
+		}
+		return { segments, after };
+	}
+
+	/**
+	 * Accepting a change writes it into the baseline, so it stops showing as a change.
+	 * Rejecting it puts the original text back in the file. Other changes are untouched.
+	 */
+	async resolve(path: string, id: number, action: "accept" | "reject", expect: { del: string; ins: string }): Promise<FileReview> {
+		const { segments, after } = await this.segments(path);
+		const change = segments.find((segment) => segment.kind === "change" && segment.id === id);
+		if (!change || change.kind !== "change" || change.del !== expect.del || change.ins !== expect.ins) {
+			throw new Error("The file changed since you opened it. Review it again.");
+		}
+		const build = (pick: (segment: Extract<ReviewSegment, { kind: "change" }>) => string) =>
+			segments.map((segment) => (segment.kind === "same" ? segment.text : pick(segment))).join("");
+		if (action === "accept") {
+			this.baselines.set(path, build((segment) => (segment === change ? segment.ins : segment.del)));
+			await this.save();
+		} else {
+			const text = build((segment) => (segment === change ? segment.del : segment.ins));
+			if (after === null && !text) await rm(path, { force: true });
+			else await writeFile(path, text);
+		}
+		return this.review(path);
 	}
 
 	/** Accepts the current content: forgets the baselines. */

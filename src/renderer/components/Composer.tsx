@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from
 import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { CloseIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
-import { attempt, setState, trivium } from "../store.ts";
+import { attempt, getState, setState, trivium } from "../store.ts";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 
@@ -116,7 +116,15 @@ function Tray({ view }: { view: SessionView }) {
 }
 
 export function Composer({ view }: { view: SessionView }) {
-	const [text, setText] = useState("");
+	// Starts from a draft another screen left for this session, such as "Open in Write".
+	const [text, setText] = useState(() => getState().drafts[view.path] ?? "");
+	useEffect(() => {
+		if (getState().drafts[view.path] === undefined) return;
+		setState((s) => {
+			const { [view.path]: _, ...rest } = s.drafts;
+			return { drafts: rest };
+		});
+	}, [view.path]);
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
 	const menu = useCommandMenu(view.path, text, setText);

@@ -243,6 +243,8 @@ export interface AppDetails {
 	systemPrompt?: string;
 	running: number;
 	loaded: number;
+	/** pi packages installed for every app and the pi CLI, as their sources, such as "npm:pi-web-access". */
+	packages: string[];
 }
 
 export interface ProviderInfo {

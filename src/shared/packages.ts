@@ -15,3 +15,11 @@ export function packageSource(input: string): string {
 	if (/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:@[\w.^~<>=*|+ -]+)?$/i.test(text)) return `npm:${text}`;
 	throw new Error(`"${text}" is not an npm package, a git repository or a URL.`);
 }
+
+/** The npm package name in a source, without "npm:" or a version: "npm:@a/b@1.2" is "@a/b". Git and URL sources keep their address. */
+export function packageName(source: string): string {
+	const spec = source.trim().replace(/^npm:/, "");
+	if (!/^(?:@[^/@\s]+\/)?[^/@\s:]+(?:@.*)?$/.test(spec)) return spec;
+	const at = spec.indexOf("@", spec.startsWith("@") ? 1 : 0);
+	return at === -1 ? spec : spec.slice(0, at);
+}

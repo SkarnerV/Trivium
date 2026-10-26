@@ -1827,6 +1827,84 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
+/* Recommended packages for the app, each with its own Install. */
+.rec {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.rec h3 {
+	margin: 4px 0 0;
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink-4);
+}
+
+.rec-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 12px 12px 12px 14px;
+	border-radius: 12px;
+	box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.rec-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	font-size: 12.5px;
+	line-height: 1.45;
+}
+
+.rec-name {
+	align-self: flex-start;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.rec-name:hover {
+	color: var(--accent);
+	text-decoration: underline;
+}
+
+.rec-adds {
+	color: var(--ink-2);
+}
+
+.rec-why {
+	color: var(--ink-3);
+}
+
+.rec-note {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin-top: 2px;
+	color: #844705;
+	font-size: 11.5px;
+}
+
+.rec-note svg {
+	flex: none;
+	margin-top: 2px;
+}
+
+.btn.rec-btn {
+	flex: none;
+	min-width: 92px;
+	min-height: 30px;
+	padding: 0 12px;
+	font-size: 12.5px;
+}
+
 .modal-foot {
 	display: flex;
 	align-items: center;

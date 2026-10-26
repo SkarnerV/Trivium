@@ -1,0 +1,102 @@
+import type { AppId } from "./protocol.ts";
+
+export interface Recommendation {
+	/** npm package name; installed as "npm:<name>". */
+	name: string;
+	/** What it adds, in the user's terms. */
+	adds: string;
+	/** Why it suits this app. */
+	why: string;
+	/** What works differently in Trivium, or what installing it does, when that matters. */
+	note?: string;
+}
+
+/**
+ * pi gallery packages suited to each app, checked against their source: each is an MIT-licensed pi package,
+ * and what it relies on works in Trivium unless the note says otherwise.
+ */
+export const RECOMMENDED: Record<AppId, Recommendation[]> = {
+	code: [
+		{
+			name: "@gotgenes/pi-permission-system",
+			adds: "Allow, ask or deny rules for tools, bash commands and file paths",
+			why: "Code runs bash and edits files without asking. This asks first for what you choose and blocks files like .env.",
+		},
+		{
+			name: "pi-lens",
+			adds: "Type-checking, linters and language-server diagnostics after each edit",
+			why: "The agent sees the errors its edits caused right away, instead of finishing with broken code.",
+			note: "A large download, about 25 MB.",
+		},
+		{
+			name: "@narumitw/pi-plan-mode",
+			adds: "A read-only /plan mode",
+			why: "Agree on an approach before any file changes, then implement it in this session or a fresh one.",
+			note: "Its status indicator doesn't show in Trivium; /plan itself works.",
+		},
+		{
+			name: "pi-subagents",
+			adds: "A subagent tool with scout, reviewer and researcher agents",
+			why: "Hands side tasks such as exploring the codebase or reviewing a change to a separate agent, keeping this session's context focused.",
+			note: "Its live progress widget doesn't show in Trivium.",
+		},
+		{
+			name: "pi-simplify",
+			adds: "A /simplify review of uncommitted, staged or chosen changes",
+			why: "Checks recent changes for clarity and consistency before you keep them.",
+		},
+	],
+	research: [
+		{
+			name: "pi-web-access",
+			adds: "web_search, fetch_content, PDF extraction, GitHub cloning and YouTube understanding",
+			why: "Research can't reach the web on its own. This is the gallery's most used web package.",
+		},
+		{
+			name: "pi-web-search",
+			adds: "web_search and url_context through your model provider",
+			why: "A lighter alternative: uses your provider's own search, so it needs no extra API key.",
+		},
+		{
+			name: "pi-docparser",
+			adds: "document_parse, document_search and document_screenshot",
+			why: "Reads and searches the PDFs and documents you already have, locally.",
+		},
+		{
+			name: "pi-memory",
+			adds: "memory_write, memory_search, memory_read and a scratchpad",
+			why: "Keeps findings across sessions, with search, so last week's research can be found again.",
+			note: "Runs a setup script when it installs.",
+		},
+		{
+			name: "pi-subagents",
+			adds: "A subagent tool with researcher and evidence-auditor agents",
+			why: "Investigates several questions in parallel and checks that claims are backed by their sources.",
+			note: "Its researcher needs a web package such as pi-web-access. Live progress doesn't show in Trivium.",
+		},
+	],
+	write: [
+		{
+			name: "pi-web-search",
+			adds: "web_search and url_context through your model provider",
+			why: "Fact-checking while writing, with no extra API key.",
+		},
+		{
+			name: "pi-quiver",
+			adds: "doc_to_md, which turns PDF, DOCX and PPTX into Markdown",
+			why: "Brings existing drafts into Markdown, where Write's Review panel can mark each change.",
+			note: "A personal toolkit that also adds Slack and fetch tools.",
+		},
+		{
+			name: "pi-markdown-preview",
+			adds: "/preview-pdf and /preview-browser, with LaTeX",
+			why: "Exports a finished piece to PDF.",
+		},
+		{
+			name: "@narumitw/pi-plan-mode",
+			adds: "A read-only /plan mode",
+			why: "Outline and agree on structure before the agent starts editing the document.",
+			note: "Its status indicator doesn't show in Trivium; /plan itself works.",
+		},
+	],
+};

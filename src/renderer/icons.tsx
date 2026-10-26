@@ -143,6 +143,11 @@ export const AlertIcon = (p: IconProps) => (
 		<path d="M12 16h.01" />
 	</Svg>
 );
+export const CheckIcon = (p: IconProps) => (
+	<Svg width={2.4} size={12} {...p}>
+		<path d="m5 12.5 4.5 4.5L19 7.5" />
+	</Svg>
+);
 export const DownloadIcon = (p: IconProps) => (
 	<Svg size={14} {...p}>
 		<path d="M12 4v11" />

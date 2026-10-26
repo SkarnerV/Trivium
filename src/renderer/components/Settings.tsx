@@ -499,7 +499,14 @@ function AppPage({ app }: { app: AppId }) {
 					<ExtensionRow key={extension.path} extension={extension} onToggle={() => void toggle(extension)} />
 				))}
 			</Group>
-			{adding && <AddExtensionDialog app={app} onClose={() => setAdding(false)} onAdded={(next) => void added(next)} />}
+			{adding && (
+				<AddExtensionDialog
+					app={app}
+					packages={details?.packages ?? []}
+					onClose={() => setAdding(false)}
+					onAdded={(next) => void added(next)}
+				/>
+			)}
 
 			<Group title="Model">
 				<Item label={`New ${theme.name} sessions`} hint="Open sessions keep the model they use">

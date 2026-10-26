@@ -623,6 +623,10 @@ export class SessionHost {
 			systemPrompt: profileFor(app).appendSystemPrompt,
 			running: lives.filter((live) => live.running).length,
 			loaded: lives.length,
+			packages: new DefaultPackageManager({ cwd: projectDir, agentDir: this.agentDir, settingsManager })
+				.listConfiguredPackages()
+				.filter((entry) => entry.scope === "user")
+				.map((entry) => entry.source),
 		};
 	}
 

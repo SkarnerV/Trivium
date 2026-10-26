@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { appIconFilename } from "../../shared/branding.ts";
 import type { AppId } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { CloseIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon } from "../icons.tsx";
+import { AlertIcon, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
 import { dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
 import { panelFor } from "../panels.ts";
@@ -59,12 +59,11 @@ function Toasts() {
 	return (
 		<div className="toasts" aria-live="polite">
 			{notices.map((notice) => (
-				<div key={notice.id} className="toast" role={notice.level === "error" ? "alert" : "status"}>
-					<span
-						className="live-dot"
-						style={{ background: notice.level === "error" ? "#FF8A80" : notice.level === "warning" ? "#F5C26B" : "#8F92FF" }}
-					/>
-					<span>{notice.message}</span>
+				<div key={notice.id} className={`toast ${notice.level}`} role={notice.level === "error" ? "alert" : "status"}>
+					<span className="toast-icon">
+						{notice.level === "error" ? <AlertIcon size={15} /> : notice.level === "warning" ? <WarnIcon size={14} width={2} /> : <InfoIcon size={15} />}
+					</span>
+					<p className="toast-text">{notice.message}</p>
 					<button type="button" className="mini-btn" aria-label="Dismiss" onClick={() => dismissNotice(notice.id)}>
 						<CloseIcon size={12} />
 					</button>

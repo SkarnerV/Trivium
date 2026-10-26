@@ -6,12 +6,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
-import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
+import type { AppId, CustomProvider, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { writePermissionLevel } from "./builtin-packages.ts";
+import { fetchModels, readCustomProviders, removeCustomProvider, saveCustomProvider } from "./custom-models.ts";
 import { exportFileName, sessionMarkdown } from "./export.ts";
 import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
@@ -208,13 +209,28 @@ function registerIpc(): void {
 	});
 	handle("trivium:copyText", (text: string) => clipboard.writeText(text));
 	handle("trivium:deleteSessions", (paths: string[]) => host.deleteSessions(paths, (path) => shell.trashItem(path)));
-	handle("trivium:providers", () => listProviders(host.runtime));
+	handle("trivium:providers", () =>
+		listProviders(host.runtime, new Set(readCustomProviders(getAgentDir()).map((provider) => provider.id))),
+	);
 	handle("trivium:login", (providerId: string, type: "api_key" | "oauth") => {
 		// The flow reports progress through events; the call returns at once.
 		void login.start(host.runtime, providerId, type);
 	});
 	handle("trivium:answerLogin", (id: string, value: string | undefined) => login.answer(id, value));
 	handle("trivium:logout", (providerId: string) => host.runtime.logout(providerId));
+	handle("trivium:customProviders", () => readCustomProviders(getAgentDir()));
+	handle("trivium:fetchModels", (endpoint: Pick<CustomProvider, "baseUrl" | "api" | "apiKey">) => fetchModels(endpoint));
+	// pi reads models.json again on refresh; network catalogs stay as they are.
+	handle("trivium:saveCustomProvider", async (provider: CustomProvider, previousId?: string) => {
+		await saveCustomProvider(getAgentDir(), provider, previousId);
+		await host.runtime.refresh({ allowNetwork: false });
+		return readCustomProviders(getAgentDir());
+	});
+	handle("trivium:removeCustomProvider", async (id: string) => {
+		await removeCustomProvider(getAgentDir(), id);
+		await host.runtime.refresh({ allowNetwork: false });
+		return readCustomProviders(getAgentDir());
+	});
 	handle("trivium:setDefaultModel", async (key: string, level: string) => {
 		const slash = key.indexOf("/");
 		const manager = SettingsManager.create(homedir(), getAgentDir());

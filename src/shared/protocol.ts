@@ -274,6 +274,35 @@ export interface ProviderInfo {
 	logins: { type: "api_key" | "oauth"; label: string }[];
 	canLogout: boolean;
 	models: number;
+	/** An endpoint the user added in models.json, edited as a custom provider rather than logged in to. */
+	custom?: boolean;
+}
+
+/** The APIs a custom provider can speak, as pi names them. */
+export type CustomApi = "openai-completions" | "openai-responses" | "anthropic-messages" | "google-generative-ai";
+
+export interface CustomModel {
+	id: string;
+	name?: string;
+	/** Tokens; pi assumes 128000 when unset. */
+	contextWindow?: number;
+	/** Most output tokens per response; pi assumes 16384 when unset. */
+	maxTokens?: number;
+	/** The model accepts images. */
+	images: boolean;
+	/** The model can think before it answers. */
+	reasoning: boolean;
+}
+
+/** An endpoint in pi's models.json, such as Ollama, LM Studio, vLLM or a proxy, with the models it serves. */
+export interface CustomProvider {
+	id: string;
+	name: string;
+	baseUrl: string;
+	api: CustomApi;
+	/** A key, $NAME for an environment variable or !command for a command's output. Empty when the endpoint needs none. */
+	apiKey: string;
+	models: CustomModel[];
 }
 
 export interface AppInfo {
@@ -386,6 +415,12 @@ export interface TriviumApi {
 	login(providerId: string, type: "api_key" | "oauth"): Promise<void>;
 	answerLogin(id: string, value: string | undefined): Promise<void>;
 	logout(providerId: string): Promise<void>;
+	customProviders(): Promise<CustomProvider[]>;
+	/** Asks an endpoint which models it serves, with their limits and abilities where it says. */
+	fetchModels(endpoint: Pick<CustomProvider, "baseUrl" | "api" | "apiKey">): Promise<CustomModel[]>;
+	/** Writes a custom provider to models.json, replacing `previousId` when it was renamed. Resolves with them all. */
+	saveCustomProvider(provider: CustomProvider, previousId?: string): Promise<CustomProvider[]>;
+	removeCustomProvider(id: string): Promise<CustomProvider[]>;
 	setDefaultModel(modelKey: string, thinkingLevel: string): Promise<void>;
 	appInfo(): Promise<AppInfo>;
 	openPath(path: string): Promise<void>;

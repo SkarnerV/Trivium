@@ -1,6 +1,15 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
-import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, PermissionSettings, ProviderInfo } from "../../shared/protocol.ts";
+import type {
+	AppDetails,
+	AppId,
+	AppInfo,
+	CustomProvider,
+	ExtensionInfo,
+	ExtensionSource,
+	PermissionSettings,
+	ProviderInfo,
+} from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
@@ -19,6 +28,7 @@ import {
 } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
+import { CustomProviderDialog } from "./CustomProviderDialog.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
@@ -228,14 +238,56 @@ function ProviderRow({
 
 const PROVIDERS_SHOWN = 8;
 
+const API_NAMES: Record<CustomProvider["api"], string> = {
+	"openai-completions": "OpenAI-compatible",
+	"openai-responses": "OpenAI Responses",
+	"anthropic-messages": "Anthropic",
+	"google-generative-ai": "Gemini",
+};
+
+function CustomProviderRow({ provider, onEdit }: { provider: CustomProvider; onEdit: () => void }) {
+	let host = provider.baseUrl;
+	try {
+		host = new URL(provider.baseUrl).host;
+	} catch {
+		// Shown as written.
+	}
+	return (
+		<div className="s-row s-provider">
+			<span className="s-tile on">{provider.name.slice(0, 1).toUpperCase()}</span>
+			<div className="s-row-text">
+				<span className="s-label">{provider.name}</span>
+				<span className="s-hint">
+					<span className="mono s-path" title={provider.baseUrl}>
+						{host}
+					</span>
+					· {API_NAMES[provider.api]} · {provider.models.length} {provider.models.length === 1 ? "model" : "models"}
+				</span>
+			</div>
+			<div className="s-row-control">
+				<button type="button" className="s-btn" onClick={onEdit}>
+					Edit
+				</button>
+			</div>
+		</div>
+	);
+}
+
 function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () => void }) {
 	const [info, setInfo] = useState<AppInfo>();
 	const [query, setQuery] = useState("");
 	const [showAll, setShowAll] = useState(false);
 	const login = useStore((s) => s.login);
+	const [custom, setCustom] = useState<CustomProvider[]>([]);
+	/** The endpoint being edited: a provider, or null for a new one. */
+	const [editing, setEditing] = useState<CustomProvider | null>();
+	const loadCustom = useCallback(() => {
+		void attempt(() => trivium.customProviders()).then((list) => list && setCustom(list));
+	}, []);
 	useEffect(() => {
 		void attempt(() => trivium.appInfo()).then(setInfo);
-	}, []);
+		loadCustom();
+	}, [loadCustom]);
 	// Refresh once a login finishes, whatever the outcome.
 	const loginDone = login?.events.some((event) => event.type === "done");
 	useEffect(() => {
@@ -254,10 +306,11 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 		reload();
 		void refreshModels();
 	};
-	const connected = providers.filter((provider) => provider.configured);
+	// Custom endpoints have a group of their own, edited instead of logged in to.
+	const connected = providers.filter((provider) => provider.configured && !provider.custom);
 	const others = useMemo(() => {
 		const q = query.trim().toLowerCase();
-		const rest = providers.filter((provider) => !provider.configured);
+		const rest = providers.filter((provider) => !provider.configured && !provider.custom);
 		return q ? rest.filter((provider) => provider.name.toLowerCase().includes(q) || provider.id.includes(q)) : rest;
 	}, [providers, query]);
 	const visible = query || showAll ? others : others.slice(0, PROVIDERS_SHOWN);
@@ -302,6 +355,22 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 				)}
 			</Group>
 			<Group
+				title="Custom endpoints"
+				description="Local servers, proxies and anything else that speaks an API pi knows."
+				aside={
+					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
+						<PlusIcon size={12} width={2.6} />
+						Add
+					</button>
+				}
+			>
+				{custom.length ? (
+					custom.map((provider) => <CustomProviderRow key={provider.id} provider={provider} onEdit={() => setEditing(provider)} />)
+				) : (
+					<div className="s-empty">None yet. Add Ollama, LM Studio, vLLM or a proxy, and Trivium can fetch its models.</div>
+				)}
+			</Group>
+			<Group
 				title="Add a provider"
 				aside={
 					<label className="s-search">
@@ -321,6 +390,18 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 				{visible.length ? visible.map(row) : <div className="s-empty">No provider matches “{query}”.</div>}
 			</Group>
 			{login && <LoginDialog />}
+			{editing !== undefined && (
+				<CustomProviderDialog
+					provider={editing ?? undefined}
+					takenIds={providers.map((provider) => provider.id)}
+					onClose={() => setEditing(undefined)}
+					onSaved={() => {
+						loadCustom();
+						reload();
+						void refreshModels();
+					}}
+				/>
+			)}
 		</>
 	);
 }

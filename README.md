@@ -97,6 +97,7 @@ changed line.
 - **Per-app extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that app.
 - **Per-app model.** Research on a fast model, Code on your strongest one.
 - **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes.
+- **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. They go to pi's `models.json`, so the pi CLI offers them too.
 - **Sessions that manage themselves.** Idle sessions unload after a while and reload from disk when you open them.
 
 ## Quick start
@@ -242,7 +243,7 @@ dev/          The scripted development model
 - [x] Code, Research and Write apps with live steps, steering and the context ring
 - [x] Inline extension dialogs and system notifications
 - [x] Changes panel with keep and revert
-- [x] Settings: logins, default and per-app models, per-app extensions
+- [x] Settings: logins, custom endpoints, default and per-app models, per-app extensions
 - [x] Research: note preview panel with sources
 - [x] Write: document panel with tracked changes to accept or reject
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`

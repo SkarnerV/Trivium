@@ -156,6 +156,7 @@ export function App() {
 			<div className="shell" style={vars}>
 				<WindowTitleBar app={iconApp} />
 				<SettingsPage />
+				<ConfirmDialog />
 				<Toasts />
 			</div>
 		);

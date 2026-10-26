@@ -103,27 +103,32 @@ function MessageEditor({ initial, canSendEmpty, onCancel, onSend }: {
 	);
 }
 
-function MessageActions({ run, view, index, onEdit }: { run: Run; view: SessionView; index: number; onEdit: () => void }) {
+/** Copies the text, and shows a tick for a moment once it is on the clipboard. */
+function CopyButton({ text, label }: { text: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	useEffect(() => {
 		if (!copied) return;
 		const timer = setTimeout(() => setCopied(false), 1500);
 		return () => clearTimeout(timer);
 	}, [copied]);
+	return (
+		<button
+			type="button"
+			className="prompt-action"
+			aria-label={copied ? "Copied" : label}
+			title={copied ? "Copied" : "Copy"}
+			onClick={() => void attempt(() => trivium.copyText(text).then(() => true)).then((ok) => ok && setCopied(true))}
+		>
+			{copied ? <CheckIcon size={14} width={1.75} /> : <CopyIcon size={14} width={1.75} />}
+		</button>
+	);
+}
+
+function MessageActions({ run, view, index, onEdit }: { run: Run; view: SessionView; index: number; onEdit: () => void }) {
 	const text = run.prompt.trim();
 	return (
 		<div className="prompt-actions">
-			{text && (
-				<button
-					type="button"
-					className="prompt-action"
-					aria-label={copied ? "Copied" : "Copy message"}
-					title={copied ? "Copied" : "Copy"}
-					onClick={() => void attempt(() => trivium.copyText(text).then(() => true)).then((ok) => ok && setCopied(true))}
-				>
-					{copied ? <CheckIcon size={14} width={1.75} /> : <CopyIcon size={14} width={1.75} />}
-				</button>
-			)}
+			{text && <CopyButton text={text} label="Copy message" />}
 			<button
 				type="button"
 				className="prompt-action"
@@ -198,8 +203,16 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 				{run.notice && <SubagentNoticeLine notice={run.notice} />}
 				<Steps run={run} live={live} />
 				{run.answer && (
-					<div className="answer">
-						<Markdown text={run.answer} />
+					<div className="reply">
+						<div className="answer">
+							<Markdown text={run.answer} />
+						</div>
+						{/* Copied as the markdown it was written in; offered once the reply is finished. */}
+						{!live && (
+							<div className="reply-actions">
+								<CopyButton text={run.answer.trim()} label="Copy response" />
+							</div>
+						)}
 					</div>
 				)}
 				{run.error && run.status !== "aborted" && (run.limit ? <LimitCard limit={run.limit} /> : <div className="run-error">{run.error}</div>)}
@@ -287,10 +300,17 @@ export function SessionPane({ view }: { view: SessionView }) {
 					</div>
 				</div>
 				{scroll.away && (
-					<button type="button" className="to-latest" onClick={scroll.toBottom}>
-						{/* While the agent works, the dot says there is more coming below. */}
-						{view.running ? <span className="run-dot" /> : <Chevron open={false} down size={12} />}
-						Latest
+					<button type="button" className="to-latest" onClick={scroll.toBottom} aria-label="Scroll to latest" title="Scroll to latest">
+						{/* While the agent works, the dots say there is more coming below. */}
+						{view.running ? (
+							<span className="to-latest-dots">
+								<span />
+								<span />
+								<span />
+							</span>
+						) : (
+							<Chevron open={false} down size={12} />
+						)}
 					</button>
 				)}
 			</div>

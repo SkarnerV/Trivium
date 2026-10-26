@@ -788,15 +788,14 @@ body.resizing * {
 	z-index: 5;
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	justify-content: center;
+	width: 30px;
 	height: 30px;
-	padding: 0 13px 0 11px;
+	padding: 0;
 	border: 0;
-	border-radius: 15px;
+	border-radius: 50%;
 	background: #fff;
 	color: var(--ink-2);
-	font-size: 12.5px;
-	font-weight: 500;
 	box-shadow:
 		0 6px 18px rgba(19, 20, 43, 0.12),
 		0 0 0 1px rgba(19, 20, 43, 0.07);
@@ -808,10 +807,38 @@ body.resizing * {
 	color: var(--ink);
 }
 
-.to-latest .run-dot {
-	width: 5px;
-	height: 5px;
-	margin: 0 2px;
+.to-latest-dots {
+	display: flex;
+	gap: 3px;
+}
+
+.to-latest-dots span {
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: currentColor;
+	animation: to-latest-dot 1.2s ease-in-out infinite;
+}
+
+.to-latest-dots span:nth-child(2) {
+	animation-delay: 0.15s;
+}
+
+.to-latest-dots span:nth-child(3) {
+	animation-delay: 0.3s;
+}
+
+@keyframes to-latest-dot {
+	0%,
+	60%,
+	100% {
+		opacity: 0.3;
+		transform: none;
+	}
+	30% {
+		opacity: 1;
+		transform: translateY(-2px);
+	}
 }
 
 @keyframes to-latest-in {
@@ -822,7 +849,8 @@ body.resizing * {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.to-latest {
+	.to-latest,
+	.to-latest-dots span {
 		animation: none;
 	}
 }
@@ -945,6 +973,20 @@ body.resizing * {
 	gap: 12px;
 }
 
+/* Copy sits under the reply, shown while it is hovered, like the actions under a message. */
+.reply-actions {
+	display: flex;
+	gap: 2px;
+	margin: 2px 0 -12px -6px;
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.reply:hover .reply-actions,
+.reply-actions:focus-within {
+	opacity: 1;
+}
+
 /* Steps */
 
 .steps-toggle {
@@ -964,23 +1006,34 @@ body.resizing * {
 	font-weight: 500;
 }
 
+/* A light passing across "Working" or "Waiting for your answer" says the run is alive, without a dot beside it. */
+.steps-toggle .shimmer,
+.ask-head .shimmer {
+	background: linear-gradient(90deg, var(--ink) 35%, var(--ink-4) 50%, var(--ink) 65%) 0 0 / 300% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.steps-toggle .shimmer,
+	.ask-head .shimmer {
+		animation: none;
+	}
+}
+
 .steps-failed {
 	color: var(--del);
-}
-
-.run-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-ring);
-	animation: pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes pulse {
-	50% {
-		box-shadow: 0 0 0 5px var(--accent-ring);
-	}
 }
 
 .steps {

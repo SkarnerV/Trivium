@@ -68,9 +68,8 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	return (
 		<>
 			<button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-				{live && <span className="run-dot" />}
 				<span>
-					<strong>{live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked"}</strong>
+					<strong className={live ? "shimmer" : undefined}>{live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked"}</strong>
 					{total && ` for ${total}`}
 				</span>
 				{count > 0 && <span>· {count} {count === 1 ? "step" : "steps"}</span>}

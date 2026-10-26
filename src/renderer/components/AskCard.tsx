@@ -11,8 +11,7 @@ function answer(id: string, value: DialogAnswer): void {
 function Waiting() {
 	return (
 		<div className="ask-head">
-			<span className="run-dot" />
-			<strong>Waiting for your answer</strong>
+			<strong className="shimmer">Waiting for your answer</strong>
 		</div>
 	);
 }

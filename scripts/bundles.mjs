@@ -31,6 +31,7 @@ export const bundles = {
 		platform: "browser",
 		format: "esm",
 		jsx: "automatic",
+		loader: { ".svg": "text" },
 		sourcemap: true,
 		define: { "process.env.NODE_ENV": '"development"' },
 	},

@@ -14,6 +14,7 @@ import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
+import { providerLogo } from "../provider-logos.ts";
 import { AppIcon, BackIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
@@ -189,6 +190,18 @@ function General() {
 
 /* Models and logins */
 
+/** The provider's logo, or its initial when Trivium has no logo for it. */
+function ProviderTile({ id, name, on }: { id: string; name: string; on: boolean }) {
+	const logo = providerLogo(id, name);
+	return logo ? (
+		<span className="s-tile logo">
+			<img src={logo} alt="" draggable={false} />
+		</span>
+	) : (
+		<span className={`s-tile${on ? " on" : ""}`}>{name.slice(0, 1).toUpperCase()}</span>
+	);
+}
+
 const loginLabel = (type: "api_key" | "oauth", configured: boolean) =>
 	type === "oauth" ? (configured ? "Log in again" : "Log in") : configured ? "Replace key" : "Add API key";
 
@@ -203,7 +216,7 @@ function ProviderRow({
 }) {
 	return (
 		<div className="s-row s-provider">
-			<span className={`s-tile${provider.configured ? " on" : ""}`}>{provider.name.slice(0, 1).toUpperCase()}</span>
+			<ProviderTile id={provider.id} name={provider.name} on={provider.configured} />
 			<div className="s-row-text">
 				<span className="s-label">{provider.name}</span>
 				{provider.configured && (
@@ -254,7 +267,7 @@ function CustomProviderRow({ provider, onEdit }: { provider: CustomProvider; onE
 	}
 	return (
 		<div className="s-row s-provider">
-			<span className="s-tile on">{provider.name.slice(0, 1).toUpperCase()}</span>
+			<ProviderTile id={provider.id} name={provider.name} on />
 			<div className="s-row-text">
 				<span className="s-label">{provider.name}</span>
 				<span className="s-hint">

@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, ProviderInfo } from "../../shared/protocol.ts";
+import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
+import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, PermissionSettings, ProviderInfo } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
 import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
@@ -15,7 +16,7 @@ import {
 } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
-import { Dropdown } from "./Dropdown.tsx";
+import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 
@@ -383,6 +384,50 @@ function ExtensionRow({ extension, onToggle, onRemove }: { extension: ExtensionI
 	);
 }
 
+/** pi-permission-system's level, written to its own config file, which the pi CLI shares. */
+function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSettings; onChange: (level: string) => void }) {
+	const level = PERMISSION_LEVELS.find((entry) => entry.id === permissions.level);
+	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: entry.label }));
+	if (!level) options.push({ value: "custom", label: "Your own rules" });
+	return (
+		<Group
+			title="Permissions"
+			description="What pi-permission-system asks you about before it runs. .env files are always blocked."
+			footer={
+				<>
+					Saved in <span className="mono">{shortPath(permissions.path)}</span>, which the pi CLI also uses. Changes apply when a
+					session loads.
+				</>
+			}
+		>
+			<Item
+				label="Ask before"
+				hint={
+					level?.hint ??
+					(permissions.unreadable
+						? "The config has comments or isn't plain JSON, so Trivium leaves it to you."
+						: "The config has rules of its own. Choosing a level replaces them.")
+				}
+			>
+				{permissions.unreadable ? (
+					<button type="button" className="s-btn soft" onClick={() => openFolder(permissions.path.replace(/[\\/][^\\/]+$/, ""))}>
+						<FolderIcon size={14} />
+						Open folder
+					</button>
+				) : (
+					<Dropdown
+						label="Ask before"
+						value={level?.id ?? "custom"}
+						options={options}
+						align="right"
+						onChange={(value) => value !== "custom" && onChange(value)}
+					/>
+				)}
+			</Item>
+		</Group>
+	);
+}
+
 function AppPage({ app }: { app: AppId }) {
 	const settings = useStore((s) => s.settings);
 	const [details, setDetails] = useState<AppDetails>();
@@ -483,6 +528,18 @@ function AppPage({ app }: { app: AppId }) {
 						</button>
 					)}
 				</div>
+			)}
+
+			{details?.permissions && (
+				<PermissionsGroup
+					permissions={details.permissions}
+					onChange={async (level) => {
+						const next = await attempt(() => trivium.setPermissionLevel(app, level));
+						if (!next) return;
+						setDetails(next);
+						setTouched(true);
+					}}
+				/>
 			)}
 
 			<Group

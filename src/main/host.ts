@@ -43,7 +43,7 @@ import type {
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { profileFor, profileInfo, triviumDir } from "./apps.ts";
-import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE } from "./builtin-packages.ts";
+import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
@@ -643,6 +643,9 @@ export class SessionHost {
 				.listConfiguredPackages()
 				.filter((entry) => entry.scope === "user")
 				.map((entry) => entry.source),
+			permissions: extensions.some((extension) => extension.on && /pi-permission-system/.test(extension.display))
+				? readPermissions(this.agentDir)
+				: undefined,
 		};
 	}
 

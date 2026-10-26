@@ -11,6 +11,7 @@ import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
+import { writePermissionLevel } from "./builtin-packages.ts";
 import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
@@ -181,6 +182,10 @@ function registerIpc(): void {
 	});
 	handle("trivium:installPackage", async (id: AppId, source: string) => {
 		await host.installPackage(packageSource(source));
+		return host.describeApp(id);
+	});
+	handle("trivium:setPermissionLevel", async (id: AppId, level: string) => {
+		await writePermissionLevel(getAgentDir(), level);
 		return host.describeApp(id);
 	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));

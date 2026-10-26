@@ -235,6 +235,15 @@ export interface ExtensionInfo {
 	builtIn?: string;
 }
 
+/** pi-permission-system's policy level, from its config file. */
+export interface PermissionSettings {
+	path: string;
+	/** A level id from PERMISSION_LEVELS, or "custom" for the user's own policy. */
+	level: string;
+	/** The file isn't plain JSON (it may have comments), so Trivium leaves it to the user. */
+	unreadable?: boolean;
+}
+
 export interface AppDetails {
 	id: AppId;
 	extensionDir: string;
@@ -249,6 +258,8 @@ export interface AppDetails {
 	loaded: number;
 	/** pi packages installed for every app and the pi CLI, as their sources, such as "npm:pi-web-access". */
 	packages: string[];
+	/** Set while pi-permission-system loads in this app. */
+	permissions?: PermissionSettings;
 }
 
 export interface ProviderInfo {
@@ -363,6 +374,8 @@ export interface TriviumApi {
 	addExtension(app: AppId): Promise<AppDetails | undefined>;
 	/** Installs a pi package from npm, git or a URL for every app, then describes this app again. */
 	installPackage(app: AppId, source: string): Promise<AppDetails>;
+	/** Writes a permission level to pi-permission-system's config, then describes this app again. */
+	setPermissionLevel(app: AppId, level: string): Promise<AppDetails>;
 	reloadApp(app: AppId): Promise<string[]>;
 	providers(): Promise<ProviderInfo[]>;
 	login(providerId: string, type: "api_key" | "oauth"): Promise<void>;

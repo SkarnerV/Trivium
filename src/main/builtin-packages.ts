@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { PackageSource } from "@earendil-works/pi-coding-agent";
 import { packageName } from "../shared/packages.ts";
-import type { AppId } from "../shared/protocol.ts";
+import { DEFAULT_PERMISSION_LEVEL, PERMISSION_LEVELS, permissionLevelOf, withPermissionLevel } from "../shared/permissions.ts";
+import type { AppId, PermissionSettings } from "../shared/protocol.ts";
 import { builtInPackages } from "../shared/recommended.ts";
 
 const require = createRequire(import.meta.url);
@@ -36,23 +38,51 @@ export function activeBuiltIns(app: AppId, removed: string[], installed: Package
 
 export const PERMISSION_PACKAGE = "@gotgenes/pi-permission-system";
 
+export const permissionConfigPath = (agentDir: string): string => join(agentDir, "extensions", "pi-permission-system", "config.json");
+
+const format = (config: unknown) => `${JSON.stringify(config, null, "\t")}\n`;
+
 /**
- * With no config, pi-permission-system asks before every tool call. This starting policy keeps Code working as it
+ * With no config, pi-permission-system asks before every tool call. The default level keeps Code working as it
  * did and gates what is hard to undo; it is written only when the user has no config of their own.
  */
-export const STARTER_PERMISSIONS = {
-	permission: {
-		"*": "allow",
-		path: { "*": "allow", "*.env": "deny", "*.env.*": "deny", "*.env.example": "allow" },
-		bash: { "*": "allow", "rm -rf *": "ask", "sudo *": "ask", "git push": "ask", "git push *": "ask" },
-		external_directory: "ask",
-	},
-};
-
 export function ensurePermissionConfig(agentDir: string): void {
-	const dir = join(agentDir, "extensions", "pi-permission-system");
-	const file = join(dir, "config.json");
+	const file = permissionConfigPath(agentDir);
 	if (existsSync(file)) return;
-	mkdirSync(dir, { recursive: true });
-	writeFileSync(file, `${JSON.stringify(STARTER_PERMISSIONS, null, "\t")}\n`, { flag: "wx" });
+	mkdirSync(dirname(file), { recursive: true });
+	writeFileSync(file, format({ permission: DEFAULT_PERMISSION_LEVEL.permission }), { flag: "wx" });
+}
+
+/**
+ * The level the config sets. A missing file reads as the default, which the next Code session writes. A file
+ * Trivium can't parse as plain JSON, such as one with comments, is left to the user.
+ */
+export function readPermissions(agentDir: string): PermissionSettings {
+	const path = permissionConfigPath(agentDir);
+	if (!existsSync(path)) return { path, level: DEFAULT_PERMISSION_LEVEL.id };
+	try {
+		const config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		return { path, level: permissionLevelOf(config)?.id ?? "custom" };
+	} catch {
+		return { path, level: "custom", unreadable: true };
+	}
+}
+
+/** Sets a level's policy, keeping the config's other settings. Refuses a file it can't parse rather than lose it. */
+export async function writePermissionLevel(agentDir: string, id: string): Promise<PermissionSettings> {
+	const level = PERMISSION_LEVELS.find((entry) => entry.id === id);
+	if (!level) throw new Error(`Unknown permission level: ${id}`);
+	const path = permissionConfigPath(agentDir);
+	let config: Record<string, unknown> = {};
+	if (existsSync(path)) {
+		try {
+			config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		} catch {
+			throw new Error(`${path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.`);
+		}
+	}
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(`${path}.tmp`, format(withPermissionLevel(config, level)));
+	await rename(`${path}.tmp`, path);
+	return { path, level: level.id };
 }

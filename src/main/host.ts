@@ -43,6 +43,8 @@ import type {
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { profileFor, profileInfo, triviumDir } from "./apps.ts";
+import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE } from "./builtin-packages.ts";
+import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -71,11 +73,16 @@ function shortPath(path: string): string {
 	return path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
-/** A readable name: the file name without extension, or the folder name for index files. */
-function extensionName(path: string): string {
+/**
+ * A readable name: the file name without extension, or the folder name for index files. A package's
+ * index often sits in a build folder such as dist; the package's own name says more, without its scope.
+ */
+function extensionName(path: string, packageSource?: string): string {
 	if (path.includes(":") && !path.includes(sep)) return path.split(":").pop() ?? path;
 	const file = basename(path).replace(/\.(ts|js|mjs)$/, "");
-	return file === "index" ? basename(join(path, "..")) : file;
+	const name = file === "index" ? basename(join(path, "..")) : file;
+	if (packageSource && /^(src|dist|lib|bundle|build|out|extensions?)$/.test(name)) return packageName(packageSource).split("/").pop()!;
+	return name;
 }
 
 /**
@@ -577,9 +584,12 @@ export class SessionHost {
 		const appSettings = this.settings.app(app);
 		const disabled = new Set(appSettings.disabled);
 		const added = new Set(appSettings.added);
+		const builtIns = activeBuiltIns(app, appSettings.removed, settingsManager.getPackages());
+		const builtInOf = (path: string) => builtIns.find((entry) => path.startsWith(entry.dir + sep))?.name;
 		const sourceOf = (path: string, extension?: Extension): ExtensionSource => {
 			if (path === devFaux) return "Dev";
 			if (path.startsWith(profile.extensionDir + sep)) return "App";
+			if (builtInOf(path)) return "Trivium";
 			if ([...added].some((entry) => path === entry || path.startsWith(entry + sep))) return "Added";
 			if (path.startsWith("builtin:")) return "Built-in";
 			if (extension?.sourceInfo.origin === "package") return "Package";
@@ -591,12 +601,17 @@ export class SessionHost {
 			.filter((extension) => !extension.hidden && !extension.path.startsWith("<"))
 			.map((extension) => ({
 				path: extension.resolvedPath,
-				name: extensionName(extension.resolvedPath),
+				name: extensionName(
+					extension.resolvedPath,
+					builtInOf(extension.resolvedPath) ?? (extension.sourceInfo.origin === "package" ? extension.sourceInfo.source : undefined),
+				),
 				display:
-					extension.sourceInfo.origin === "package" ? extension.sourceInfo.source : shortPath(extension.resolvedPath),
+					builtInOf(extension.resolvedPath) ??
+					(extension.sourceInfo.origin === "package" ? extension.sourceInfo.source : shortPath(extension.resolvedPath)),
 				source: sourceOf(extension.resolvedPath, extension),
 				on: !disabled.has(extension.resolvedPath),
 				registers: registers(extension),
+				builtIn: builtInOf(extension.resolvedPath),
 			}));
 		for (const error of result.errors) {
 			extensions.push({
@@ -607,9 +622,10 @@ export class SessionHost {
 				on: !disabled.has(error.path),
 				registers: [],
 				error: error.error,
+				builtIn: builtInOf(error.path),
 			});
 		}
-		const order: ExtensionSource[] = ["App", "Added", "Global", "Package", "Project", "Built-in", "Dev"];
+		const order: ExtensionSource[] = ["App", "Added", "Trivium", "Global", "Package", "Project", "Built-in", "Dev"];
 		extensions.sort((a, b) => order.indexOf(a.source) - order.indexOf(b.source));
 		const lives = [...this.live.values()].filter((live) => live.app === app);
 		return {
@@ -649,7 +665,14 @@ export class SessionHost {
 	): DefaultResourceLoader {
 		const profile = profileFor(app);
 		const appSettings = this.settings.app(app);
-		const extensions = [...profile.extensions, ...appSettings.added.filter((path) => existsSync(path))];
+		const builtIns = activeBuiltIns(app, appSettings.removed, settingsManager.getPackages());
+		// Only a session gets a starting policy; looking at Settings writes nothing.
+		if (!options.keepDisabled && builtIns.some((entry) => entry.name === PERMISSION_PACKAGE)) ensurePermissionConfig(this.agentDir);
+		const extensions = [
+			...profile.extensions,
+			...builtIns.map((entry) => entry.dir),
+			...appSettings.added.filter((path) => existsSync(path)),
+		];
 		if (process.env.TRIVIUM_DEV_FAUX) extensions.push(devFaux);
 		const disabled = new Set(appSettings.disabled);
 		const appendPrompt = profile.appendSystemPrompt;

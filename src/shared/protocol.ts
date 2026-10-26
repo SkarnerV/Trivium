@@ -204,6 +204,8 @@ export interface AppSettings {
 	disabled: string[];
 	/** Extension files or folders added to this app from elsewhere. */
 	added: string[];
+	/** Packages Trivium ships for this app that the user removed, by npm name. */
+	removed: string[];
 }
 
 export interface TriviumSettings {
@@ -216,7 +218,7 @@ export interface TriviumSettings {
 	apps: Record<AppId, AppSettings>;
 }
 
-export type ExtensionSource = "App" | "Added" | "Global" | "Project" | "Package" | "Built-in" | "Dev";
+export type ExtensionSource = "App" | "Added" | "Trivium" | "Global" | "Project" | "Package" | "Built-in" | "Dev";
 
 export interface ExtensionInfo {
 	/** Resolved path, the key used to turn it off. */
@@ -229,6 +231,8 @@ export interface ExtensionInfo {
 	/** What it adds: tools, commands, event handlers. */
 	registers: string[];
 	error?: string;
+	/** The npm name of the package Trivium ships it in, which the user can remove from this app. */
+	builtIn?: string;
 }
 
 export interface AppDetails {

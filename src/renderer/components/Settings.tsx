@@ -332,6 +332,7 @@ const APP_SUMMARY: Record<AppId, string> = {
 const SOURCE_HINT: Record<ExtensionSource, string> = {
 	App: "In this app's folder",
 	Added: "Added to this app from elsewhere",
+	Trivium: "Comes with Trivium. Remove it if this app shouldn't have it; Add can bring it back.",
 	Global: "From ~/.pi/agent, loaded by pi everywhere",
 	Project: "From the project's .pi folder",
 	Package: "From a pi package",
@@ -339,7 +340,7 @@ const SOURCE_HINT: Record<ExtensionSource, string> = {
 	Dev: "Development only",
 };
 
-function ExtensionRow({ extension, onToggle }: { extension: ExtensionInfo; onToggle: () => void }) {
+function ExtensionRow({ extension, onToggle, onRemove }: { extension: ExtensionInfo; onToggle: () => void; onRemove?: () => void }) {
 	const failed = Boolean(extension.error && extension.on);
 	return (
 		<div className={`s-row s-ext${extension.on ? "" : " off"}`}>
@@ -371,6 +372,11 @@ function ExtensionRow({ extension, onToggle }: { extension: ExtensionInfo; onTog
 				)}
 			</div>
 			<div className="s-row-control">
+				{onRemove && (
+					<button type="button" className="s-btn s-ext-remove" title={`Remove ${extension.builtIn} from this app`} onClick={onRemove}>
+						Remove
+					</button>
+				)}
 				<Switch on={extension.on} label={`Load ${extension.name}`} onChange={onToggle} />
 			</div>
 		</div>
@@ -406,6 +412,14 @@ function AppPage({ app }: { app: AppId }) {
 			},
 		);
 		await saveApp({ disabled });
+	};
+	/** Removes a package Trivium ships from this app, or brings it back; its extensions' on/off state is kept. */
+	const setRemoved = async (name: string, remove: boolean) => {
+		const removed = appSettings.removed.filter((entry) => entry !== name);
+		await saveApp({ removed: remove ? [...removed, name] : removed });
+		const next = await attempt(() => trivium.appDetails(app));
+		if (next) setDetails(next);
+		return next;
 	};
 	const [adding, setAdding] = useState(false);
 	const added = async (next: AppDetails) => {
@@ -496,13 +510,20 @@ function AppPage({ app }: { app: AppId }) {
 					</div>
 				)}
 				{extensions.map((extension) => (
-					<ExtensionRow key={extension.path} extension={extension} onToggle={() => void toggle(extension)} />
+					<ExtensionRow
+						key={extension.path}
+						extension={extension}
+						onToggle={() => void toggle(extension)}
+						onRemove={extension.builtIn ? () => void setRemoved(extension.builtIn!, true) : undefined}
+					/>
 				))}
 			</Group>
 			{adding && (
 				<AddExtensionDialog
 					app={app}
 					packages={details?.packages ?? []}
+					removed={appSettings.removed}
+					onRestore={(name) => setRemoved(name, false)}
 					onClose={() => setAdding(false)}
 					onAdded={(next) => void added(next)}
 				/>

@@ -3,7 +3,7 @@ import { rename, writeFile } from "node:fs/promises";
 import type { AppId, AppSettings, TriviumSettings } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 
-const emptyApp = (): AppSettings => ({ disabled: [], added: [] });
+const emptyApp = (): AppSettings => ({ disabled: [], added: [], removed: [] });
 
 const DEFAULTS: TriviumSettings = {
 	textSize: 1,

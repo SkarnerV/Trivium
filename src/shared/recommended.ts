@@ -9,18 +9,23 @@ export interface Recommendation {
 	why: string;
 	/** What works differently in Trivium, or what installing it does, when that matters. */
 	note?: string;
+	/** Ships with Trivium and loads in this app unless removed. */
+	builtIn?: true;
 }
 
 /**
  * pi gallery packages suited to each app, checked against their source: each is an MIT-licensed pi package,
- * and what it relies on works in Trivium unless the note says otherwise.
+ * and what it relies on works in Trivium unless the note says otherwise. Built-in ones are Trivium dependencies,
+ * pinned in package.json; the rest install from npm when chosen.
  */
 export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 	code: [
 		{
 			name: "@gotgenes/pi-permission-system",
+			builtIn: true,
 			adds: "Allow, ask or deny rules for tools, bash commands and file paths",
 			why: "Code runs bash and edits files without asking. This asks first for what you choose and blocks files like .env.",
+			note: "Starts with a policy that blocks .env files and asks before rm -rf, sudo, git push and folders outside the project. Edit it in ~/.pi/agent/extensions/pi-permission-system/config.json.",
 		},
 		{
 			name: "pi-lens",
@@ -30,12 +35,14 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 		},
 		{
 			name: "@narumitw/pi-plan-mode",
+			builtIn: true,
 			adds: "A read-only /plan mode",
 			why: "Agree on an approach before any file changes, then implement it in this session or a fresh one.",
 			note: "Its status indicator doesn't show in Trivium; /plan itself works.",
 		},
 		{
 			name: "pi-subagents",
+			builtIn: true,
 			adds: "A subagent tool with scout, reviewer and researcher agents",
 			why: "Hands side tasks such as exploring the codebase or reviewing a change to a separate agent, keeping this session's context focused.",
 			note: "Its live progress widget doesn't show in Trivium.",
@@ -59,17 +66,20 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 		},
 		{
 			name: "pi-docparser",
+			builtIn: true,
 			adds: "document_parse, document_search and document_screenshot",
 			why: "Reads and searches the PDFs and documents you already have, locally.",
 		},
 		{
 			name: "pi-memory",
+			builtIn: true,
 			adds: "memory_write, memory_search, memory_read and a scratchpad",
 			why: "Keeps findings across sessions, with search, so last week's research can be found again.",
-			note: "Runs a setup script when it installs.",
+			note: "Keeps memory in ~/.pi/agent/memory. Search needs qmd, installed separately.",
 		},
 		{
 			name: "pi-subagents",
+			builtIn: true,
 			adds: "A subagent tool with researcher and evidence-auditor agents",
 			why: "Investigates several questions in parallel and checks that claims are backed by their sources.",
 			note: "Its researcher needs a web package such as pi-web-access. Live progress doesn't show in Trivium.",
@@ -89,8 +99,10 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 		},
 		{
 			name: "pi-markdown-preview",
+			builtIn: true,
 			adds: "/preview-pdf and /preview-browser, with LaTeX",
 			why: "Exports a finished piece to PDF.",
+			note: "PDF export needs Pandoc and LaTeX installed.",
 		},
 		{
 			name: "@narumitw/pi-plan-mode",
@@ -100,3 +112,6 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 		},
 	],
 };
+
+/** Packages Trivium ships for an app, by npm name. */
+export const builtInPackages = (app: AppId): string[] => RECOMMENDED[app].filter((item) => item.builtIn).map((item) => item.name);

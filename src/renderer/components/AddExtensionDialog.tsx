@@ -19,12 +19,17 @@ function preview(text: string): { source?: string; error?: string } {
 export function AddExtensionDialog({
 	app,
 	packages,
+	removed,
+	onRestore,
 	onClose,
 	onAdded,
 }: {
 	app: AppId;
 	/** Sources of the pi packages already installed. */
 	packages: string[];
+	/** Packages Trivium ships for this app that the user removed. */
+	removed: string[];
+	onRestore: (name: string) => Promise<unknown>;
 	onClose: () => void;
 	onAdded: (details: AppDetails) => void;
 }) {
@@ -58,6 +63,16 @@ export function AddExtensionDialog({
 		}
 	};
 	const install = () => source && void run(value, true);
+	const restore = async (name: string) => {
+		if (busy) return;
+		setBusy(`npm:${name}`);
+		try {
+			await onRestore(name);
+			notify(`Added ${name} back`, "info");
+		} finally {
+			setBusy(undefined);
+		}
+	};
 
 	const pickLocal = async () => {
 		const details = await attempt(() => trivium.addExtension(app));
@@ -125,6 +140,9 @@ export function AddExtensionDialog({
 					{RECOMMENDED[app].map((item) => {
 						const done = installed.has(item.name);
 						const working = busy === `npm:${item.name}`;
+						// Shipped with Trivium: nothing to download, only to bring back if removed.
+						const shipped = item.builtIn && !done;
+						const isRemoved = shipped && removed.includes(item.name);
 						return (
 							<div key={item.name} className="rec-item">
 								<div className="rec-text">
@@ -140,22 +158,30 @@ export function AddExtensionDialog({
 										</span>
 									)}
 								</div>
-								<button
-									type="button"
-									className={`btn ${done ? "ghost" : ""} rec-btn`}
-									disabled={done || Boolean(busy)}
-									onClick={() => void run(`npm:${item.name}`, false)}
-								>
-									{done ? (
-										<>
-											<CheckIcon size={12} /> Installed
-										</>
-									) : working ? (
-										"Installing…"
-									) : (
-										"Install"
-									)}
-								</button>
+								{shipped && !isRemoved ? (
+									<button type="button" className="btn ghost rec-btn" disabled title="Comes with Trivium. Remove it from the extension list.">
+										<CheckIcon size={12} /> Built in
+									</button>
+								) : (
+									<button
+										type="button"
+										className={`btn ${done ? "ghost" : ""} rec-btn`}
+										disabled={done || Boolean(busy)}
+										onClick={() => void (isRemoved ? restore(item.name) : run(`npm:${item.name}`, false))}
+									>
+										{done ? (
+											<>
+												<CheckIcon size={12} /> Installed
+											</>
+										) : working ? (
+											isRemoved ? "Adding…" : "Installing…"
+										) : isRemoved ? (
+											"Add back"
+										) : (
+											"Install"
+										)}
+									</button>
+								)}
 							</div>
 						);
 					})}

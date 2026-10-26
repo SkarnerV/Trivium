@@ -35,7 +35,13 @@
 		"@earendil-works/pi-agent-core": "1.4.0",
 		"@earendil-works/pi-ai": "1.4.0",
 		"@earendil-works/pi-coding-agent": "1.4.0",
-		"diff": "8.0.4"
+		"@gotgenes/pi-permission-system": "41.0.0",
+		"@narumitw/pi-plan-mode": "0.59.4",
+		"diff": "8.0.4",
+		"pi-docparser": "4.0.0",
+		"pi-markdown-preview": "0.24.0",
+		"pi-memory": "0.4.2",
+		"pi-subagents": "0.82.1"
 	},
 	"devDependencies": {
 		"@types/node": "22.19.19",

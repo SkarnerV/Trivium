@@ -2564,6 +2564,12 @@ body.resizing * {
 	padding-top: 1px;
 }
 
+.s-btn.s-ext-remove {
+	min-height: 26px;
+	padding: 0 10px;
+	color: var(--ink-2);
+}
+
 .s-ext.off .s-row-text {
 	opacity: 0.55;
 }
@@ -2585,7 +2591,8 @@ body.resizing * {
 	line-height: 18px;
 }
 
-.s-tag.src-app {
+.s-tag.src-app,
+.s-tag.src-trivium {
 	background: color-mix(in srgb, var(--accent) 14%, #fff);
 	color: var(--accent-text);
 }

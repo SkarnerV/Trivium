@@ -117,9 +117,9 @@ export function EmptyPane() {
 					<AppIcon app={app} size={20} />
 				</span>
 				<h2>Start a {name} session</h2>
-				<p>Pick a project folder and say what you need. Sessions keep running when you switch apps.</p>
+				<p>Pick a project folder to start. Sessions keep running when you switch apps.</p>
 				<button type="button" className="btn primary" onClick={() => setState({ overlay: "new" })}>
-					<PlusIcon size={14} /> New session <span className="kbd">⌘N</span>
+					<PlusIcon size={14} /> New session
 				</button>
 			</div>
 		</main>

@@ -84,10 +84,10 @@ function ConfirmCard({ request }: { request: Extract<DialogRequest, { kind: "con
 			{request.message && <p className="ask-msg">{request.message}</p>}
 			<div className="btn-row">
 				<button type="button" className="btn" onClick={() => answer(request.id, { confirmed: false })}>
-					Decline <span className="kbd">esc</span>
+					Decline
 				</button>
 				<button type="button" className="btn primary" onClick={() => answer(request.id, { confirmed: true })}>
-					Allow <span className="kbd">⌘↵</span>
+					Allow
 				</button>
 			</div>
 		</div>
@@ -124,7 +124,7 @@ function TextCard({ request }: { request: Extract<DialogRequest, { kind: "input"
 						/>
 					)}
 					<button type="button" className="btn primary" style={{ minHeight: 30 }} onClick={submit}>
-						Answer <span className="kbd">{request.kind === "editor" ? "⌘↵" : "↵"}</span>
+						Answer
 					</button>
 				</span>
 			</label>

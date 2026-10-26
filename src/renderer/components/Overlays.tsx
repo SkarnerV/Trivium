@@ -65,7 +65,7 @@ export function NewSessionDialog() {
 				</div>
 				<div role="radiogroup" aria-label="Project" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
 					<span className="group-label">Project</span>
-					{projects.map((path, index) => (
+					{projects.map((path) => (
 						<button
 							key={path}
 							type="button"
@@ -77,7 +77,6 @@ export function NewSessionDialog() {
 							<span className="ring" />
 							<span style={{ fontWeight: path === cwd ? 500 : 400 }}>{baseName(path)}</span>
 							<span className="path ellipsis">{shortPath(path)}</span>
-							<span className="kbd">⌘{index + 1}</span>
 						</button>
 					))}
 					<button type="button" className="radio" onClick={() => void pickFolder()} style={{ color: "var(--ink-2)" }}>
@@ -87,10 +86,10 @@ export function NewSessionDialog() {
 				</div>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={close}>
-						Cancel <span className="kbd">esc</span>
+						Cancel
 					</button>
 					<button type="button" className="btn primary" disabled={!cwd || busy} onClick={() => void start()}>
-						{busy ? "Starting…" : "Start session"} <span className="kbd">⌘↵</span>
+						{busy ? "Starting…" : "Start session"}
 					</button>
 				</div>
 			</div>
@@ -184,7 +183,7 @@ export function ConfirmDialog() {
 				</p>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={() => request.resolve(false)}>
-						Cancel <span className="kbd">esc</span>
+						Cancel
 					</button>
 					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
 						{request.confirmLabel}

@@ -727,7 +727,6 @@ export function SettingsPage() {
 				<button type="button" className="back" onClick={closeSettings}>
 					<BackIcon />
 					Back to {THEMES[app].name}
-					<span className="kbd">esc</span>
 				</button>
 				<h1>Settings</h1>
 				{item("general", "General", <SlidersIcon />)}

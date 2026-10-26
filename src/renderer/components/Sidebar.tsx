@@ -167,7 +167,7 @@ export function AppSwitcher() {
 	const sessions = useStore((s) => s.sessions);
 	return (
 		<nav className="switcher" aria-label="Apps">
-			{APP_IDS.map((id, index) => {
+			{APP_IDS.map((id) => {
 				const busy = id !== app && sessions.some((session) => session.app === id && session.running);
 				return (
 					<button
@@ -175,7 +175,7 @@ export function AppSwitcher() {
 						type="button"
 						aria-label={THEMES[id].name}
 						aria-current={id === app ? "page" : undefined}
-						title={`${THEMES[id].name} ⌘${index + 1}`}
+						title={THEMES[id].name}
 						onClick={() => switchApp(id)}
 					>
 						<AppIcon app={id} />
@@ -195,7 +195,7 @@ function SidebarToggle({ rail = false }: { rail?: boolean }) {
 			className={rail ? "rail-btn panel" : "icon-btn sidebar-toggle"}
 			aria-label={folded ? "Expand sidebar" : "Fold sidebar"}
 			aria-expanded={!folded}
-			title={folded ? "Sessions · click to keep open ⌘\\" : "Fold sidebar ⌘\\"}
+			title={folded ? "Sessions · click to keep open" : "Fold sidebar"}
 			onMouseEnter={() => {
 				if (!folded) return;
 				cancelPeekClose();
@@ -267,7 +267,7 @@ export function Rail() {
 			<span className="rail-sep" aria-hidden="true" />
 			{!IS_WINDOWS && (
 				<>
-					{APP_IDS.map((id, index) => {
+					{APP_IDS.map((id) => {
 						const busy = id !== app && sessions.some((session) => session.app === id && session.running);
 						return (
 							<button
@@ -276,7 +276,7 @@ export function Rail() {
 								className="rail-btn app"
 								aria-label={THEMES[id].name}
 								aria-current={id === app ? "page" : undefined}
-								title={`${THEMES[id].name} ⌘${index + 1}`}
+								title={THEMES[id].name}
 								onClick={() => switchApp(id)}
 							>
 								<AppIcon app={id} size={16} />
@@ -287,14 +287,14 @@ export function Rail() {
 					<span className="rail-sep" aria-hidden="true" />
 				</>
 			)}
-			<button type="button" className="rail-btn" aria-label="Search" title="Search ⌘K" onClick={() => setState({ overlay: "search" })}>
+			<button type="button" className="rail-btn" aria-label="Search" title="Search" onClick={() => setState({ overlay: "search" })}>
 				<SearchIcon size={17} />
 			</button>
-			<button type="button" className="rail-btn" aria-label="New session" title="New session ⌘N" onClick={() => setState({ overlay: "new" })}>
+			<button type="button" className="rail-btn" aria-label="New session" title="New session" onClick={() => setState({ overlay: "new" })}>
 				<PlusIcon size={17} />
 			</button>
 			<span style={{ flex: 1 }} />
-			<button type="button" className="rail-btn" aria-label="Settings" title="Settings ⌘," onClick={() => openSettings()}>
+			<button type="button" className="rail-btn" aria-label="Settings" title="Settings" onClick={() => openSettings()}>
 				<GearIcon size={17} />
 			</button>
 		</nav>

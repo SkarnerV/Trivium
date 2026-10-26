@@ -337,12 +337,6 @@ button:disabled {
 	flex: 1;
 }
 
-.kbd {
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--muted);
-}
-
 .sb-sessions {
 	flex: 1;
 	min-height: 0;
@@ -1538,14 +1532,6 @@ button:disabled {
 	font-weight: 400;
 }
 
-.btn .kbd {
-	color: var(--ink-4);
-}
-
-.btn.primary .kbd {
-	color: rgba(255, 255, 255, 0.75);
-}
-
 .btn-row {
 	display: flex;
 	gap: 8px;
@@ -1795,10 +1781,6 @@ button:disabled {
 .set-nav .back:hover {
 	background: var(--tab);
 	color: var(--secondary);
-}
-
-.set-nav .back .kbd {
-	margin-left: auto;
 }
 
 .set-nav h1 {

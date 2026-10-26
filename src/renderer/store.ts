@@ -240,7 +240,7 @@ function handleEvent(event: HostEvent): void {
 			// The session on screen reloads at once with the new setup.
 			const { selected, app, page } = getState();
 			const current = selected[app];
-			if (current && gone.has(current) && page === "main") void openSession(current);
+			if (current && gone.has(current) && page === "main") void loadSession(current, navigation);
 			break;
 		}
 	}
@@ -251,9 +251,22 @@ export async function refreshSessions(): Promise<void> {
 	if (sessions) setState({ sessions });
 }
 
-export async function openSession(path: string): Promise<void> {
+/**
+ * Counts the user's moves to another app or session. Loading a session takes a while, so one that lands after a
+ * newer move only keeps its view and leaves the screen where the user went.
+ */
+let navigation = 0;
+
+export function openSession(path: string): Promise<void> {
+	return loadSession(path, ++navigation);
+}
+
+/** Loads a session and shows it if `ticket` is still the latest move; a reload passes the current one. */
+async function loadSession(path: string, ticket: number): Promise<void> {
 	const view = await attempt(() => trivium.openSession(path));
 	if (!view) return;
+	const keep = () => setState((s) => ({ views: { ...s.views, [path]: view } }));
+	if (ticket !== navigation) return keep();
 	const before = getState();
 	const show = () =>
 		setState((s) => ({
@@ -279,17 +292,18 @@ export async function refreshModels(): Promise<void> {
 
 /** Starts a session and shows it. `draft` goes into its message box, unsent. */
 export async function startSession(input: NewSessionInput, draft?: string): Promise<SessionView | undefined> {
+	const ticket = ++navigation;
 	const view = await attempt(() => trivium.newSession(input));
 	if (!view) return undefined;
-	transition(getState().app === input.app ? "session" : "app", () =>
-		setState((s) => ({
-			drafts: draft ? { ...s.drafts, [view.path]: { text: draft, attachments: [] } } : s.drafts,
-			views: { ...s.views, [view.path]: view },
-			selected: { ...s.selected, [input.app]: view.path },
-			app: input.app,
-			overlay: null,
-		})),
-	);
+	const keep = (s: State): Partial<State> => ({
+		drafts: draft ? { ...s.drafts, [view.path]: { text: draft, attachments: [] } } : s.drafts,
+		views: { ...s.views, [view.path]: view },
+	});
+	if (ticket !== navigation) setState(keep);
+	else
+		transition(getState().app === input.app ? "session" : "app", () =>
+			setState((s) => ({ ...keep(s), selected: { ...s.selected, [input.app]: view.path }, app: input.app, overlay: null })),
+		);
 	void refreshSessions();
 	void refreshModels();
 	return view;
@@ -302,27 +316,26 @@ export async function editMessage(path: string, run: number, text: string): Prom
 
 /** Copies a session up to one of its runs into a new session and shows it, with that run's message to edit. */
 export async function forkFrom(path: string, run: number): Promise<void> {
+	const ticket = ++navigation;
 	const result = await attempt(() => trivium.fork(path, run));
 	if (!result) return;
 	const { view, draft } = result;
-	transition("session", () =>
-		setState((s) => ({
-			drafts: { ...s.drafts, [view.path]: draft },
-			views: { ...s.views, [view.path]: view },
-			selected: { ...s.selected, [view.app]: view.path },
-			app: view.app,
-			overlay: null,
-		})),
-	);
+	const keep = (s: State): Partial<State> => ({ drafts: { ...s.drafts, [view.path]: draft }, views: { ...s.views, [view.path]: view } });
+	if (ticket !== navigation) setState(keep);
+	else
+		transition("session", () =>
+			setState((s) => ({ ...keep(s), selected: { ...s.selected, [view.app]: view.path }, app: view.app, overlay: null })),
+		);
 	void refreshSessions();
 }
 
 export function switchApp(app: AppId): void {
 	const { app: current, page } = getState();
 	if (app === current && page === "main") return;
+	const ticket = ++navigation;
 	transition(page === "main" ? "app" : "page", () => setState({ app, peek: false, page: "main" }));
 	const path = getState().selected[app];
-	if (path && !getState().views[path]) void openSession(path);
+	if (path && !getState().views[path]) void loadSession(path, ticket);
 }
 
 /** Shows a confirm dialog and resolves with the answer. */
@@ -368,7 +381,7 @@ export function closeSettings(): void {
 	if (getState().page !== "main") transition("page", () => setState({ page: "main" }));
 	const { selected, app, views } = getState();
 	const path = selected[app];
-	if (path && !views[path]) void openSession(path);
+	if (path && !views[path]) void loadSession(path, navigation);
 }
 
 export async function updateSettings(patch: Partial<TriviumSettings>): Promise<void> {

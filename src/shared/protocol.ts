@@ -79,6 +79,45 @@ export interface Step {
 	images?: TranscriptImage[];
 	/** Last lines of live output, shown for a running bash step. */
 	tail?: string;
+	/** The child agents a subagent step started, and what each is doing or did. */
+	subagent?: Subagent;
+}
+
+/** One child agent started by the subagent tool. */
+export interface SubagentChild {
+	agent: string;
+	/** What it was asked to do. */
+	task: string;
+	/** The workflow's name for it, which tells apart children of the same agent, such as "tests". */
+	label?: string;
+	status: StepStatus | "pending";
+	/** The tool it is using now, such as { tool: "read", target: "src/auth.ts" }. */
+	current?: { tool: string; target: string };
+	/** Its latest tool calls, oldest first. */
+	steps: { tool: string; target: string }[];
+	tools: number;
+	tokens?: number;
+	durationMs?: number;
+	model?: string;
+	context?: "fresh" | "fork";
+	/** Its answer, once it finishes. */
+	output?: string;
+	error?: string;
+}
+
+export interface Subagent {
+	children: SubagentChild[];
+	/** Started in the background: the step ends at launch, and the result arrives later as its own run. */
+	background: boolean;
+}
+
+/** A background subagent's result, which starts a run of its own instead of a user message. */
+export interface SubagentNotice {
+	agent: string;
+	status: "completed" | "failed" | "paused" | "stopped";
+	durationMs?: number;
+	/** The child's result, as pi-subagents previewed it. */
+	text: string;
 }
 
 /** A provider's usage-limit, quota or balance error, explained. */
@@ -96,6 +135,8 @@ export interface Run {
 	prompt: string;
 	/** Files and images sent with the prompt; an image carries what fetches and previews it. */
 	attachments?: { name: string; kind: "image" | "file"; id?: string; mimeType?: string; thumb?: string }[];
+	/** Set when a background subagent's result started the run; the prompt is then empty. */
+	notice?: SubagentNotice;
 	steps: Step[];
 	/** Assistant text after the last tool call: the run's answer. */
 	answer: string;

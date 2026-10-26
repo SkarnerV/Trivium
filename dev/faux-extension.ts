@@ -5,6 +5,8 @@
 // - Code fixes a bug in src/reader.ts: investigate, ask where the test goes, fix and test, explain.
 // - Research writes notes/electron-vs-tauri.md with a comparison and cited sources, then extends it.
 // - Write tightens two paragraphs of docs/rpc-integration.md and adds one.
+// - A prompt that mentions "subagent", in any app, delegates: one child, three in parallel, then one in
+//   the background whose result arrives later as its own run.
 // Every prompt replays the story from its first step.
 import {
 	createFauxCore,
@@ -143,6 +145,160 @@ const WRITE: Step[] = [
 		),
 ];
 
+/** A scripted child: the tool calls it makes, one every `pace` ms, and what it answers. */
+interface FauxChild {
+	agent: string;
+	task: string;
+	label?: string;
+	calls: [tool: string, args: string][];
+	output: string;
+	pace: number;
+}
+
+const SCOUT: FauxChild = {
+	agent: "scout",
+	task: "Map how sessions are created and refreshed in the auth flow. List entry points and risks.",
+	calls: [
+		["grep", '"createSession" src'],
+		["read", "src/auth/session.ts"],
+		["read", "src/auth/refresh.ts"],
+		["grep", '"refreshTimer" src'],
+		["read", "src/auth/logout.ts"],
+		["bash", "git log --oneline -5 -- src/auth"],
+		["read", "src/auth/store.ts"],
+		["read", "test/auth.test.ts"],
+	],
+	output: [
+		"Sessions start in `createSession()` (src/auth/session.ts) and refresh in `scheduleRefresh()` (src/auth/refresh.ts).",
+		"",
+		"- **Entry points:** `login()`, `restoreSession()` on startup, and the 401 retry in `fetchWithAuth()`",
+		"- **Risk:** the refresh timer is never cleared on logout, so a signed-out user can get a new token",
+	].join("\n"),
+	pace: 700,
+};
+
+const REVIEWERS: FauxChild[] = [
+	{
+		agent: "reviewer",
+		label: "correctness",
+		task: "Review the logout fix for correctness.",
+		calls: [["read", "src/auth/logout.ts"], ["grep", '"refreshTimer" src'], ["read", "src/auth/refresh.ts"], ["read", "src/auth/store.ts"], ["grep", '"clearTimeout" src']],
+		output: "No correctness problems. `logout()` now clears the timer before dropping the token.",
+		pace: 900,
+	},
+	{
+		agent: "reviewer",
+		label: "tests",
+		task: "Check the logout fix is covered by tests.",
+		calls: [["read", "test/auth.test.ts"], ["bash", "npm test -- auth"], ["read", "test/helpers.ts"], ["bash", "npm test -- auth --coverage"]],
+		output: "Covered: the new test fails without the fix and passes with it.",
+		pace: 1300,
+	},
+	{
+		agent: "reviewer",
+		label: "cleanup",
+		task: "Look for leftover complexity in the change.",
+		calls: [["read", "src/auth/logout.ts"], ["read", "src/auth/refresh.ts"]],
+		output: "2 findings: an unused import, and `stopRefresh` could be inlined.",
+		pace: 1100,
+	},
+];
+
+const RESEARCHER: FauxChild = {
+	agent: "researcher",
+	task: "Compare Electron and Tauri cold-start times on macOS, with sources.",
+	calls: [],
+	output: "Electron cold-starts about 2.1× slower than Tauri on the test machine (420 ms vs 200 ms), mostly loading Chromium. Both are under half a second.",
+	pace: 0,
+};
+
+const BACKGROUND_MS = 6000;
+
+/** The details pi-subagents streams while its children work, shaped closely enough for Trivium to read. */
+function fauxDetails(children: FauxChild[], elapsed: number, mode: string) {
+	const views = children.map((child, index) => {
+		const done = Math.min(child.calls.length, Math.floor(elapsed / child.pace));
+		const finished = elapsed >= child.pace * (child.calls.length + 1);
+		const current = finished ? undefined : child.calls[done];
+		const durationMs = finished ? child.pace * (child.calls.length + 1) : elapsed;
+		return {
+			result: {
+				index,
+				agent: child.agent,
+				task: child.task,
+				workflowKey: child.label,
+				exitCode: finished ? 0 : -1,
+				model: "scripted",
+				context: "fresh",
+				usage: { input: 2400 * (done + 1), output: 180 * (done + 1), cacheRead: 0, cacheWrite: 0, cost: 0, turns: done + 1 },
+				finalOutput: finished ? child.output : "",
+			},
+			progress: {
+				index,
+				agent: child.agent,
+				task: child.task,
+				status: finished ? "completed" : "running",
+				currentTool: current?.[0],
+				currentToolArgs: current?.[1],
+				recentTools: child.calls.slice(0, done).map(([tool, args]) => ({ tool, args, endMs: 0 })),
+				recentOutput: [],
+				toolCount: done,
+				tokens: 2580 * (done + 1),
+				durationMs,
+			},
+			finished,
+		};
+	});
+	return {
+		finished: views.every((view) => view.finished),
+		details: {
+			mode,
+			results: views.map((view) => ({ ...view.result, progress: view.progress })),
+			progress: views.map((view) => view.progress),
+		},
+	};
+}
+
+/** Delegates three times: one child, three reviewers at once, then one in the background. */
+const SUBAGENT_STORY: Step[] = [
+	() =>
+		fauxAssistantMessage(
+			[
+				fauxThinking("Before touching auth, get a map of how sessions are made and refreshed."),
+				fauxText("I'll have scout map the auth flow first."),
+				fauxToolCall("subagent", { agent: SCOUT.agent, task: SCOUT.task, async: false }),
+			],
+			{ stopReason: "toolUse" },
+		),
+	() =>
+		fauxAssistantMessage(
+			[
+				fauxText("Now three reviewers in parallel on the logout fix."),
+				fauxToolCall("subagent", { workflow: true, async: false }),
+			],
+			{ stopReason: "toolUse" },
+		),
+	() =>
+		fauxAssistantMessage(
+			[
+				fauxText("While that settles, a researcher can look into startup times in the background."),
+				fauxToolCall("subagent", { agent: RESEARCHER.agent, task: RESEARCHER.task }),
+			],
+			{ stopReason: "toolUse" },
+		),
+	() =>
+		fauxAssistantMessage(
+			fauxText(
+				"Logout now clears the refresh timer, so a signed-out user can't get a new token. The three reviewers found no correctness problems and two small cleanups. The researcher is still running and will report back.",
+			),
+		),
+];
+
+const NOTICE_REPLY: Step = () =>
+	fauxAssistantMessage(
+		fauxText("The researcher is back: Electron starts about **2.1× slower** than Tauri here (420 ms vs 200 ms), but both stay under half a second, so it isn't a reason to switch."),
+	);
+
 function textOf(message: unknown): string {
 	return JSON.stringify(message);
 }
@@ -215,7 +371,10 @@ export default function (pi: ExtensionAPI) {
 		const app = system.includes("research assistant") ? "research" : system.includes("writing assistant") ? "write" : "code";
 		const lastUser = context.messages.findLastIndex((m) => m.role === "user");
 		const step = context.messages.slice(lastUser + 1).filter((m) => m.role === "assistant").length;
-		const story = scripts[app]!;
+		// pi hands a custom message to the model as a user message.
+		const prompt = textOf(context.messages[lastUser]?.content);
+		if (prompt.includes("Background task completed")) return NOTICE_REPLY();
+		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();
 	};
 	core.setResponses(Array.from({ length: 200 }, () => respond));
@@ -247,6 +406,48 @@ export default function (pi: ExtensionAPI) {
 		execute: async (_id, params, signal, _update, ctx) => {
 			const choice = await ctx.ui.select(params.question, params.options, { signal });
 			return { content: [{ type: "text", text: choice ? `User chose: ${choice}` : "User dismissed the question" }], details: {} };
+		},
+	});
+
+	pi.registerTool({
+		name: "subagent",
+		label: "Subagent",
+		description: "Delegate a task to a child agent.",
+		parameters: Type.Object({
+			agent: Type.Optional(Type.String()),
+			task: Type.Optional(Type.String()),
+			workflow: Type.Optional(Type.Boolean()),
+			async: Type.Optional(Type.Boolean()),
+		}),
+		execute: async (_id, params, signal, update) => {
+			if (params.agent === RESEARCHER.agent) {
+				setTimeout(() => {
+					pi.sendMessage(
+						{
+							customType: "subagent-notify",
+							content: `Background task completed: **${RESEARCHER.agent}**\n\n${RESEARCHER.output}\n\nSession file: /tmp/faux-researcher.jsonl\n\nParent action: Report the result.`,
+							display: false,
+							details: { runs: [{ agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
+						},
+						{ triggerTurn: true },
+					);
+				}, BACKGROUND_MS);
+				return {
+					content: [{ type: "text", text: `Started ${RESEARCHER.agent} in the background.` }],
+					details: { mode: "single", asyncId: "faux-researcher", background: true, results: [] },
+				};
+			}
+			const children = params.workflow ? REVIEWERS : [SCOUT];
+			const mode = params.workflow ? "workflow" : "single";
+			const started = Date.now();
+			for (;;) {
+				if (signal?.aborted) throw new Error("Stopped");
+				const { finished, details } = fauxDetails(children, Date.now() - started, mode);
+				const text = details.results.map((result) => result.finalOutput).filter(Boolean).join("\n\n");
+				if (finished) return { content: [{ type: "text", text }], details };
+				update?.({ content: [{ type: "text", text: text || "(running...)" }], details });
+				await new Promise((resolve) => setTimeout(resolve, 250));
+			}
 		},
 	});
 }

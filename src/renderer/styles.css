@@ -1171,6 +1171,255 @@ body.resizing * {
 	white-space: pre;
 }
 
+/* Subagents: the agent's name is the one tinted thing, so delegated work stands out among the steps. */
+.agent-tag {
+	flex: none;
+	padding: 0 6px;
+	border-radius: 4px;
+	background: var(--soft);
+	color: var(--accent-text);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	line-height: 18px;
+}
+
+.agent-tag.quiet {
+	background: var(--line);
+	color: var(--ink-3);
+}
+
+/* The task is prose, so the target here leaves the monospace to the agent's name. */
+.step .subagent-target {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-family: inherit;
+}
+
+.step .subagent-target > .prose {
+	margin-left: 2px;
+}
+
+.subagent-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.subagent-child + .subagent-child {
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.subagent-child-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.subagent-label {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.subagent-child-time {
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-task {
+	margin: 0 0 12px;
+	font-size: 12.5px;
+	white-space: pre-wrap;
+}
+
+.subagent-steps {
+	list-style: none;
+	margin: 0 0 12px;
+	padding: 0 0 0 10px;
+	border-left: 1.5px solid var(--border);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	line-height: 1.75;
+	color: var(--ink-2);
+}
+
+.subagent-steps li {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+}
+
+.subagent-steps .tool {
+	flex: none;
+	width: 44px;
+	color: var(--ink-4);
+}
+
+.subagent-steps .more {
+	color: var(--ink-4);
+}
+
+.subagent-result {
+	margin-bottom: 12px;
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.subagent-result > :first-child {
+	margin-top: 0;
+}
+
+.subagent-result > :last-child,
+.subagent-child > :last-child {
+	margin-bottom: 0;
+}
+
+.subagent-detail .subagent-error {
+	color: var(--del);
+}
+
+.subagent-usage {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-note {
+	margin: 0;
+	font-size: 12px;
+	color: var(--ink-3);
+}
+
+/* The live line's second line: what the child is doing now. */
+.subagent-now {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+	padding-left: 14px;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+}
+
+.subagent-now-count {
+	flex: none;
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-bg {
+	color: var(--ink-4);
+}
+
+.subagent-row {
+	display: grid;
+	grid-template-columns: auto auto minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 8px;
+	min-height: 22px;
+	padding-left: 14px;
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+/* One width for every row's label, so what each child is doing lines up. */
+.subagent-row .subagent-label {
+	width: 96px;
+}
+
+.subagent-activity {
+	color: var(--ink-2);
+}
+
+.subagent-activity.done {
+	color: var(--add);
+}
+
+.subagent-activity.error {
+	color: var(--del);
+}
+
+.subagent-row.finished .subagent-activity {
+	opacity: 0.85;
+}
+
+/* A background subagent's result, opening the run it started in place of a user message. */
+.subagent-notice {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--tray);
+	font-size: 12.5px;
+}
+
+.subagent-notice-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 6px 6px 6px 10px;
+}
+
+.subagent-notice-icon {
+	display: flex;
+	flex: none;
+	color: var(--ink-4);
+}
+
+.subagent-notice-status {
+	flex: none;
+	color: var(--ink-2);
+}
+
+.subagent-notice.problem .subagent-notice-status {
+	color: var(--del);
+}
+
+.subagent-notice-preview {
+	flex: 1;
+	color: var(--ink-4);
+}
+
+.subagent-notice-toggle {
+	flex: none;
+	margin-left: auto;
+	padding: 2px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.subagent-notice-toggle:hover {
+	background: var(--line);
+	color: var(--ink);
+}
+
+.subagent-notice-body {
+	padding: 4px 12px 12px 32px;
+	font-size: 13px;
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+.subagent-notice-body > :first-child {
+	margin-top: 0;
+}
+
+.subagent-notice-body > :last-child {
+	margin-bottom: 0;
+}
+
 /* Changes panel */
 
 .changes {

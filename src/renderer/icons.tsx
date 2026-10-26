@@ -211,6 +211,12 @@ export const BackIcon = (p: IconProps) => (
 		<path d="m15 18-6-6 6-6" />
 	</Svg>
 );
+export const ReturnIcon = (p: IconProps) => (
+	<Svg width={2} size={14} {...p}>
+		<path d="m9 14-4-4 4-4" />
+		<path d="M5 10h11a4 4 0 1 1 0 8h-1" />
+	</Svg>
+);
 export const SteerIcon = (p: IconProps) => (
 	<Svg width={2.2} size={13} {...p}>
 		<path d="M4 6h10a5 5 0 0 1 0 10H8" />

@@ -782,7 +782,8 @@ export class SessionHost {
 			...builtIns.map((entry) => entry.dir),
 			...appSettings.added.filter((path) => existsSync(path)),
 		];
-		if (process.env.TRIVIUM_DEV_FAUX) extensions.push(devFaux);
+		// First, so its scripted subagent tool wins over pi-subagents' own, which registers the same name.
+		if (process.env.TRIVIUM_DEV_FAUX) extensions.unshift(devFaux);
 		const disabled = new Set(appSettings.disabled);
 		const appendPrompt = profile.appendSystemPrompt;
 		return new DefaultResourceLoader({

@@ -5,6 +5,7 @@ import { useNow } from "../hooks.ts";
 import { Chevron } from "../icons.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
+import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
 
 /** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". A note is its own words. */
 const VERBS: Record<string, string> = {
@@ -23,6 +24,7 @@ const VERBS: Record<string, string> = {
  * step starts, so quick reads and edits do not flash by. Commands also show their latest line of output.
  */
 function LiveStep({ step, now }: { step: Step; now: number }) {
+	if (step.subagent) return <SubagentLive step={step} now={now} />;
 	const running = step.status === "running";
 	const prose = step.tool === "think" || step.tool === "note";
 	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
@@ -91,15 +93,21 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 									<summary className="step-summary" title={step.target}>
 										<span className="mark" aria-hidden="true" />
 										<span className="tool">{step.tool}</span>
-										<span className={`target ellipsis${step.tool === "think" || step.tool === "note" ? " prose" : ""}`}>
-											{step.target}
-										</span>
+										{step.subagent ? (
+											<SubagentTarget subagent={step.subagent} fallback={step.target} />
+										) : (
+											<span className={`target ellipsis${step.tool === "think" || step.tool === "note" ? " prose" : ""}`}>
+												{step.target}
+											</span>
+										)}
 										<span className="meta">{step.meta}</span>
 										<span className="time">{time}</span>
 										<span className="step-chevron"><Chevron open={false} /></span>
 									</summary>
 									<div className="step-detail">
-										{step.tool === "think" || step.tool === "note" ? (
+										{step.subagent ? (
+											<SubagentDetail subagent={step.subagent} />
+										) : step.tool === "think" || step.tool === "note" ? (
 											<Markdown text={step.content ?? step.target} />
 										) : (
 											<>

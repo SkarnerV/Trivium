@@ -3,6 +3,7 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
+import { describeSubagent, launchesSubagents, noticeOf, subagentOf } from "./subagents.ts";
 
 /**
  * Turns pi's message stream into runs: one user message, the steps the agent
@@ -37,6 +38,7 @@ interface RunState {
 	fromUser: boolean;
 	prompt: string;
 	attachments?: Run["attachments"];
+	notice?: Run["notice"];
 	segments: Segment[];
 	status: Run["status"];
 	startedAt?: number;
@@ -146,6 +148,7 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 	const { args, result } = tool;
 	const path = str(args.path) || str(args.file_path);
 	const running = tool.status === "running";
+	if (launchesSubagents(tool.name, args)) return describeSubagent(subagentOf(args, tool.details, tool.status), args, tool.status);
 	if (tool.status === "error") {
 		const target = path || str(args.command) || str(args.pattern) || firstLine(JSON.stringify(args), 80);
 		const code = /exit(?:ed with)? code (\d+)/i.exec(result ?? "")?.[1];
@@ -264,7 +267,7 @@ export class RunTracker {
 		const now = Date.now();
 		switch (event.type) {
 			case "message_start":
-				if (event.message.role === "user") {
+				if (event.message.role === "user" || noticeOf(event.message)) {
 					this.applyMessage(event.message, true);
 					return true;
 				}
@@ -299,8 +302,11 @@ export class RunTracker {
 			}
 			case "tool_execution_update": {
 				const tool = this.ensureTool(event.toolCallId, event.toolName, event.args);
-				const text = textOf((event.partialResult as { content?: unknown } | undefined)?.content);
+				const partial = event.partialResult as { content?: unknown; details?: unknown } | undefined;
+				const text = textOf(partial?.content);
 				tool.result = text;
+				// A subagent reports its children's progress here.
+				if (partial?.details !== undefined) tool.details = partial.details;
 				tool.tail = text.split("\n").slice(-8).join("\n");
 				return true;
 			}
@@ -342,7 +348,25 @@ export class RunTracker {
 	private applyMessage(message: AgentMessage, live: boolean): void {
 		const timestamp = timestampOf(message);
 		const current = this.runs.at(-1);
-		if (!live && current && timestamp && message.role !== "user") current.endedAt = timestamp;
+		// A background subagent's result starts a run of its own, as a user message would.
+		const notice = noticeOf(message);
+		if (!live && current && timestamp && message.role !== "user" && !notice) current.endedAt = timestamp;
+		if (notice) {
+			if (live && current?.status === "running") {
+				current.status = "done";
+				current.endedAt = Date.now();
+			}
+			this.runs.push({
+				id: `r${this.runs.length}`,
+				fromUser: false,
+				prompt: "",
+				notice,
+				segments: [],
+				status: live ? "running" : "done",
+				startedAt: live ? Date.now() : timestamp,
+			});
+			return;
+		}
 		if (message.role === "user") {
 			// A steering message arrives as a user message while the previous run is still going.
 			if (live && current?.status === "running") {
@@ -452,12 +476,14 @@ export class RunTracker {
 				output: tool.result,
 				images: tool.images,
 				tail: tool.tail,
+				subagent: launchesSubagents(tool.name, tool.args) ? subagentOf(tool.args, tool.details, status) : undefined,
 			});
 		});
 		return {
 			id: run.id,
 			prompt: run.prompt,
 			attachments: run.attachments,
+			notice: run.notice,
 			steps,
 			answer,
 			status: run.status,

@@ -11,6 +11,7 @@ import { Composer } from "./Composer.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
+import { SubagentNoticeLine } from "./Subagents.tsx";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
 function fileKind(name: string, kind: "image" | "file"): string {
@@ -194,6 +195,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 		<div className="run">
 			{Boolean(run.prompt.trim() || run.attachments?.length) && <UserMessage run={run} view={view} index={index} />}
 			<div className="agent">
+				{run.notice && <SubagentNoticeLine notice={run.notice} />}
 				<Steps run={run} live={live} />
 				{run.answer && (
 					<div className="answer">

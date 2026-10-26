@@ -5,7 +5,7 @@ import { AppIcon, FileIcon, ImageIcon, PlusIcon } from "../icons.tsx";
 import { setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
-import { panelFor } from "../panels.ts";
+import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -70,7 +70,7 @@ function useStickToBottom(dep: unknown) {
 export function SessionPane({ view }: { view: SessionView }) {
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
-	const changesHidden = useStore((s) => Boolean(s.changesHidden[view.path]));
+	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
 	const scroll = useStickToBottom(`${view.path}:${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
@@ -84,26 +84,22 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
-				{panelFor(app, view) && (
-					<button
-						type="button"
-						className="changes-toggle"
-						aria-pressed={!changesHidden}
-						title={changesHidden ? "Show panel" : "Hide panel"}
-						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: !changesHidden } }))}
-					>
-						{panelFor(app, view) === "changes" ? (
-							<>
-								<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>
-								<ChangeCount changes={view.changes} />
-							</>
-						) : panelFor(app, view) === "note" ? (
-							<span>Note</span>
-						) : (
-							<span>Review</span>
-						)}
-					</button>
-				)}
+				<button
+					type="button"
+					className="changes-toggle"
+					aria-pressed={open}
+					title={open ? "Hide panel" : "Show panel"}
+					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
+				>
+					{panelFor(app, view) === "changes" ? (
+						<>
+							<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>
+							<ChangeCount changes={view.changes} />
+						</>
+					) : (
+						<span>{{ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)]}</span>
+					)}
+				</button>
 			</header>
 			<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
 				<div className="thread">

@@ -38,7 +38,7 @@ export interface State {
 	/** Widths the user dragged the sidebar and the right panel to; unset means the default. */
 	sidebarWidth?: number;
 	panelWidth?: number;
-	/** Sessions whose Changes panel the user closed. */
+	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
 	overlay: "new" | "search" | null;
 	page: "main" | "settings";

@@ -5,8 +5,9 @@ import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
 import { dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
-import { panelFor } from "../panels.ts";
+import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
+import { EmptyPanel } from "./EmptyPanel.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./Overlays.tsx";
@@ -123,8 +124,9 @@ export function App() {
 	const overlay = useStore((s) => s.overlay);
 	const path = useStore((s) => s.selected[s.app]);
 	const view = useStore((s) => (path ? s.views[path] : undefined));
-	const changesHidden = useStore((s) => (path ? Boolean(s.changesHidden[path]) : false));
-	const panel = view && !changesHidden ? panelFor(app, view) : undefined;
+	const hidden = useStore((s) => (path ? s.changesHidden[path] : undefined));
+	const open = view ? panelOpen(app, view, hidden) : false;
+	const panel = view && open ? panelFor(app, view) : undefined;
 	const page = useStore((s) => s.page);
 	const section = useStore((s) => s.settingsSection);
 	useShortcuts();
@@ -168,6 +170,7 @@ export function App() {
 					{view && panel === "changes" && <ChangesPanel view={view} />}
 					{view && panel === "note" && <NotePanel view={view} />}
 					{view && panel === "review" && <ReviewPanel view={view} />}
+					{view && open && !panel && <EmptyPanel view={view} kind={panelKind(app)} />}
 				</div>
 			</div>
 			{overlay === "new" && <NewSessionDialog />}

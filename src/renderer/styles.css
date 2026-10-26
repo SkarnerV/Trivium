@@ -3727,3 +3727,85 @@ body.resizing * {
 		transform: translateX(-8px);
 	}
 }
+
+/* Right-click menu (ContextMenu.tsx) */
+
+.cm-menu {
+	position: fixed;
+	z-index: 80;
+	min-width: 200px;
+	display: flex;
+	flex-direction: column;
+	padding: 4px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 12px 32px rgba(19, 20, 43, 0.16);
+	outline: none;
+	animation: dd-in 0.12s ease-out;
+}
+
+.cm-item {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-height: 32px;
+	padding: 0 10px 0 8px;
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--ink);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.cm-item.active {
+	background: var(--soft);
+}
+
+.cm-item:disabled {
+	color: var(--ink-4);
+}
+
+.cm-item.danger {
+	color: var(--del);
+}
+
+.cm-item.danger.active {
+	background: #fdeeee;
+}
+
+.cm-icon {
+	width: 16px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	color: var(--ink-3);
+}
+
+.cm-item.danger .cm-icon {
+	color: inherit;
+}
+
+.cm-label {
+	flex: 1;
+	white-space: nowrap;
+}
+
+.cm-hint {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.cm-sep {
+	height: 1px;
+	margin: 4px 6px;
+	background: var(--edge);
+}
+
+/* The row a menu belongs to stays marked while the menu is open. */
+.session-item.menu-open .session-row:not([aria-current="page"]) {
+	background: var(--tab);
+}

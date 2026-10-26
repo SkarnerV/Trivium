@@ -1,10 +1,10 @@
 import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { writeFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
-import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
@@ -12,6 +12,7 @@ import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { writePermissionLevel } from "./builtin-packages.ts";
+import { exportFileName, sessionMarkdown } from "./export.ts";
 import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
@@ -189,6 +190,23 @@ function registerIpc(): void {
 		return host.describeApp(id);
 	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
+	handle("trivium:exportSession", async (path: string) => {
+		const info = host.exportInfo(path);
+		const result = await dialog.showSaveDialog(window!, {
+			title: "Export session",
+			defaultPath: join(app.getPath("downloads"), `${exportFileName(info.title)}.md`),
+			filters: [
+				{ name: "Markdown", extensions: ["md"] },
+				{ name: "pi session file", extensions: ["jsonl"] },
+			],
+		});
+		if (result.canceled || !result.filePath) return undefined;
+		// The session file itself, which pi can open again, or a readable copy of the conversation.
+		if (/\.jsonl$/i.test(result.filePath)) await copyFile(path, result.filePath);
+		else await writeFile(result.filePath, sessionMarkdown(info));
+		return result.filePath;
+	});
+	handle("trivium:copyText", (text: string) => clipboard.writeText(text));
 	handle("trivium:deleteSessions", (paths: string[]) => host.deleteSessions(paths, (path) => shell.trashItem(path)));
 	handle("trivium:providers", () => listProviders(host.runtime));
 	handle("trivium:login", (providerId: string, type: "api_key" | "oauth") => {

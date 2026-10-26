@@ -377,6 +377,9 @@ export interface TriviumApi {
 	/** Writes a permission level to pi-permission-system's config, then describes this app again. */
 	setPermissionLevel(app: AppId, level: string): Promise<AppDetails>;
 	reloadApp(app: AppId): Promise<string[]>;
+	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */
+	exportSession(path: string): Promise<string | undefined>;
+	copyText(text: string): Promise<void>;
 	providers(): Promise<ProviderInfo[]>;
 	login(providerId: string, type: "api_key" | "oauth"): Promise<void>;
 	answerLogin(id: string, value: string | undefined): Promise<void>;

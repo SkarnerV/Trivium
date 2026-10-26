@@ -46,6 +46,7 @@ import { profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
+import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
 import { RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
@@ -446,6 +447,13 @@ export class SessionHost {
 		const changes = await live.changes.list();
 		this.emit({ type: "changes", path: live.path, changes });
 		return changes;
+	}
+
+	/** The conversation on a session's current branch, read from its file, for export. */
+	exportInfo(path: string): ExportInfo {
+		const manager = SessionManager.open(path);
+		const title = this.summaries.find((summary) => summary.path === path)?.title ?? manager.getSessionName() ?? "Session";
+		return { title, id: manager.getSessionId(), cwd: manager.getCwd(), messages: manager.buildSessionContext().messages };
 	}
 
 	/**

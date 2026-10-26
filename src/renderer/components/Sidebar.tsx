@@ -1,11 +1,25 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
-import { askConfirm, deleteSessions, getState, notify, openSession, openSettings, setState, startSession, switchApp, useStore } from "../store.ts";
+import {
+	askConfirm,
+	attempt,
+	deleteSessions,
+	getState,
+	notify,
+	openSession,
+	openSettings,
+	setState,
+	startSession,
+	switchApp,
+	trivium,
+	useStore,
+} from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
 import { Resizer } from "./Resizer.tsx";
 
 const IS_MAC = navigator.userAgent.includes("Mac");
@@ -54,15 +68,54 @@ function confirmDelete(sessions: SessionSummary[], what: string, title?: string)
 	});
 }
 
+async function exportSession(session: SessionSummary): Promise<void> {
+	const saved = await attempt(() => trivium.exportSession(session.path));
+	if (saved) notify(`Exported to ${saved}`, "info");
+}
+
+async function copySessionId(session: SessionSummary): Promise<void> {
+	const copied = await attempt(async () => {
+		await trivium.copyText(session.id);
+		return true;
+	});
+	if (copied) notify("Session ID copied", "info");
+}
+
+function sessionMenu(session: SessionSummary): MenuEntry[] {
+	return [
+		{ label: "Export messages…", icon: <DownloadIcon size={14} />, onSelect: () => void exportSession(session) },
+		{ label: "Copy session ID", icon: <CopyIcon size={14} />, hint: session.id.slice(0, 8), onSelect: () => void copySessionId(session) },
+		"separator",
+		{
+			label: "Delete session",
+			icon: <TrashIcon size={14} />,
+			danger: true,
+			disabled: session.running,
+			title: session.running ? "Stop the session before deleting it" : undefined,
+			onSelect: () => confirmDelete([session], `"${session.title}"`),
+		},
+	];
+}
+
 function SessionRow({ session, active, startedAt }: { session: SessionSummary; active: boolean; startedAt?: number }) {
 	const now = useNow(session.running ? 1000 : 60_000);
+	const [menu, setMenu] = useState<{ x: number; y: number }>();
+	const closeMenu = useCallback(() => setMenu(undefined), []);
 	return (
-		<div className={`session-item${session.running ? " running" : ""}`}>
+		<div className={`session-item${session.running ? " running" : ""}${menu ? " menu-open" : ""}`}>
 			<button
 				type="button"
 				className="session-row"
 				aria-current={active ? "page" : undefined}
+				aria-haspopup="menu"
 				onClick={() => void openSession(session.path)}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					// The keyboard's menu key reports no pointer position; open under the row instead.
+					const rect = event.currentTarget.getBoundingClientRect();
+					const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+					setMenu(fromKeyboard ? { x: rect.left + 12, y: rect.bottom } : { x: event.clientX, y: event.clientY });
+				}}
 				title={session.title}
 			>
 				<span className="title ellipsis">{session.title}</span>
@@ -89,6 +142,7 @@ function SessionRow({ session, active, startedAt }: { session: SessionSummary; a
 					<TrashIcon />
 				</button>
 			)}
+			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session)} onClose={closeMenu} />}
 		</div>
 	);
 }

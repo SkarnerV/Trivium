@@ -54,6 +54,8 @@ const api: TriviumApi = {
 	appDetails: call("appDetails") as TriviumApi["appDetails"],
 	addExtension: call("addExtension") as TriviumApi["addExtension"],
 	installPackage: call("installPackage") as TriviumApi["installPackage"],
+	exportSession: call("exportSession") as TriviumApi["exportSession"],
+	copyText: call("copyText") as TriviumApi["copyText"],
 	setPermissionLevel: call("setPermissionLevel") as TriviumApi["setPermissionLevel"],
 	reloadApp: call("reloadApp") as TriviumApi["reloadApp"],
 	providers: call("providers") as TriviumApi["providers"],

@@ -33,6 +33,7 @@ import { CustomProviderDialog } from "./CustomProviderDialog.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
+import { PresetModelsDialog } from "./PresetModelsDialog.tsx";
 
 /* Building blocks */
 
@@ -209,10 +210,13 @@ function ProviderRow({
 	provider,
 	onLogin,
 	onLogout,
+	onModels,
 }: {
 	provider: ProviderInfo;
 	onLogin: (type: "api_key" | "oauth") => void;
 	onLogout: () => void;
+	/** Opens its models, offered once it is connected. */
+	onModels: () => void;
 }) {
 	return (
 		<div className="s-row s-provider">
@@ -228,6 +232,11 @@ function ProviderRow({
 				)}
 			</div>
 			<div className="s-row-control">
+				{provider.configured && provider.preset && (
+					<button type="button" className="s-btn" onClick={onModels}>
+						Models
+					</button>
+				)}
 				{provider.logins.map((option) => (
 					<button
 						key={option.type}
@@ -294,6 +303,8 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 	const [custom, setCustom] = useState<CustomProvider[]>([]);
 	/** The endpoint being edited: a provider, or null for a new one. */
 	const [editing, setEditing] = useState<CustomProvider | null>();
+	/** The built-in provider whose models are open. */
+	const [presetId, setPresetId] = useState<string>();
 	const loadCustom = useCallback(() => {
 		void attempt(() => trivium.customProviders()).then((list) => list && setCustom(list));
 	}, []);
@@ -333,6 +344,7 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 			provider={provider}
 			onLogin={(type) => startLogin(provider, type)}
 			onLogout={() => void logout(provider)}
+			onModels={() => setPresetId(provider.id)}
 		/>
 	);
 	return (
@@ -403,6 +415,16 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 				{visible.length ? visible.map(row) : <div className="s-empty">No provider matches “{query}”.</div>}
 			</Group>
 			{login && <LoginDialog />}
+			{presetId && (
+				<PresetModelsDialog
+					providerId={presetId}
+					onClose={() => setPresetId(undefined)}
+					onSaved={() => {
+						reload();
+						void refreshModels();
+					}}
+				/>
+			)}
 			{editing !== undefined && (
 				<CustomProviderDialog
 					provider={editing ?? undefined}

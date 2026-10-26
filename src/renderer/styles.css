@@ -2754,9 +2754,25 @@ body.resizing * {
 	gap: 16px;
 }
 
-.cm-remove-model {
+.cm-remove-model,
+.cm-reset-model,
+.cm-reset-note {
 	margin-left: auto;
+}
+
+.cm-remove-model {
 	color: var(--del);
+}
+
+.cm-reset-note {
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+/* A catalog model, always offered. */
+.cm-check:disabled {
+	opacity: 0.45;
+	cursor: default;
 }
 
 .cm-check {

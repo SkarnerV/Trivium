@@ -25,8 +25,11 @@ function describeSource(status: ReturnType<ModelRuntime["getProviderAuthStatus"]
 	}
 }
 
-/** `custom` holds the providers the user added in models.json, which are edited rather than logged in to. */
-export function listProviders(runtime: ModelRuntime, custom: Set<string> = new Set()): ProviderInfo[] {
+/**
+ * `custom` holds the providers the user added in models.json, which are edited rather than logged in to;
+ * `isPreset` tells which come from pi's own catalog.
+ */
+export function listProviders(runtime: ModelRuntime, custom: Set<string> = new Set(), isPreset: (id: string) => boolean = () => false): ProviderInfo[] {
 	const providers = runtime.getProviders().map((provider) => {
 		const auth = provider.auth as AuthLike;
 		const status = runtime.getProviderAuthStatus(provider.id);
@@ -43,6 +46,7 @@ export function listProviders(runtime: ModelRuntime, custom: Set<string> = new S
 			canLogout: status.configured && status.source === "stored",
 			models: runtime.getAllModels(provider.id).length,
 			custom: custom.has(provider.id) || undefined,
+			preset: isPreset(provider.id) || undefined,
 		};
 	});
 	return providers.sort((a, b) => Number(b.configured) - Number(a.configured) || a.name.localeCompare(b.name));

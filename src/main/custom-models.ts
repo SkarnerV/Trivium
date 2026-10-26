@@ -3,8 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import type { Api, Model, Provider } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
-import type { CustomApi, CustomModel, CustomProvider } from "../shared/protocol.ts";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { CustomApi, CustomModel, CustomProvider, PresetProvider, PresetProviderChanges } from "../shared/protocol.ts";
 
 type Json = Record<string, unknown>;
 
@@ -30,8 +32,9 @@ const num = (...values: unknown[]): number | undefined =>
 	values.find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
 const format = (config: unknown) => `${JSON.stringify(config, null, "\t")}\n`;
 
-let builtIn: Set<string> | undefined;
-const isBuiltIn = (id: string) => (builtIn ??= new Set(builtinProviders().map((provider) => provider.id))).has(id);
+let catalog: Map<string, Provider> | undefined;
+const catalogProvider = (id: string) => (catalog ??= new Map(builtinProviders().map((provider) => [provider.id, provider]))).get(id);
+export const isBuiltIn = (id: string) => catalogProvider(id) !== undefined;
 
 function readConfig(path: string): Json {
 	if (!existsSync(path)) return {};
@@ -40,6 +43,24 @@ function readConfig(path: string): Json {
 	} catch {
 		throw new Error(`${path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.`);
 	}
+}
+
+/** A models.json `models` list as written, leaving out what pi fills in. */
+function readModels(models: unknown): CustomModel[] {
+	return (Array.isArray(models) ? models : []).map(obj).flatMap((model): CustomModel[] => {
+		const id = str(model.id);
+		if (!id) return [];
+		return [
+			{
+				id,
+				name: str(model.name),
+				contextWindow: num(model.contextWindow),
+				maxTokens: num(model.maxTokens),
+				images: strings(model.input)?.includes("image") ?? false,
+				reasoning: model.reasoning === true,
+			},
+		];
+	});
 }
 
 /** The endpoints in models.json that Trivium can edit: added providers on one of the APIs it offers. */
@@ -54,20 +75,7 @@ export function readCustomProviders(agentDir: string): CustomProvider[] {
 		const entry = obj(value);
 		const api = entry.api as CustomApi;
 		if (isBuiltIn(id) || !str(entry.baseUrl) || !CUSTOM_APIS.includes(api)) return [];
-		const models = (Array.isArray(entry.models) ? entry.models : []).map(obj).flatMap((model): CustomModel[] => {
-			const modelId = str(model.id);
-			if (!modelId) return [];
-			return [
-				{
-					id: modelId,
-					name: str(model.name),
-					contextWindow: num(model.contextWindow),
-					maxTokens: num(model.maxTokens),
-					images: strings(model.input)?.includes("image") ?? false,
-					reasoning: model.reasoning === true,
-				},
-			];
-		});
+		const models = readModels(entry.models);
 		const apiKey = typeof entry.apiKey === "string" && entry.apiKey !== NO_KEY ? entry.apiKey : "";
 		return [{ id, name: str(entry.name) ?? id, baseUrl: entry.baseUrl as string, api, apiKey, models }];
 	});
@@ -77,15 +85,23 @@ function validate(provider: CustomProvider): void {
 	if (!/^[a-z0-9][a-z0-9._-]*$/i.test(provider.id)) throw new Error("The ID can use letters, digits, dots, dashes and underscores.");
 	if (isBuiltIn(provider.id)) throw new Error(`“${provider.id}” is one of pi's own providers. Choose another ID.`);
 	if (!CUSTOM_APIS.includes(provider.api)) throw new Error(`Unknown API: ${provider.api}`);
+	validateUrl(provider.baseUrl);
+	validateModels(provider.models);
+}
+
+function validateUrl(baseUrl: string): void {
 	let url: URL;
 	try {
-		url = new URL(provider.baseUrl);
+		url = new URL(baseUrl);
 	} catch {
 		throw new Error("The base URL isn't a valid URL.");
 	}
 	if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("The base URL must start with http:// or https://.");
+}
+
+function validateModels(models: CustomModel[]): void {
 	const seen = new Set<string>();
-	for (const model of provider.models) {
+	for (const model of models) {
 		if (!model.id.trim()) throw new Error("Every model needs an ID.");
 		if (seen.has(model.id)) throw new Error(`${model.id} is listed twice.`);
 		seen.add(model.id);
@@ -105,6 +121,8 @@ function modelEntry(model: CustomModel, previous: Json): Json {
 	};
 }
 
+const modelsById = (models: unknown) => new Map((Array.isArray(models) ? models : []).map(obj).map((model) => [model.id, model] as const));
+
 async function writeConfig(path: string, config: Json): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
 	await writeFile(`${path}.tmp`, format(config));
@@ -123,9 +141,7 @@ export async function saveCustomProvider(agentDir: string, provider: CustomProvi
 	if (provider.id !== previousId && provider.id in providers) throw new Error(`models.json already has a provider called “${provider.id}”.`);
 	const previous = obj(providers[previousId ?? provider.id]);
 	if (previousId) delete providers[previousId];
-	const previousModels = new Map(
-		(Array.isArray(previous.models) ? previous.models : []).map(obj).map((model) => [model.id, model] as const),
-	);
+	const previousModels = modelsById(previous.models);
 	providers[provider.id] = {
 		...previous,
 		name: provider.name.trim() || provider.id,
@@ -143,6 +159,118 @@ export async function removeCustomProvider(agentDir: string, id: string): Promis
 	const providers = { ...obj(config.providers) };
 	if (!(id in providers)) return;
 	delete providers[id];
+	await writeConfig(path, { ...config, providers });
+}
+
+/** The model details Trivium edits, as models.json names them. */
+const EDITED_KEYS = ["name", "contextWindow", "maxTokens", "input", "reasoning"];
+
+const describeModel = (model: Model<Api>): CustomModel => ({
+	id: model.id,
+	name: model.name !== model.id ? model.name : undefined,
+	contextWindow: model.contextWindow,
+	maxTokens: model.maxTokens,
+	images: model.input.includes("image"),
+	reasoning: model.reasoning,
+});
+
+/** The API most of the provider's models speak, which models added to it speak too. */
+function mainApi(models: readonly Model<Api>[]): string | undefined {
+	const counts = new Map<string, number>();
+	for (const model of models) counts.set(model.api, (counts.get(model.api) ?? 0) + 1);
+	return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+/** A built-in provider's models as pi offers them now, split into its catalog's and those models.json adds. */
+export function readPresetProvider(agentDir: string, runtime: ModelRuntime, id: string): PresetProvider & { mainApi?: string } {
+	const base = catalogProvider(id);
+	const provider = runtime.getProvider(id);
+	if (!base || !provider) throw new Error(`${id} isn't one of pi's own providers.`);
+	const entry = obj(obj(readConfig(modelsPath(agentDir)).providers)[id]);
+	const added = modelsById(entry.models);
+	const overrides = obj(entry.modelOverrides);
+	const models = runtime.getModels(id);
+	const builtIn = models.filter((model) => !added.has(model.id));
+	const api = mainApi(builtIn);
+	return {
+		id,
+		name: provider.name,
+		defaultBaseUrl: base.baseUrl ?? base.getModels()[0]?.baseUrl ?? "",
+		baseUrl: str(entry.baseUrl) ?? "",
+		api: CUSTOM_APIS.includes(api as CustomApi) ? (api as CustomApi) : undefined,
+		mainApi: api,
+		builtIn: builtIn.map((model) => ({
+			...describeModel(model),
+			edited: EDITED_KEYS.some((key) => key in obj(overrides[model.id])),
+		})),
+		added: readModels(entry.models),
+	};
+}
+
+/** Asks a built-in provider which models it serves, with the credentials pi resolves for it. */
+export async function fetchPresetModels(agentDir: string, runtime: ModelRuntime, id: string, baseUrl: string): Promise<CustomModel[]> {
+	const preset = readPresetProvider(agentDir, runtime, id);
+	if (!preset.api) throw new Error(`Trivium can't ask ${preset.name} for its models. Add them by ID instead.`);
+	const result = await runtime.getAuth(id);
+	if (!result) throw new Error(`Log in to ${preset.name} first.`);
+	const headers = Object.fromEntries(
+		Object.entries(result.auth.headers ?? {}).filter((header): header is [string, string] => header[1] !== null),
+	);
+	return fetchModels(
+		{ baseUrl: baseUrl.trim() || result.auth.baseUrl || preset.defaultBaseUrl, api: preset.api, apiKey: "" },
+		{ key: result.auth.apiKey ?? "", headers },
+	);
+}
+
+/**
+ * Writes a built-in provider's base URL, model changes and added models to models.json. Catalog models change
+ * through modelOverrides, field by field, so pi's later catalog updates still reach the rest of each model.
+ */
+export async function savePresetProvider(agentDir: string, runtime: ModelRuntime, id: string, changes: PresetProviderChanges): Promise<void> {
+	const preset = readPresetProvider(agentDir, runtime, id);
+	const baseUrl = changes.baseUrl.trim().replace(/\/+$/, "");
+	if (baseUrl) validateUrl(baseUrl);
+	validateModels(changes.added);
+	const catalogIds = new Set(preset.builtIn.map((model) => model.id));
+	const taken = changes.added.find((model) => catalogIds.has(model.id));
+	if (taken) throw new Error(`${taken.id} is one of ${preset.name}'s own models already.`);
+
+	const path = modelsPath(agentDir);
+	const config = readConfig(path);
+	const providers = { ...obj(config.providers) };
+	const previous = obj(providers[id]);
+	const previousModels = modelsById(previous.models);
+	const overrides = { ...obj(previous.modelOverrides) };
+	for (const edit of changes.edits) {
+		if (!catalogIds.has(edit.id)) continue;
+		const override = { ...obj(overrides[edit.id]) };
+		if (edit.reset) for (const key of EDITED_KEYS) delete override[key];
+		const set = (key: string, value: unknown) => {
+			if (value === undefined) delete override[key];
+			else override[key] = value;
+		};
+		const { name, contextWindow, maxTokens, images, reasoning } = edit.fields;
+		if (name !== undefined) set("name", name?.trim() || undefined);
+		if (contextWindow !== undefined) set("contextWindow", num(contextWindow));
+		if (maxTokens !== undefined) set("maxTokens", num(maxTokens));
+		if (images !== undefined) set("input", images === null ? undefined : images ? ["text", "image"] : ["text"]);
+		if (reasoning !== undefined) set("reasoning", reasoning ?? undefined);
+		if (Object.keys(override).length) overrides[edit.id] = override;
+		else delete overrides[edit.id];
+	}
+	const entry = Object.fromEntries(
+		Object.entries({
+			...previous,
+			baseUrl: baseUrl || undefined,
+			models: changes.added.length
+				? changes.added.map((model) => modelEntry(model, { api: preset.mainApi, ...obj(previousModels.get(model.id)) }))
+				: undefined,
+			modelOverrides: Object.keys(overrides).length ? overrides : undefined,
+		}).filter(([, value]) => value !== undefined),
+	);
+	// pi rejects an entry for a built-in provider that changes nothing.
+	if (Object.keys(entry).length) providers[id] = entry;
+	else delete providers[id];
 	await writeConfig(path, { ...config, providers });
 }
 
@@ -278,15 +406,23 @@ async function describeLocal(baseUrl: string, models: CustomModel[], headers: Re
 	return [...described, ...models.slice(DETAIL_LIMIT)];
 }
 
-/** Asks an endpoint which models it serves. */
-export async function fetchModels(endpoint: Pick<CustomProvider, "baseUrl" | "api" | "apiKey">): Promise<CustomModel[]> {
+/**
+ * Asks an endpoint which models it serves. `auth` holds a hosted provider's resolved key and headers, used
+ * in place of the endpoint's own key.
+ */
+export async function fetchModels(
+	endpoint: Pick<CustomProvider, "baseUrl" | "api" | "apiKey">,
+	auth?: { key: string; headers: Record<string, string> },
+): Promise<CustomModel[]> {
 	try {
 		new URL(endpoint.baseUrl);
 	} catch {
 		throw new Error("Enter the endpoint's base URL first.");
 	}
-	const key = await resolveKey(endpoint.apiKey);
-	const { url, headers } = listRequest(endpoint.api, endpoint.baseUrl, key);
+	const key = auth ? auth.key : await resolveKey(endpoint.apiKey);
+	const request = listRequest(endpoint.api, endpoint.baseUrl, key);
+	const { url } = request;
+	const headers = { ...auth?.headers, ...request.headers };
 	let body: unknown;
 	try {
 		body = await getJson(url, { headers });
@@ -296,7 +432,8 @@ export async function fetchModels(endpoint: Pick<CustomProvider, "baseUrl" | "ap
 	}
 	const models = parseListing(endpoint.api, body);
 	if (!models.length) throw new Error(`${url} answered, but listed no models.`);
-	return endpoint.api === "openai-completions" || endpoint.api === "openai-responses"
+	// Only a local server has the APIs beside /v1 that describe its models.
+	return !auth && (endpoint.api === "openai-completions" || endpoint.api === "openai-responses")
 		? describeLocal(endpoint.baseUrl, models, headers)
 		: models;
 }

@@ -276,6 +276,8 @@ export interface ProviderInfo {
 	models: number;
 	/** An endpoint the user added in models.json, edited as a custom provider rather than logged in to. */
 	custom?: boolean;
+	/** In pi's own catalog, so its models can be changed through models.json. */
+	preset?: boolean;
 }
 
 /** The APIs a custom provider can speak, as pi names them. */
@@ -303,6 +305,42 @@ export interface CustomProvider {
 	/** A key, $NAME for an environment variable or !command for a command's output. Empty when the endpoint needs none. */
 	apiKey: string;
 	models: CustomModel[];
+}
+
+/** A model from a built-in provider's catalog, as pi offers it now. */
+export interface PresetModel extends CustomModel {
+	/** models.json changes some of what Trivium shows of it. */
+	edited: boolean;
+}
+
+/** The details of a catalog model Trivium can change through models.json. */
+export type PresetModelField = "name" | "contextWindow" | "maxTokens" | "images" | "reasoning";
+
+/** A built-in provider's models, which models.json can change and add to like a custom endpoint's. */
+export interface PresetProvider {
+	id: string;
+	name: string;
+	/** The base URL pi's catalog gives. */
+	defaultBaseUrl: string;
+	/** The base URL models.json puts in its place; empty when it keeps the catalog's. */
+	baseUrl: string;
+	/** The API its models speak, when Trivium can ask it for a model list. */
+	api?: CustomApi;
+	/** Catalog models, which can be changed but not removed. */
+	builtIn: PresetModel[];
+	/** Models added in models.json. */
+	added: CustomModel[];
+}
+
+export interface PresetProviderChanges {
+	/** Empty to use the catalog's. */
+	baseUrl: string;
+	/**
+	 * Catalog models the user changed: the fields that changed, null to drop that change, and `reset` to drop
+	 * every change Trivium makes before applying them.
+	 */
+	edits: { id: string; reset?: boolean; fields: { [K in PresetModelField]?: CustomModel[K] | null } }[];
+	added: CustomModel[];
 }
 
 export interface AppInfo {
@@ -421,6 +459,10 @@ export interface TriviumApi {
 	/** Writes a custom provider to models.json, replacing `previousId` when it was renamed. Resolves with them all. */
 	saveCustomProvider(provider: CustomProvider, previousId?: string): Promise<CustomProvider[]>;
 	removeCustomProvider(id: string): Promise<CustomProvider[]>;
+	presetProvider(id: string): Promise<PresetProvider>;
+	/** Asks a built-in provider which models it serves, with the credentials pi has for it. */
+	fetchPresetModels(id: string, baseUrl: string): Promise<CustomModel[]>;
+	savePresetProvider(id: string, changes: PresetProviderChanges): Promise<void>;
 	setDefaultModel(modelKey: string, thinkingLevel: string): Promise<void>;
 	appInfo(): Promise<AppInfo>;
 	openPath(path: string): Promise<void>;

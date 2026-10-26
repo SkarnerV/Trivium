@@ -45,7 +45,7 @@ import { profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
-import { RunTracker, type Thumbnail } from "./transcript.ts";
+import { RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
 	path: string;
@@ -111,8 +111,12 @@ function registers(extension: Extension): string[] {
 	];
 }
 
+/** The first line the user typed, without the <file> tags of attachments; their names when that is all there is. */
 function titleOf(text: string | undefined): string {
-	const line = (text ?? "").trim().split("\n")[0] ?? "";
+	const { prompt, attachments } = splitAttachments(text ?? "");
+	// A stored first message can be cut short inside a text file's tag; its name still makes a title.
+	const cut = /^<file name="([^"]*)">/.exec(prompt.trimStart())?.[1]?.split(/[\\/]/).pop();
+	const line = cut ?? (prompt.trim().split("\n")[0] || attachments?.map((file) => file.name).join(", ") || "");
 	return line.length > 80 ? `${line.slice(0, 79)}…` : line || "New session";
 }
 

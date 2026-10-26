@@ -65,7 +65,7 @@ function imagesOf(content: unknown): { data: string; mimeType: string }[] {
  * Text files have their content on the following lines; images have an empty tag or a short note,
  * and their image parts follow in the same order.
  */
-function splitAttachments(content: unknown, thumbnail?: Thumbnail): { prompt: string; attachments?: Run["attachments"] } {
+export function splitAttachments(content: unknown, thumbnail?: Thumbnail): { prompt: string; attachments?: Run["attachments"] } {
 	const text = textOf(content);
 	const images = imagesOf(content);
 	const attachments: NonNullable<Run["attachments"]> = [];

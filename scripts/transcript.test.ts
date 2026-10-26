@@ -87,3 +87,27 @@ test("live expanded output updates independently of the short terminal tail", ()
 	assert.equal(step.tail, undefined);
 	assert.equal(step.status, "done");
 });
+
+test("sent images get previews in order and text files do not", () => {
+	const seen: string[] = [];
+	const tracker = new RunTracker([{
+		role: "user",
+		content: [
+			{ type: "text", text: '<file name="shots/a.png"></file>\n<file name="notes.md">\n# Notes\n</file>\n<file name="b.jpg"></file>\nWhat changed?' },
+			{ type: "image", data: "AAA", mimeType: "image/png" },
+			{ type: "image", data: "BBB", mimeType: "image/jpeg" },
+		],
+		timestamp: 1000,
+	}] as unknown as Messages, (data, mimeType) => {
+		seen.push(`${data} ${mimeType}`);
+		return `thumb:${data}`;
+	});
+	const [run] = tracker.all();
+	assert.equal(run!.prompt, "What changed?");
+	assert.deepEqual(run!.attachments, [
+		{ name: "a.png", kind: "image", thumb: "thumb:AAA" },
+		{ name: "notes.md", kind: "file" },
+		{ name: "b.jpg", kind: "image", thumb: "thumb:BBB" },
+	]);
+	assert.deepEqual(seen, ["AAA image/png", "BBB image/jpeg"]);
+});

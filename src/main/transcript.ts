@@ -50,16 +50,35 @@ function textOf(content: unknown): string {
 		.join("");
 }
 
+/** Makes a small preview of an image sent with a prompt. The host supplies it, since resizing needs Electron. */
+export type Thumbnail = (data: string, mimeType: string) => string | undefined;
+
+function imagesOf(content: unknown): { data: string; mimeType: string }[] {
+	if (!Array.isArray(content)) return [];
+	return content.filter(
+		(part): part is { type: "image"; data: string; mimeType: string } => part?.type === "image" && typeof part.data === "string",
+	);
+}
+
 /**
  * Splits the <file> tags pi's CLI and Trivium put in front of a prompt from the text the user typed.
- * Text files have their content on the following lines; images have an empty tag or a short note.
+ * Text files have their content on the following lines; images have an empty tag or a short note,
+ * and their image parts follow in the same order.
  */
-function splitAttachments(text: string): { prompt: string; attachments?: Run["attachments"] } {
+function splitAttachments(content: unknown, thumbnail?: Thumbnail): { prompt: string; attachments?: Run["attachments"] } {
+	const text = textOf(content);
+	const images = imagesOf(content);
 	const attachments: NonNullable<Run["attachments"]> = [];
 	let rest = text;
 	for (let match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest); match; match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest)) {
 		const name = match[1]!.split(/[\\/]/).pop() || match[1]!;
-		attachments.push({ name, kind: match[2]!.startsWith("\n") ? "file" : "image" });
+		if (match[2]!.startsWith("\n")) {
+			attachments.push({ name, kind: "file" });
+		} else {
+			const image = images.shift();
+			const thumb = image && thumbnail ? thumbnail(image.data, image.mimeType) : undefined;
+			attachments.push(thumb ? { name, kind: "image", thumb } : { name, kind: "image" });
+		}
 		rest = rest.slice(match[0].length);
 	}
 	return attachments.length ? { prompt: rest, attachments } : { prompt: text };
@@ -140,8 +159,10 @@ export class RunTracker {
 	private tools = new Map<string, ToolState>();
 	private messageSeq = 0;
 	private currentAssistantKey: string | undefined;
+	private readonly thumbnail: Thumbnail | undefined;
 
-	constructor(messages: AgentMessage[]) {
+	constructor(messages: AgentMessage[], thumbnail?: Thumbnail) {
+		this.thumbnail = thumbnail;
 		for (const message of messages) this.applyMessage(message, false);
 	}
 
@@ -246,7 +267,7 @@ export class RunTracker {
 			}
 			this.runs.push({
 				id: `r${this.runs.length}`,
-				...splitAttachments(textOf(message.content)),
+				...splitAttachments(message.content, this.thumbnail),
 				segments: [],
 				status: live ? "running" : "done",
 				startedAt: live ? Date.now() : timestamp,

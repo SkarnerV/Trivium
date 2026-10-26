@@ -11,17 +11,31 @@ import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
 
+/** "PDF", "TS file" or "Image": the extension says more than the word "file". */
+function fileKind(name: string, kind: "image" | "file"): string {
+	if (kind === "image") return "Image";
+	const extension = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1];
+	return extension ? `${extension.toUpperCase()} file` : "File";
+}
+
 function RunBlock({ run, live }: { run: Run; live: boolean }) {
 	return (
 		<div className="run">
 			{run.attachments?.length ? (
 				<div className="bubble-files">
-					{run.attachments.map((file, index) => (
-						<span key={index} className="bubble-file">
-							{file.kind === "image" ? <ImageIcon size={13} /> : <FileIcon size={13} />}
-							{file.name}
-						</span>
-					))}
+					{run.attachments.map((file, index) =>
+						file.thumb ? (
+							<img key={index} className="bubble-thumb" src={file.thumb} alt={file.name} title={file.name} />
+						) : (
+							<span key={index} className="bubble-file" title={file.name}>
+								<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>
+								<span className="bubble-file-text">
+									<span className="ellipsis">{file.name}</span>
+									<span className="bubble-file-kind">{fileKind(file.name, file.kind)}</span>
+								</span>
+							</span>
+						),
+					)}
 				</div>
 			) : null}
 			{run.prompt.trim() && <div className="bubble">{run.prompt.trim()}</div>}

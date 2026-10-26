@@ -3118,30 +3118,64 @@ button:disabled {
 	font-size: 12px;
 }
 
+/* Sent attachments sit right above the message they came with. */
 .bubble-files {
 	align-self: flex-end;
 	display: flex;
 	flex-wrap: wrap;
+	align-items: flex-end;
 	justify-content: flex-end;
-	gap: 6px;
+	gap: 8px;
 	max-width: 80%;
 	margin-bottom: -14px;
 }
 
-.bubble-file {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 10px;
-	border-radius: 999px;
+.bubble-thumb {
+	display: block;
+	max-width: 160px;
+	max-height: 120px;
+	min-width: 48px;
+	min-height: 48px;
+	object-fit: cover;
+	border-radius: 12px;
 	background: var(--tray);
-	box-shadow: inset 0 0 0 1px var(--line);
-	color: var(--ink-2);
-	font-size: 12px;
+	box-shadow: 0 0 0 1px var(--line);
 }
 
-.bubble-file svg {
-	color: var(--muted);
+.bubble-file {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	max-width: 240px;
+	padding: 6px 14px 6px 6px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.bubble-file-icon {
+	width: 34px;
+	height: 34px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.bubble-file-text {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	font-size: 12.5px;
+	line-height: 1.35;
+	color: var(--ink);
+}
+
+.bubble-file-kind {
+	color: var(--ink-4);
+	font-size: 11px;
 }
 
 /* Project trust */

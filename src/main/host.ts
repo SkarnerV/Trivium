@@ -45,7 +45,7 @@ import { profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { ChangeTracker } from "./changes.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
-import { RunTracker } from "./transcript.ts";
+import { RunTracker, type Thumbnail } from "./transcript.ts";
 
 interface Live {
 	path: string;
@@ -133,6 +133,7 @@ export class SessionHost {
 	private readonly indexFile: string;
 	private readonly settings: SettingsStore;
 	private readonly onDone: (path: string, title: string) => void;
+	private readonly thumbnail: Thumbnail | undefined;
 	private idleTimer: ReturnType<typeof setInterval> | undefined;
 	private trustStore!: ProjectTrustStore;
 	/** Decisions made for this run of the app only. */
@@ -148,12 +149,15 @@ export class SessionHost {
 		settings: SettingsStore;
 		/** Called when a run settles, for system notifications. */
 		onDone: (path: string, title: string) => void;
+		/** Previews for images in the transcript. */
+		thumbnail?: Thumbnail;
 	}) {
 		this.emit = options.emit;
 		this.broker = options.broker;
 		this.indexFile = options.indexFile;
 		this.settings = options.settings;
 		this.onDone = options.onDone;
+		this.thumbnail = options.thumbnail;
 	}
 
 	get runtime(): ModelRuntime {
@@ -681,7 +685,7 @@ export class SessionHost {
 			app,
 			cwd,
 			session,
-			tracker: new RunTracker(session.messages),
+			tracker: new RunTracker(session.messages, this.thumbnail),
 			changes,
 			running: false,
 			unread: false,

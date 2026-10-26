@@ -72,8 +72,8 @@ export interface Step {
 export interface Run {
 	id: string;
 	prompt: string;
-	/** Files and images sent with the prompt. */
-	attachments?: { name: string; kind: "image" | "file" }[];
+	/** Files and images sent with the prompt; `thumb` is a small data URL preview of an image. */
+	attachments?: { name: string; kind: "image" | "file"; thumb?: string }[];
 	steps: Step[];
 	/** Assistant text after the last tool call: the run's answer. */
 	answer: string;

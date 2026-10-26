@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
-import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, Notification, shell } from "electron";
+import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type { AppId, DialogAnswer, HostEvent, NewSessionInput, TriviumSettings, TrustChoice } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
@@ -55,7 +55,18 @@ const host = new SessionHost({
 	indexFile: join(triviumDir, "session-apps.json"),
 	settings,
 	onDone: (path, title) => alert("done", path, title),
+	thumbnail,
 });
+
+/** A preview at most 320×240, twice the size it shows at. JPEG keeps it small; PNG keeps transparency. */
+function thumbnail(data: string, mimeType: string): string | undefined {
+	const image = nativeImage.createFromBuffer(Buffer.from(data, "base64"));
+	if (image.isEmpty()) return undefined;
+	const { width, height } = image.getSize();
+	const scale = Math.min(1, 320 / width, 240 / height);
+	const small = image.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: "good" });
+	return mimeType === "image/jpeg" ? `data:image/jpeg;base64,${small.toJPEG(82).toString("base64")}` : small.toDataURL();
+}
 const attachments = new AttachmentStore();
 // pi's login flow asks the host for this installation's device ID.
 const loginSettings = SettingsManager.create(homedir(), getAgentDir());

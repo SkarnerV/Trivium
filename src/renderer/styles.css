@@ -1022,19 +1022,32 @@ body.resizing * {
 .changes-toggle {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	min-height: 30px;
-	padding: 0 10px;
-	border: 1px solid var(--edge);
+	gap: 7px;
+	height: 30px;
+	padding: 0 10px 0 8px;
+	border: 0;
 	border-radius: 8px;
-	background: #fff;
+	background: transparent;
+	color: var(--muted);
+	font-size: 12.5px;
+	font-weight: 500;
+	transition:
+		background 120ms ease,
+		color 120ms ease;
+}
+
+.changes-toggle:hover {
+	background: var(--tab);
 	color: var(--ink-2);
-	font-size: 12px;
 }
 
 .changes-toggle[aria-pressed="true"] {
 	background: var(--soft);
-	border-color: transparent;
+	color: var(--accent-text);
+}
+
+.changes-toggle svg {
+	flex: none;
 }
 
 .chips {

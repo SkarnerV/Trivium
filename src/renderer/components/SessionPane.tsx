@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import type { Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, FileIcon, ImageIcon, PlusIcon } from "../icons.tsx";
+import { AppIcon, FileIcon, ImageIcon, PanelRightIcon, PlusIcon } from "../icons.tsx";
 import { setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -92,6 +92,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					title={open ? "Hide panel" : "Show panel"}
 					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
 				>
+					<PanelRightIcon size={15} />
 					{panelFor(app, view) === "changes" ? (
 						<>
 							<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>

@@ -66,7 +66,8 @@ function MessageEditor({ initial, canSendEmpty, onCancel, onSend }: {
 		area?.focus();
 		area?.setSelectionRange(area.value.length, area.value.length);
 	}, []);
-	const ready = !sending && (text.trim().length > 0 || canSendEmpty) && text.trim() !== initial;
+	// The same text can go again: a retry, say after picking another model.
+	const ready = !sending && (text.trim().length > 0 || canSendEmpty);
 	const send = async () => {
 		if (!ready) return;
 		setSending(true);

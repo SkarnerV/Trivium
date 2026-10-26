@@ -13,6 +13,7 @@ import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
+import { packageSource } from "../shared/packages.ts";
 import { SettingsStore } from "./settings.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
 
@@ -171,6 +172,10 @@ function registerIpc(): void {
 		if (!current.added.includes(path)) {
 			await settings.update({ apps: { ...settings.get().apps, [id]: { ...current, added: [...current.added, path] } } });
 		}
+		return host.describeApp(id);
+	});
+	handle("trivium:installPackage", async (id: AppId, source: string) => {
+		await host.installPackage(packageSource(source));
 		return host.describeApp(id);
 	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));

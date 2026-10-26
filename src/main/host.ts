@@ -16,6 +16,7 @@ import {
 	hasTrustRequiringProjectResources,
 	ProjectTrustStore,
 	type InlineExtension,
+	DefaultPackageManager,
 	DefaultResourceLoader,
 	getAgentDir,
 	ModelRuntime,
@@ -540,6 +541,29 @@ export class SessionHost {
 
 	answerTrust(id: string, choice: TrustChoice): void {
 		this.trustAnswers.get(id)?.resolve(choice);
+	}
+
+	/**
+	 * Installs a pi package as `pi install` does: fetched from npm, git or a URL and recorded in pi's own
+	 * settings, so every app and the pi CLI load it. Each app can still turn its extensions off.
+	 */
+	async installPackage(source: string): Promise<void> {
+		const settingsManager = SettingsManager.create(homedir(), this.agentDir, { projectTrusted: false });
+		const manager = new DefaultPackageManager({ cwd: homedir(), agentDir: this.agentDir, settingsManager });
+		try {
+			await manager.installAndPersist(source);
+		} catch (error) {
+			// pi reports only the command and its exit code; npm and git print the reason to the console.
+			const message = error instanceof Error ? error.message : String(error);
+			const tool = /\bspawn (npm|git)\b.*ENOENT/i.exec(message)?.[1] ?? (/ENOENT/.test(message) ? /^(npm|git)\b/.exec(message)?.[1] : undefined);
+			if (tool) throw new Error(`Installing ${source} needs ${tool}, and it isn't installed or isn't on your PATH.`);
+			if (/^npm install /.test(message)) throw new Error(`npm couldn't install ${source.replace(/^npm:/, "")}. Check the package name and your network connection.`);
+			if (/^git clone /.test(message)) throw new Error(`git couldn't clone ${source.replace(/^git:/, "")}. Check the address and that you can access the repository.`);
+			throw error;
+		}
+		await settingsManager.flush();
+		const [failed] = settingsManager.drainErrors();
+		if (failed) throw new Error(`Installed, but pi's settings could not be saved: ${failed.error.message}`);
 	}
 
 	/** What a new session in this app would load, with every extension pi finds, on or off. */

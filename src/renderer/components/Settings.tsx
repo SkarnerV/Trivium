@@ -14,6 +14,7 @@ import {
 	useStore,
 } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
 import { Dropdown } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
@@ -406,13 +407,11 @@ function AppPage({ app }: { app: AppId }) {
 		);
 		await saveApp({ disabled });
 	};
-	const add = async () => {
-		const next = await attempt(() => trivium.addExtension(app));
-		if (next) {
-			setDetails(next);
-			setTouched(true);
-			setState({ settings: await trivium.getSettings() });
-		}
+	const [adding, setAdding] = useState(false);
+	const added = async (next: AppDetails) => {
+		setDetails(next);
+		setTouched(true);
+		setState({ settings: await trivium.getSettings() });
 	};
 	const reload = async () => {
 		await attempt(() => trivium.reloadApp(app));
@@ -476,7 +475,7 @@ function AppPage({ app }: { app: AppId }) {
 				title="Extensions"
 				description="pi's own extensions load first, then this app's folder. Turn off anything this app should skip."
 				aside={
-					<button type="button" className="s-btn accent" onClick={() => void add()}>
+					<button type="button" className="s-btn accent" onClick={() => setAdding(true)}>
 						<PlusIcon size={12} width={2.6} />
 						Add
 					</button>
@@ -493,13 +492,14 @@ function AppPage({ app }: { app: AppId }) {
 				{!details && <div className="s-empty">Loading…</div>}
 				{details && !extensions.length && (
 					<div className="s-empty">
-						No extensions yet. Put <span className="mono">.ts</span> files in this app's folder, or add one from elsewhere.
+						No extensions yet. Install a pi package, or put <span className="mono">.ts</span> files in this app's folder.
 					</div>
 				)}
 				{extensions.map((extension) => (
 					<ExtensionRow key={extension.path} extension={extension} onToggle={() => void toggle(extension)} />
 				))}
 			</Group>
+			{adding && <AddExtensionDialog app={app} onClose={() => setAdding(false)} onAdded={(next) => void added(next)} />}
 
 			<Group title="Model">
 				<Item label={`New ${theme.name} sessions`} hint="Open sessions keep the model they use">

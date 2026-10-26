@@ -1776,6 +1776,57 @@ body.resizing * {
 	color: var(--ink-3);
 }
 
+/* Add an extension: the source the input resolves to, and the package gallery. */
+.add-ext-source {
+	min-height: 18px;
+	font-size: 12px;
+	color: var(--ink-4);
+}
+
+.add-ext-source.bad {
+	color: var(--del);
+}
+
+.add-ext-source .mono {
+	color: var(--ink-2);
+}
+
+.add-ext-gallery {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	border-radius: 12px;
+	background: var(--tray);
+	box-shadow: inset 0 0 0 1px var(--line);
+	color: var(--ink-3);
+	text-decoration: none;
+}
+
+.add-ext-gallery:hover {
+	box-shadow: inset 0 0 0 1px var(--edge);
+	color: var(--accent);
+}
+
+.add-ext-gallery > span {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.add-ext-gallery strong {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--ink);
+}
+
+.add-ext-gallery .mono {
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
 .modal-foot {
 	display: flex;
 	align-items: center;

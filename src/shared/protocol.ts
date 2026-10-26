@@ -355,6 +355,8 @@ export interface TriviumApi {
 	updateSettings(patch: Partial<TriviumSettings>): Promise<TriviumSettings>;
 	appDetails(app: AppId): Promise<AppDetails>;
 	addExtension(app: AppId): Promise<AppDetails | undefined>;
+	/** Installs a pi package from npm, git or a URL for every app, then describes this app again. */
+	installPackage(app: AppId, source: string): Promise<AppDetails>;
 	reloadApp(app: AppId): Promise<string[]>;
 	providers(): Promise<ProviderInfo[]>;
 	login(providerId: string, type: "api_key" | "oauth"): Promise<void>;

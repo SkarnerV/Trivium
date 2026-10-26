@@ -788,8 +788,51 @@ body.resizing * {
 	gap: 22px;
 }
 
+.prompt {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 8px;
+}
+
+/* Edit and Fork sit beside the message, shown while it is hovered or one of them has focus. */
+.prompt-line {
+	align-self: stretch;
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.prompt-actions {
+	display: flex;
+	gap: 2px;
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.prompt:hover .prompt-actions,
+.prompt-actions:focus-within {
+	opacity: 1;
+}
+
+.prompt-action {
+	width: 26px;
+	height: 26px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--muted);
+}
+
+.prompt-action:hover:not(:disabled) {
+	background: var(--soft);
+	color: var(--ink);
+}
+
 .bubble {
-	align-self: flex-end;
 	max-width: 80%;
 	padding: 10px 14px;
 	border-radius: 16px 16px 4px 16px;
@@ -3823,7 +3866,6 @@ body.resizing * {
 	justify-content: flex-end;
 	gap: 8px;
 	max-width: 80%;
-	margin-bottom: -14px;
 }
 
 /* Transcript images: sent with a message, or returned by a step. Hovering shows Download and Preview. */

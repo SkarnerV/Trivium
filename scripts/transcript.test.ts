@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RunTracker } from "../src/main/transcript.ts";
+import { AttachmentStore } from "../src/main/attachments.ts";
+import { messageFiles, RunTracker } from "../src/main/transcript.ts";
 
 type Messages = ConstructorParameters<typeof RunTracker>[0];
 type Event = Parameters<RunTracker["apply"]>[0];
@@ -132,4 +133,30 @@ test("a read that returns an image shows it on the step, kept once for preview",
 	assert.equal(tracker.image("i0")?.data, "PNGDATA");
 	tracker.all();
 	assert.deepEqual(thumbs, ["PNGDATA"]);
+});
+
+test("a sent message's attachments come back out to be sent again exactly as they were", () => {
+	const prefix = '<file name="/work/notes.md">\n# Notes\nline two\n</file>\n<file name="/work/shot.png">[Image resized]</file>\n';
+	const image = { type: "image", data: "aGVsbG8=", mimeType: "image/png" };
+	const { prompt, files } = messageFiles([{ type: "text", text: `${prefix}Fix the header` }, image]);
+	assert.equal(prompt, "Fix the header");
+	const store = new AttachmentStore();
+	const infos = store.fromMessage(files);
+	assert.deepEqual(infos.map((info) => [info.name, info.kind]), [["notes.md", "file"], ["shot.png", "image"]]);
+	assert.equal(infos[1]!.preview, "data:image/png;base64,aGVsbG8=");
+	const rebuilt = store.build(infos.map((info) => info.id));
+	assert.equal(rebuilt.prefix, prefix);
+	assert.deepEqual(rebuilt.images, [image]);
+});
+
+test("each run knows how many later runs began with a user message", () => {
+	const tracker = new RunTracker([
+		{ role: "assistant", content: [{ type: "text", text: "Kept from before compaction" }], timestamp: 1 },
+		{ role: "user", content: "First", timestamp: 2 },
+		{ role: "assistant", content: [{ type: "text", text: "One" }], timestamp: 3 },
+		{ role: "user", content: "Second", timestamp: 4 },
+	] as unknown as Messages);
+	assert.equal(tracker.userMessage(0), undefined);
+	assert.deepEqual(tracker.userMessage(1), { prompt: "First", later: 1 });
+	assert.deepEqual(tracker.userMessage(2), { prompt: "Second", later: 0 });
 });

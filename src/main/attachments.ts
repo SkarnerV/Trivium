@@ -9,6 +9,7 @@ import {
 	resizeImage,
 } from "@earendil-works/pi-coding-agent";
 import type { AttachmentInfo } from "../shared/protocol.ts";
+import type { MessageFile } from "./transcript.ts";
 
 /** Larger text files are refused: they would crowd out the conversation. */
 const MAX_TEXT_BYTES = 1024 * 1024;
@@ -86,6 +87,32 @@ export class AttachmentStore {
 		};
 		this.items.set(info.id, { info, label, image, hints });
 		return info;
+	}
+
+	/** Files a sent message carried, ready to send again as they were. Images whose data is gone are left out. */
+	fromMessage(files: MessageFile[]): AttachmentInfo[] {
+		const infos: AttachmentInfo[] = [];
+		for (const file of files) {
+			const name = basename(file.label);
+			if (file.text !== undefined) {
+				const info: AttachmentInfo = { id: randomUUID(), name, kind: "file", size: Buffer.byteLength(file.text) };
+				this.items.set(info.id, { info, label: file.label, hints: [], text: file.text });
+				infos.push(info);
+			} else if (file.image) {
+				const { data, mimeType } = file.image;
+				const info: AttachmentInfo = {
+					id: randomUUID(),
+					name,
+					kind: "image",
+					size: Math.floor((data.length * 3) / 4),
+					preview: `data:${mimeType};base64,${data}`,
+				};
+				const image: ImageContent = { type: "image", data, mimeType };
+				this.items.set(info.id, { info, label: file.label, image, hints: file.note ? [file.note] : [] });
+				infos.push(info);
+			}
+		}
+		return infos;
 	}
 
 	drop(ids: string[]): void {

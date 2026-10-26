@@ -183,6 +183,12 @@ export type HostEvent =
 	| { type: "trust"; request: TrustRequest }
 	| { type: "trust_closed"; id: string };
 
+/** What goes into a session's message box, unsent: such as an earlier message taken back to edit. */
+export interface Draft {
+	text: string;
+	attachments: AttachmentInfo[];
+}
+
 export interface NewSessionInput {
 	app: AppId;
 	cwd: string;
@@ -397,6 +403,13 @@ export interface TriviumApi {
 	pickFolder(): Promise<string | undefined>;
 	openSession(path: string): Promise<SessionView>;
 	newSession(input: NewSessionInput): Promise<SessionView>;
+	/**
+	 * Takes a session back to just before one of its runs, and returns that run's message to edit and send again.
+	 * Undefined when an extension cancelled it.
+	 */
+	rewind(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
+	/** Copies the conversation before one of a session's runs into a new session, with that run's message to edit. */
+	fork(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
 	/** Moves session files to the Trash. Returns the paths that were deleted. */
 	deleteSessions(paths: string[]): Promise<string[]>;
 	send(path: string, text: string, mode: "prompt" | "steer" | "followUp", attachments?: string[]): Promise<void>;

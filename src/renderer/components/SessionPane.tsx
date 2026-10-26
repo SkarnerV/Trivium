@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
 import type { Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, FileIcon, ImageIcon, PanelRightIcon, PlusIcon } from "../icons.tsx";
-import { setState, useStore } from "../store.ts";
+import { AppIcon, BranchIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
+import { askConfirm, forkFrom, rewindTo, setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
@@ -19,27 +19,74 @@ function fileKind(name: string, kind: "image" | "file"): string {
 	return extension ? `${extension.toUpperCase()} file` : "File";
 }
 
-function RunBlock({ run, live }: { run: Run; live: boolean }) {
+/** Asks before taking the conversation back, since the later messages leave it and Trivium can't show them again. */
+async function editMessage(view: SessionView, index: number): Promise<void> {
+	const changed = view.changes.length
+		? " Files the agent changed stay as they are; revert them in the Changes panel if you need to."
+		: " Files on disk stay as they are.";
+	const ok = await askConfirm({
+		title: "Edit this message?",
+		message: `The conversation goes back to just before it, and the message moves to the box to edit and send again. The replies after it leave the conversation.${changed}`,
+		confirmLabel: "Edit message",
+	});
+	if (ok) await rewindTo(view.path, index);
+}
+
+function PromptActions({ view, index }: { view: SessionView; index: number }) {
+	return (
+		<div className="prompt-actions">
+			<button
+				type="button"
+				className="prompt-action"
+				aria-label="Edit message"
+				title={view.running ? "Stop the run to edit an earlier message" : "Edit and send again from here"}
+				disabled={view.running}
+				onClick={() => void editMessage(view, index)}
+			>
+				<PenIcon size={13} width={2} />
+			</button>
+			<button
+				type="button"
+				className="prompt-action"
+				aria-label="Fork from here"
+				title="Fork: a new session from before this message, with it ready to edit"
+				onClick={() => void forkFrom(view.path, index)}
+			>
+				<BranchIcon size={13} />
+			</button>
+		</div>
+	);
+}
+
+function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: SessionView; index: number }) {
+	const sent = Boolean(run.prompt.trim() || run.attachments?.length);
 	return (
 		<div className="run">
-			{run.attachments?.length ? (
-				<div className="bubble-files">
-					{run.attachments.map((file, index) =>
-						file.id ? (
-							<ImageTile key={index} image={{ id: file.id, name: file.name, mimeType: file.mimeType ?? "image/png", thumb: file.thumb }} />
-						) : (
-							<span key={index} className="bubble-file" title={file.name}>
-								<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>
-								<span className="bubble-file-text">
-									<span className="ellipsis">{file.name}</span>
-									<span className="bubble-file-kind">{fileKind(file.name, file.kind)}</span>
-								</span>
-							</span>
-						),
-					)}
+			{sent && (
+				<div className="prompt">
+					{run.attachments?.length ? (
+						<div className="bubble-files">
+							{run.attachments.map((file, i) =>
+								file.id ? (
+									<ImageTile key={i} image={{ id: file.id, name: file.name, mimeType: file.mimeType ?? "image/png", thumb: file.thumb }} />
+								) : (
+									<span key={i} className="bubble-file" title={file.name}>
+										<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>
+										<span className="bubble-file-text">
+											<span className="ellipsis">{file.name}</span>
+											<span className="bubble-file-kind">{fileKind(file.name, file.kind)}</span>
+										</span>
+									</span>
+								),
+							)}
+						</div>
+					) : null}
+					<div className="prompt-line">
+						<PromptActions view={view} index={index} />
+						{run.prompt.trim() && <div className="bubble">{run.prompt.trim()}</div>}
+					</div>
 				</div>
-			) : null}
-			{run.prompt.trim() && <div className="bubble">{run.prompt.trim()}</div>}
+			)}
 			<div className="agent">
 				<Steps run={run} live={live} />
 				{run.answer && (
@@ -106,7 +153,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 			<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
 				<div className="thread">
 					{view.runs.map((run, index) => (
-						<RunBlock key={run.id} run={run} live={view.running && index === view.runs.length - 1} />
+						<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
 					))}
 					{dialogs.map((request) => (
 						<AskCard key={request.id} request={request} />

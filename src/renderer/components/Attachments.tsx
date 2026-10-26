@@ -65,7 +65,14 @@ export function useAttachments() {
 		return ids;
 	};
 
-	return { items, pending, pick: () => void add(() => trivium.pickAttachments()), addFiles, remove, takeIds, restore: setItems };
+	/** Puts these in the box in place of what it holds, such as an earlier message's attachments. */
+	const replace = (list: AttachmentInfo[]) => {
+		const dropped = current.current.filter((item) => !list.some((next) => next.id === item.id));
+		if (dropped.length) void trivium.dropAttachments(dropped.map((item) => item.id));
+		setItems(list);
+	};
+
+	return { items, pending, pick: () => void add(() => trivium.pickAttachments()), addFiles, remove, takeIds, restore: setItems, replace };
 }
 
 export function AttachmentChips({

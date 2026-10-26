@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from
 import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { CloseIcon, PaperclipIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
-import { attempt, getState, setState, trivium, useStore } from "../store.ts";
+import { attempt, setState, trivium, useStore } from "../store.ts";
 import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
@@ -121,19 +121,23 @@ function Tray({ view }: { view: SessionView }) {
 }
 
 export function Composer({ view }: { view: SessionView }) {
-	// Starts from a draft another screen left for this session, such as "Open in Write".
-	const [text, setText] = useState(() => getState().drafts[view.path] ?? "");
-	useEffect(() => {
-		if (getState().drafts[view.path] === undefined) return;
-		setState((s) => {
-			const { [view.path]: _, ...rest } = s.drafts;
-			return { drafts: rest };
-		});
-	}, [view.path]);
+	// Takes a draft left for this session, such as from "Open in Write" or an earlier message taken back to edit.
+	const draft = useStore((s) => s.drafts[view.path]);
+	const [text, setText] = useState(() => draft?.text ?? "");
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
 	const menu = useCommandMenu(view.path, text, setText);
 	const files = useAttachments();
+	useEffect(() => {
+		if (!draft) return;
+		setText(draft.text);
+		files.replace(draft.attachments);
+		setState((s) => {
+			const { [view.path]: _, ...rest } = s.drafts;
+			return { drafts: rest };
+		});
+		ref.current?.focus();
+	}, [draft]);
 	const [dragging, setDragging] = useState(false);
 	const models = useStore((s) => s.models);
 	const model = models.find((m) => m.key === view.model);

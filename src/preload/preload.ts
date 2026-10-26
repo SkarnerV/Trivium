@@ -20,6 +20,8 @@ const api: TriviumApi = {
 	pickFolder: call("pickFolder") as TriviumApi["pickFolder"],
 	openSession: call("openSession") as TriviumApi["openSession"],
 	newSession: call("newSession") as TriviumApi["newSession"],
+	rewind: call("rewind") as TriviumApi["rewind"],
+	fork: call("fork") as TriviumApi["fork"],
 	deleteSessions: call("deleteSessions") as TriviumApi["deleteSessions"],
 	pickAttachments: call("pickAttachments") as TriviumApi["pickAttachments"],
 	attachPaths: call("attachPaths") as TriviumApi["attachPaths"],

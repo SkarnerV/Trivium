@@ -4,6 +4,7 @@ import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getSupportedThinkingLevels, type ImageContent } from "@earendil-works/pi-ai";
 import {
 	type AgentSession,
@@ -21,6 +22,7 @@ import {
 	getAgentDir,
 	ModelRuntime,
 	SessionManager,
+	type SessionMessageEntry,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type {
@@ -49,7 +51,7 @@ import { ChangeTracker } from "./changes.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
-import { RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
+import { type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
 	path: string;
@@ -65,6 +67,15 @@ interface Live {
 	sentRuns: number;
 	lastActive: number;
 }
+
+/** A session shown at an earlier message, and that message taken back out to edit and send again. */
+export interface Rewound {
+	view: SessionView;
+	prompt: string;
+	files: MessageFile[];
+}
+
+type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: "user" }> };
 
 const FLUSH_MS = 40;
 const devFaux = fileURLToPath(new URL("../dev/faux-extension.ts", import.meta.url));
@@ -312,6 +323,66 @@ export class SessionHost {
 		void session.prompt(message, { images }).catch((error: unknown) => {
 			this.notice(error instanceof Error ? error.message : String(error), "error");
 		});
+	}
+
+	/**
+	 * Takes the conversation back to just before a run's message, so it can be edited and sent again.
+	 * pi keeps the later messages on their own branch of the session file. Files on disk stay as they are.
+	 * Undefined when an extension cancelled it.
+	 */
+	async rewind(path: string, index: number): Promise<Rewound | undefined> {
+		const live = this.require(path);
+		if (live.running) throw new Error("Stop the run before editing an earlier message.");
+		const entry = this.userEntry(live, index);
+		const result = await live.session.navigateTree(entry.id);
+		if (result.cancelled) return undefined;
+		live.tracker = new RunTracker(live.session.messages, this.thumbnail);
+		this.scheduleList();
+		return { view: this.view(live, await live.changes.list()), ...messageFiles(entry.message.content) };
+	}
+
+	/**
+	 * Copies the conversation before a run's message into a new session in the same project, and shows that
+	 * one with the message ready to edit. This session stays as it is, and keeps running if it was.
+	 */
+	async fork(path: string, index: number): Promise<Rewound | undefined> {
+		const live = this.require(path);
+		const entry = this.userEntry(live, index);
+		const runner = live.session.extensionRunner;
+		if (runner.hasHandlers("session_before_fork")) {
+			const result = await runner.emit({ type: "session_before_fork", entryId: entry.id, position: "before" });
+			if (result?.cancel) return undefined;
+		}
+		if (!existsSync(path)) throw new Error("This session has not been saved yet. Send a message before forking it.");
+		// A second manager on the same file, as pi's own fork does, so the live session is left alone.
+		const source = SessionManager.open(path);
+		let manager = source;
+		if (entry.parentId) {
+			source.createBranchedSession(entry.parentId);
+		} else {
+			manager = SessionManager.create(live.cwd, source.getSessionDir());
+			manager.newSession({ parentSession: path });
+		}
+		const forked = await this.start(live.app, manager.getCwd(), manager);
+		this.appIndex[forked.session.sessionId] = live.app;
+		await this.saveIndex();
+		this.viewing = forked.path;
+		this.scheduleList();
+		return { view: this.view(forked, []), ...messageFiles(entry.message.content) };
+	}
+
+	/** The user message a run began with, on the session's current branch. */
+	private userEntry(live: Live, index: number): UserEntry {
+		const wanted = live.tracker.userMessage(index);
+		// The transcript can begin after a compaction, so count from the end of the branch.
+		const entries = live.session.sessionManager
+			.getBranch()
+			.filter((entry): entry is UserEntry => entry.type === "message" && entry.message.role === "user");
+		const entry = wanted ? entries[entries.length - 1 - wanted.later] : undefined;
+		if (!entry || splitAttachments(entry.message.content).prompt !== wanted?.prompt) {
+			throw new Error("That message is no longer in this session.");
+		}
+		return entry;
 	}
 
 	/**

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type {
 	AppId,
+	Draft,
 	TriviumApi,
 	TriviumSettings,
 	LoginEvent,
@@ -47,7 +48,7 @@ export interface State {
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
 	/** Text to put in a session's message box when it next shows. */
-	drafts: Record<string, string>;
+	drafts: Record<string, Draft>;
 	/** Projects asking to load their .pi resources, oldest first. */
 	trust: TrustRequest[];
 	/** The transcript image open in the lightbox, and the session it belongs to. */
@@ -282,7 +283,7 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 	if (!view) return undefined;
 	transition(getState().app === input.app ? "session" : "app", () =>
 		setState((s) => ({
-			drafts: draft ? { ...s.drafts, [view.path]: draft } : s.drafts,
+			drafts: draft ? { ...s.drafts, [view.path]: { text: draft, attachments: [] } } : s.drafts,
 			views: { ...s.views, [view.path]: view },
 			selected: { ...s.selected, [input.app]: view.path },
 			app: input.app,
@@ -292,6 +293,30 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 	void refreshSessions();
 	void refreshModels();
 	return view;
+}
+
+/** Takes a session back to before one of its runs, with that run's message in the box to edit and send again. */
+export async function rewindTo(path: string, run: number): Promise<void> {
+	const result = await attempt(() => trivium.rewind(path, run));
+	if (!result) return;
+	setState((s) => ({ views: { ...s.views, [path]: result.view }, drafts: { ...s.drafts, [path]: result.draft } }));
+}
+
+/** Copies a session up to one of its runs into a new session and shows it, with that run's message to edit. */
+export async function forkFrom(path: string, run: number): Promise<void> {
+	const result = await attempt(() => trivium.fork(path, run));
+	if (!result) return;
+	const { view, draft } = result;
+	transition("session", () =>
+		setState((s) => ({
+			drafts: { ...s.drafts, [view.path]: draft },
+			views: { ...s.views, [view.path]: view },
+			selected: { ...s.selected, [view.app]: view.path },
+			app: view.app,
+			overlay: null,
+		})),
+	);
+	void refreshSessions();
 }
 
 export function switchApp(app: AppId): void {

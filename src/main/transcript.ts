@@ -31,6 +31,8 @@ interface ToolState {
 
 interface RunState {
 	id: string;
+	/** The run began with a user message, rather than with output left over after compaction. */
+	fromUser: boolean;
 	prompt: string;
 	attachments?: Run["attachments"];
 	segments: Segment[];
@@ -61,30 +63,47 @@ function imagesOf(content: unknown): ImagePart[] {
 	);
 }
 
-type ImagePart = { data: string; mimeType: string };
+export type ImagePart = { data: string; mimeType: string };
 type KeepImage = (image: ImagePart, name: string) => TranscriptImage;
+
+/** A file sent with a prompt, as its <file> tag gave it: a text file's content, or an image and the notes on it. */
+export interface MessageFile {
+	/** The name in the tag: the absolute path for files from disk. */
+	label: string;
+	text?: string;
+	image?: ImagePart;
+	note?: string;
+}
 
 /**
  * Splits the <file> tags pi's CLI and Trivium put in front of a prompt from the text the user typed.
  * Text files have their content on the following lines; images have an empty tag or a short note,
  * and their image parts follow in the same order.
  */
-export function splitAttachments(content: unknown, keep?: KeepImage): { prompt: string; attachments?: Run["attachments"] } {
+export function messageFiles(content: unknown): { prompt: string; files: MessageFile[] } {
 	const text = textOf(content);
 	const images = imagesOf(content);
-	const attachments: NonNullable<Run["attachments"]> = [];
+	const files: MessageFile[] = [];
 	let rest = text;
 	for (let match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest); match; match = /^<file name="([^"]*)">([\s\S]*?)<\/file>\n?/.exec(rest)) {
-		const name = match[1]!.split(/[\\/]/).pop() || match[1]!;
-		if (match[2]!.startsWith("\n")) {
-			attachments.push({ name, kind: "file" });
-		} else {
-			const image = images.shift();
-			attachments.push(image && keep ? { kind: "image", ...keep(image, name) } : { name, kind: "image" });
-		}
+		const body = match[2]!;
+		if (body.startsWith("\n")) files.push({ label: match[1]!, text: body.slice(1).replace(/\n$/, "") });
+		else files.push({ label: match[1]!, image: images.shift(), note: body });
 		rest = rest.slice(match[0].length);
 	}
-	return attachments.length ? { prompt: rest, attachments } : { prompt: text };
+	return files.length ? { prompt: rest, files } : { prompt: text, files };
+}
+
+/** The prompt and what was sent with it, for the transcript. `keep` stores images so they can be shown. */
+export function splitAttachments(content: unknown, keep?: KeepImage): { prompt: string; attachments?: Run["attachments"] } {
+	const { prompt, files } = messageFiles(content);
+	if (!files.length) return { prompt };
+	const attachments = files.map((file): NonNullable<Run["attachments"]>[number] => {
+		const name = file.label.split(/[\\/]/).pop() || file.label;
+		if (file.text !== undefined) return { name, kind: "file" };
+		return file.image && keep ? { kind: "image", ...keep(file.image, name) } : { name, kind: "image" };
+	});
+	return { prompt, attachments };
 }
 
 function timestampOf(message: AgentMessage): number | undefined {
@@ -206,6 +225,16 @@ export class RunTracker {
 		return this.runs.map((run) => this.view(run));
 	}
 
+	/**
+	 * The prompt a run began with, and how many later runs also began with a user message, which
+	 * finds the message among the session's entries. Undefined when the run did not begin with one.
+	 */
+	userMessage(index: number): { prompt: string; later: number } | undefined {
+		const run = this.runs[index];
+		if (!run?.fromUser) return undefined;
+		return { prompt: run.prompt, later: this.runs.slice(index + 1).filter((other) => other.fromUser).length };
+	}
+
 	current(): { index: number; run: Run } | undefined {
 		const run = this.runs.at(-1);
 		return run ? { index: this.runs.length - 1, run: this.view(run) } : undefined;
@@ -300,6 +329,7 @@ export class RunTracker {
 			}
 			this.runs.push({
 				id: `r${this.runs.length}`,
+				fromUser: true,
 				...splitAttachments(message.content, this.keepImage),
 				segments: [],
 				status: live ? "running" : "done",
@@ -331,7 +361,7 @@ export class RunTracker {
 		if (message.role !== "assistant") return;
 		let run = this.runs.at(-1);
 		if (!run) {
-			run = { id: "r0", prompt: "", segments: [], status: live ? "running" : "done" };
+			run = { id: "r0", fromUser: false, prompt: "", segments: [], status: live ? "running" : "done" };
 			this.runs.push(run);
 		}
 		const previous = new Map(run.segments.filter((s) => s.key.startsWith(`${key}:`)).map((s) => [s.key, s]));

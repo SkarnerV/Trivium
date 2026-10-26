@@ -10,7 +10,8 @@ const close = () => setState({ overlay: null });
 export function NewSessionDialog() {
 	const app = useStore((s) => s.app);
 	const [projects, setProjects] = useState<string[]>([]);
-	const [cwd, setCwd] = useState<string | undefined>();
+	// A project folder, or null for a chat without one.
+	const [cwd, setCwd] = useState<string | null | undefined>();
 	const [busy, setBusy] = useState(false);
 	// Focus the dialog itself so Esc and the ⌘ shortcuts work right away.
 	const ref = useRef<HTMLDivElement>(null);
@@ -19,10 +20,10 @@ export function NewSessionDialog() {
 		ref.current?.focus();
 		void attempt(() => trivium.recentProjects()).then((list) => {
 			// Prefer projects this app has used, then the rest.
-			const own = [...new Set(getState().sessions.filter((s) => s.app === app).map((s) => s.cwd))];
+			const own = [...new Set(getState().sessions.filter((s) => s.app === app && !s.chat).map((s) => s.cwd))];
 			const merged = [...new Set([...own, ...(list ?? [])])].filter(Boolean).slice(0, 6);
 			setProjects(merged);
-			setCwd((current) => current ?? merged[0]);
+			setCwd((current) => (current !== undefined ? current : (merged[0] ?? null)));
 		});
 	}, [app]);
 
@@ -34,9 +35,9 @@ export function NewSessionDialog() {
 	};
 
 	const start = async () => {
-		if (!cwd || busy) return;
+		if (cwd === undefined || busy) return;
 		setBusy(true);
-		await startSession({ app, cwd });
+		await startSession({ app, cwd: cwd ?? undefined });
 		setBusy(false);
 	};
 
@@ -64,7 +65,14 @@ export function NewSessionDialog() {
 					</button>
 				</div>
 				<div role="radiogroup" aria-label="Project" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-					<span className="group-label">Project</span>
+					<span className="group-label">Where</span>
+					<button type="button" role="radio" className="radio" aria-checked={cwd === null} onClick={() => setCwd(null)}>
+						<span className="ring" />
+						<span style={{ fontWeight: cwd === null ? 500 : 400 }}>No project</span>
+						<span className="path ellipsis" style={{ fontFamily: "inherit" }}>
+							Just chat. Any files go in Trivium's own folder.
+						</span>
+					</button>
 					{projects.map((path) => (
 						<button
 							key={path}
@@ -88,7 +96,7 @@ export function NewSessionDialog() {
 					<button type="button" className="btn ghost" onClick={close}>
 						Cancel
 					</button>
-					<button type="button" className="btn primary" disabled={!cwd || busy} onClick={() => void start()}>
+					<button type="button" className="btn primary" disabled={cwd === undefined || busy} onClick={() => void start()}>
 						{busy ? "Starting…" : "Start session"}
 					</button>
 				</div>

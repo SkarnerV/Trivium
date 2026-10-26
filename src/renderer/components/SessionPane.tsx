@@ -233,7 +233,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 			<header className="pane-head drag">
 				<div className="crumb">
 					<span className="project-name" title={view.cwd}>
-						{baseName(view.cwd)}
+						{view.chat ? "Chats" : baseName(view.cwd)}
 					</span>
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
@@ -282,7 +282,7 @@ export function EmptyPane() {
 					<AppIcon app={app} size={20} />
 				</span>
 				<h2>Start a {name} session</h2>
-				<p>Pick a project folder to start. Sessions keep running when you switch apps.</p>
+				<p>Start a chat, or pick a project folder to work in. Sessions keep running when you switch apps.</p>
 				<button type="button" className="btn primary" onClick={() => setState({ overlay: "new" })}>
 					<PlusIcon size={14} /> New session
 				</button>

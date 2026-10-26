@@ -14,6 +14,8 @@ export interface SessionSummary {
 	messageCount: number;
 	running: boolean;
 	unread: boolean;
+	/** Started without a project, in Trivium's own chats folder. */
+	chat: boolean;
 }
 
 export interface ModelOption {
@@ -155,6 +157,8 @@ export interface SessionView {
 	path: string;
 	id: string;
 	cwd: string;
+	/** Started without a project, in Trivium's own chats folder. */
+	chat: boolean;
 	app: AppId;
 	title: string;
 	runs: Run[];
@@ -203,7 +207,8 @@ export interface Draft {
 
 export interface NewSessionInput {
 	app: AppId;
-	cwd: string;
+	/** The project folder. Left out, the session is a chat in Trivium's own folder. */
+	cwd?: string;
 	message?: string;
 }
 

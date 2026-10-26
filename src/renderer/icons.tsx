@@ -52,6 +52,11 @@ export const BranchIcon = (p: IconProps) => (
 		<path d="M18 8.5a9.5 9.5 0 0 1-9.5 9.5" />
 	</Svg>
 );
+export const ChatIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z" />
+	</Svg>
+);
 export const PlusIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<path d="M12 5v14" />

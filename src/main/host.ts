@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { basename, join, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getSupportedThinkingLevels, type ImageContent } from "@earendil-works/pi-ai";
@@ -44,7 +44,7 @@ import type {
 	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
-import { profileFor, profileInfo, triviumDir } from "./apps.ts";
+import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
@@ -79,6 +79,10 @@ type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: 
 
 const FLUSH_MS = 40;
 const devFaux = fileURLToPath(new URL("../dev/faux-extension.ts", import.meta.url));
+
+function isChat(cwd: string): boolean {
+	return Boolean(cwd) && resolve(cwd) === resolve(chatsDir);
+}
 
 function shortPath(path: string): string {
 	const home = homedir();
@@ -230,6 +234,7 @@ export class SessionHost {
 				messageCount: info.messageCount,
 				running: live?.running ?? false,
 				unread: live?.unread ?? false,
+				chat: isChat(info.cwd),
 			};
 		});
 		for (const live of this.live.values()) {
@@ -244,6 +249,7 @@ export class SessionHost {
 				messageCount: live.session.messages.length,
 				running: live.running,
 				unread: live.unread,
+				chat: isChat(live.cwd),
 			});
 		}
 		summaries.sort((a, b) => b.modified - a.modified);
@@ -253,7 +259,7 @@ export class SessionHost {
 
 	recentProjects(): string[] {
 		const seen = new Set<string>();
-		for (const summary of this.summaries) if (summary.cwd) seen.add(summary.cwd);
+		for (const summary of this.summaries) if (summary.cwd && !summary.chat) seen.add(summary.cwd);
 		return [...seen].slice(0, 8);
 	}
 
@@ -287,7 +293,9 @@ export class SessionHost {
 	}
 
 	async newSession(input: NewSessionInput): Promise<SessionView> {
-		const live = await this.start(input.app, input.cwd, SessionManager.create(input.cwd), true);
+		const cwd = input.cwd ?? chatsDir;
+		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
+		const live = await this.start(input.app, cwd, SessionManager.create(cwd), true);
 		this.viewing = live.path;
 		this.appIndex[live.session.sessionId] = input.app;
 		await this.saveIndex();
@@ -954,6 +962,7 @@ export class SessionHost {
 			path: live.path,
 			id: session.sessionId,
 			cwd: live.cwd,
+			chat: isChat(live.cwd),
 			app: live.app,
 			title: this.titleFor(live),
 			runs: live.tracker.all(),

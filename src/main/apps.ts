@@ -39,6 +39,9 @@ const PROFILES: Record<AppId, AppProfile> = {
 
 export const triviumDir = process.env.TRIVIUM_HOME ?? join(homedir(), ".trivium");
 
+/** Where conversations started without a project run. pi gives every session a folder; this is theirs, shared. */
+export const chatsDir = join(triviumDir, "chats");
+
 function extensionDir(app: AppId): string {
 	return join(triviumDir, "apps", app, "extensions");
 }

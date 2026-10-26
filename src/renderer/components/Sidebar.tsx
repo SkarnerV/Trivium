@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
 import {
 	askConfirm,
@@ -28,6 +28,8 @@ const IS_WINDOWS = navigator.userAgent.includes("Windows");
 interface ProjectGroup {
 	cwd: string;
 	name: string;
+	/** Conversations started without a project. */
+	chat: boolean;
 	sessions: SessionSummary[];
 }
 
@@ -39,7 +41,12 @@ function groupByProject(sessions: SessionSummary[], app: AppId): ProjectGroup[] 
 		if (session.app !== app) continue;
 		let group = groups.get(session.cwd);
 		if (!group) {
-			group = { cwd: session.cwd, name: baseName(session.cwd) || "No project", sessions: [] };
+			group = {
+				cwd: session.cwd,
+				name: session.chat ? "Chats" : baseName(session.cwd) || "No project",
+				chat: session.chat,
+				sessions: [],
+			};
 			groups.set(session.cwd, group);
 		}
 		group.sessions.push(session);
@@ -172,7 +179,13 @@ export function SessionGroups() {
 								}))
 							}
 						>
-							{collapsed[`${app}:${group.cwd}`] ? <FolderIcon size={15} /> : <FolderOpenIcon size={15} />}
+							{group.chat ? (
+								<ChatIcon size={15} />
+							) : collapsed[`${app}:${group.cwd}`] ? (
+								<FolderIcon size={15} />
+							) : (
+								<FolderOpenIcon size={15} />
+							)}
 							<span className="ellipsis">{group.name}</span>
 						</button>
 						<span className="count">{group.sessions.length}</span>

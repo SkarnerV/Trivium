@@ -415,11 +415,8 @@ export interface TriviumApi {
 	pickFolder(): Promise<string | undefined>;
 	openSession(path: string): Promise<SessionView>;
 	newSession(input: NewSessionInput): Promise<SessionView>;
-	/**
-	 * Takes a session back to just before one of its runs, and returns that run's message to edit and send again.
-	 * Undefined when an extension cancelled it.
-	 */
-	rewind(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
+	/** Sends a new version of a run's message, in place of it and the replies that followed. */
+	editMessage(path: string, run: number, text: string): Promise<void>;
 	/** Copies the conversation before one of a session's runs into a new session, with that run's message to edit. */
 	fork(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
 	/** Moves session files to the Trash. Returns the paths that were deleted. */

@@ -295,11 +295,9 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 	return view;
 }
 
-/** Takes a session back to before one of its runs, with that run's message in the box to edit and send again. */
-export async function rewindTo(path: string, run: number): Promise<void> {
-	const result = await attempt(() => trivium.rewind(path, run));
-	if (!result) return;
-	setState((s) => ({ views: { ...s.views, [path]: result.view }, drafts: { ...s.drafts, [path]: result.draft } }));
+/** Sends a new version of an earlier message. Resolves false when it could not be sent. */
+export async function editMessage(path: string, run: number, text: string): Promise<boolean> {
+	return (await attempt(() => trivium.editMessage(path, run, text).then(() => true))) ?? false;
 }
 
 /** Copies a session up to one of its runs into a new session and shows it, with that run's message to edit. */

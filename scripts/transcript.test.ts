@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AttachmentStore } from "../src/main/attachments.ts";
-import { messageFiles, RunTracker } from "../src/main/transcript.ts";
+import { attachmentsOf, messageFiles, RunTracker } from "../src/main/transcript.ts";
 
 type Messages = ConstructorParameters<typeof RunTracker>[0];
 type Event = Parameters<RunTracker["apply"]>[0];
@@ -159,4 +159,11 @@ test("each run knows how many later runs began with a user message", () => {
 	assert.equal(tracker.userMessage(0), undefined);
 	assert.deepEqual(tracker.userMessage(1), { prompt: "First", later: 1 });
 	assert.deepEqual(tracker.userMessage(2), { prompt: "Second", later: 0 });
+});
+
+test("an edited message goes out with the files and images the original carried", () => {
+	const prefix = '<file name="/work/a.ts">\nexport {}\n</file>\n<file name="/work/shot.png"></file>\n';
+	const image = { type: "image", data: "aGk=", mimeType: "image/png" };
+	assert.deepEqual(attachmentsOf([{ type: "text", text: `${prefix}Old wording` }, image]), { prefix, images: [image] });
+	assert.deepEqual(attachmentsOf("Just text"), { prefix: "", images: [] });
 });

@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, BranchIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
-import { askConfirm, forkFrom, rewindTo, setState, useStore } from "../store.ts";
+import { AppIcon, BranchIcon, CheckIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
+import { attempt, editMessage, forkFrom, setState, trivium, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
@@ -40,74 +40,159 @@ function LimitCard({ limit }: { limit: LimitNotice }) {
 	);
 }
 
-/** Asks before taking the conversation back, since the later messages leave it and Trivium can't show them again. */
-async function editMessage(view: SessionView, index: number): Promise<void> {
-	const changed = view.changes.length
-		? " Files the agent changed stay as they are; revert them in the Changes panel if you need to."
-		: " Files on disk stay as they are.";
-	const ok = await askConfirm({
-		title: "Edit this message?",
-		message: `The conversation goes back to just before it, and the message moves to the box to edit and send again. The replies after it leave the conversation.${changed}`,
-		confirmLabel: "Edit message",
-	});
-	if (ok) await rewindTo(view.path, index);
+/**
+ * Edits a sent message in place. Nothing changes until it is sent: then the conversation starts over from
+ * this message, with the files and images it carried.
+ */
+function MessageEditor({ initial, canSendEmpty, onCancel, onSend }: {
+	initial: string;
+	/** The message has attachments, so it can go without text. */
+	canSendEmpty: boolean;
+	onCancel: () => void;
+	onSend: (text: string) => Promise<boolean>;
+}) {
+	const [text, setText] = useState(initial);
+	const [sending, setSending] = useState(false);
+	const ref = useRef<HTMLTextAreaElement>(null);
+	useLayoutEffect(() => {
+		const area = ref.current;
+		if (!area) return;
+		area.style.height = "auto";
+		area.style.height = `${Math.min(area.scrollHeight, 320)}px`;
+	}, [text]);
+	useEffect(() => {
+		const area = ref.current;
+		area?.focus();
+		area?.setSelectionRange(area.value.length, area.value.length);
+	}, []);
+	const ready = !sending && (text.trim().length > 0 || canSendEmpty) && text.trim() !== initial;
+	const send = async () => {
+		if (!ready) return;
+		setSending(true);
+		if (!(await onSend(text.trim()))) setSending(false);
+	};
+	return (
+		<div className="bubble-edit">
+			<textarea
+				ref={ref}
+				rows={1}
+				value={text}
+				aria-label="Edit message"
+				onChange={(event) => setText(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+						event.preventDefault();
+						void send();
+					} else if (event.key === "Escape") {
+						event.preventDefault();
+						onCancel();
+					}
+				}}
+			/>
+			<div className="bubble-edit-foot">
+				<span className="bubble-edit-hint">Sending starts over from here. Files stay as they are.</span>
+				<button type="button" className="btn ghost" onClick={onCancel}>
+					Cancel
+				</button>
+				<button type="button" className="btn primary" disabled={!ready} onClick={() => void send()}>
+					Send
+				</button>
+			</div>
+		</div>
+	);
 }
 
-function PromptActions({ view, index }: { view: SessionView; index: number }) {
+function MessageActions({ run, view, index, onEdit }: { run: Run; view: SessionView; index: number; onEdit: () => void }) {
+	const [copied, setCopied] = useState(false);
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 1500);
+		return () => clearTimeout(timer);
+	}, [copied]);
+	const text = run.prompt.trim();
 	return (
 		<div className="prompt-actions">
+			{text && (
+				<button
+					type="button"
+					className="prompt-action"
+					aria-label={copied ? "Copied" : "Copy message"}
+					title={copied ? "Copied" : "Copy"}
+					onClick={() => void attempt(() => trivium.copyText(text).then(() => true)).then((ok) => ok && setCopied(true))}
+				>
+					{copied ? <CheckIcon size={14} width={1.75} /> : <CopyIcon size={14} width={1.75} />}
+				</button>
+			)}
 			<button
 				type="button"
 				className="prompt-action"
 				aria-label="Edit message"
-				title={view.running ? "Stop the run to edit an earlier message" : "Edit and send again from here"}
+				title={view.running ? "Stop the run to edit an earlier message" : "Edit"}
 				disabled={view.running}
-				onClick={() => void editMessage(view, index)}
+				onClick={onEdit}
 			>
-				<PenIcon size={13} width={2} />
+				<PenIcon size={14} width={1.75} />
 			</button>
 			<button
 				type="button"
 				className="prompt-action"
 				aria-label="Fork from here"
-				title="Fork: a new session from before this message, with it ready to edit"
+				title="Fork into a new session from here"
 				onClick={() => void forkFrom(view.path, index)}
 			>
-				<BranchIcon size={13} />
+				<BranchIcon size={14} width={1.75} />
 			</button>
 		</div>
 	);
 }
 
+function UserMessage({ run, view, index }: { run: Run; view: SessionView; index: number }) {
+	const [editing, setEditing] = useState(false);
+	const text = run.prompt.trim();
+	return (
+		<div className={`prompt${editing ? " editing" : ""}`}>
+			{run.attachments?.length ? (
+				<div className="bubble-files">
+					{run.attachments.map((file, i) =>
+						file.id ? (
+							<ImageTile key={i} image={{ id: file.id, name: file.name, mimeType: file.mimeType ?? "image/png", thumb: file.thumb }} />
+						) : (
+							<span key={i} className="bubble-file" title={file.name}>
+								<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>
+								<span className="bubble-file-text">
+									<span className="ellipsis">{file.name}</span>
+									<span className="bubble-file-kind">{fileKind(file.name, file.kind)}</span>
+								</span>
+							</span>
+						),
+					)}
+				</div>
+			) : null}
+			{editing ? (
+				<MessageEditor
+					initial={text}
+					canSendEmpty={Boolean(run.attachments?.length)}
+					onCancel={() => setEditing(false)}
+					onSend={async (next) => {
+						const sent = await editMessage(view.path, index, next);
+						if (sent) setEditing(false);
+						return sent;
+					}}
+				/>
+			) : (
+				<>
+					{text && <div className="bubble">{text}</div>}
+					<MessageActions run={run} view={view} index={index} onEdit={() => setEditing(true)} />
+				</>
+			)}
+		</div>
+	);
+}
+
 function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: SessionView; index: number }) {
-	const sent = Boolean(run.prompt.trim() || run.attachments?.length);
 	return (
 		<div className="run">
-			{sent && (
-				<div className="prompt">
-					{run.attachments?.length ? (
-						<div className="bubble-files">
-							{run.attachments.map((file, i) =>
-								file.id ? (
-									<ImageTile key={i} image={{ id: file.id, name: file.name, mimeType: file.mimeType ?? "image/png", thumb: file.thumb }} />
-								) : (
-									<span key={i} className="bubble-file" title={file.name}>
-										<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>
-										<span className="bubble-file-text">
-											<span className="ellipsis">{file.name}</span>
-											<span className="bubble-file-kind">{fileKind(file.name, file.kind)}</span>
-										</span>
-									</span>
-								),
-							)}
-						</div>
-					) : null}
-					<div className="prompt-line">
-						<PromptActions view={view} index={index} />
-						{run.prompt.trim() && <div className="bubble">{run.prompt.trim()}</div>}
-					</div>
-				</div>
-			)}
+			{Boolean(run.prompt.trim() || run.attachments?.length) && <UserMessage run={run} view={view} index={index} />}
 			<div className="agent">
 				<Steps run={run} live={live} />
 				{run.answer && (

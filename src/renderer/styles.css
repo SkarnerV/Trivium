@@ -789,24 +789,22 @@ body.resizing * {
 }
 
 .prompt {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
 	gap: 8px;
 }
 
-/* Edit and Fork sit beside the message, shown while it is hovered or one of them has focus. */
-.prompt-line {
-	align-self: stretch;
-	display: flex;
-	align-items: flex-end;
-	justify-content: flex-end;
-	gap: 6px;
+/* Copy, Edit and Fork have their own row under the message, shown while it is hovered, so the reply never moves. */
+.prompt:not(.editing) {
+	margin-bottom: -12px;
 }
 
 .prompt-actions {
 	display: flex;
 	gap: 2px;
+	margin-top: -6px;
 	opacity: 0;
 	transition: opacity 0.12s;
 }
@@ -824,12 +822,56 @@ body.resizing * {
 	border: 0;
 	border-radius: 7px;
 	background: transparent;
-	color: var(--muted);
+	color: var(--ink-4);
 }
 
 .prompt-action:hover:not(:disabled) {
 	background: var(--soft);
 	color: var(--ink);
+}
+
+.bubble-edit {
+	width: 80%;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 12px 10px 14px;
+	border: 1px solid var(--edge);
+	border-radius: 16px;
+	background: #fff;
+	box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.bubble-edit textarea {
+	width: 100%;
+	max-height: 320px;
+	border: 0;
+	outline: none;
+	resize: none;
+	padding: 0;
+	background: transparent;
+	color: var(--ink);
+	font-size: 14px;
+}
+
+.bubble-edit-foot {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.bubble-edit-hint {
+	flex: 1;
+	min-width: 0;
+	font-size: 11.5px;
+	color: var(--muted);
+}
+
+.bubble-edit-foot .btn {
+	min-height: 30px;
+	padding: 0 12px;
+	border-radius: 8px;
+	font-size: 12.5px;
 }
 
 .bubble {

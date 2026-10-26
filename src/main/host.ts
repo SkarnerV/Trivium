@@ -51,7 +51,7 @@ import { ChangeTracker } from "./changes.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
-import { type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
+import { attachmentsOf, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
 	path: string;
@@ -68,7 +68,7 @@ interface Live {
 	lastActive: number;
 }
 
-/** A session shown at an earlier message, and that message taken back out to edit and send again. */
+/** A session forked before a message, and that message taken back out to edit and send. */
 export interface Rewound {
 	view: SessionView;
 	prompt: string;
@@ -326,19 +326,24 @@ export class SessionHost {
 	}
 
 	/**
-	 * Takes the conversation back to just before a run's message, so it can be edited and sent again.
-	 * pi keeps the later messages on their own branch of the session file. Files on disk stay as they are.
-	 * Undefined when an extension cancelled it.
+	 * Sends a new version of an earlier message: the conversation goes back to just before it, then the new
+	 * text goes out with the files and images the original carried. pi keeps the replies that followed on
+	 * their own branch of the session file. Files on disk stay as they are.
 	 */
-	async rewind(path: string, index: number): Promise<Rewound | undefined> {
+	async editMessage(path: string, index: number, text: string): Promise<void> {
 		const live = this.require(path);
 		if (live.running) throw new Error("Stop the run before editing an earlier message.");
 		const entry = this.userEntry(live, index);
+		const original = attachmentsOf(entry.message.content);
+		const attached = original.prefix || original.images.length ? original : undefined;
+		if (!text.trim() && !attached) throw new Error("Write a message to send.");
 		const result = await live.session.navigateTree(entry.id);
-		if (result.cancelled) return undefined;
+		if (result.cancelled) return;
 		live.tracker = new RunTracker(live.session.messages, this.thumbnail);
+		// The shorter transcript must reach the window before the new run's events do.
+		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
 		this.scheduleList();
-		return { view: this.view(live, await live.changes.list()), ...messageFiles(entry.message.content) };
+		await this.send(path, text, "prompt", attached);
 	}
 
 	/**

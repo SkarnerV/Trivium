@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ImageContent } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
@@ -95,6 +96,14 @@ export function messageFiles(content: unknown): { prompt: string; files: Message
 		rest = rest.slice(match[0].length);
 	}
 	return files.length ? { prompt: rest, files } : { prompt: text, files };
+}
+
+/** A sent message's <file> tags and images, to send again in front of new text. */
+export function attachmentsOf(content: unknown): { prefix: string; images: ImageContent[] } {
+	const text = textOf(content);
+	const { prompt } = messageFiles(content);
+	const images = imagesOf(content).map((image): ImageContent => ({ type: "image", data: image.data, mimeType: image.mimeType }));
+	return { prefix: text.slice(0, text.length - prompt.length), images };
 }
 
 /** The prompt and what was sent with it, for the transcript. `keep` stores images so they can be shown. */

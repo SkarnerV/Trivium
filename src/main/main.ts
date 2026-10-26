@@ -157,10 +157,10 @@ function registerIpc(): void {
 	});
 	handle("trivium:openSession", (path: string) => host.openSession(path));
 	handle("trivium:newSession", (input: NewSessionInput) => host.newSession(input));
-	// The message comes back with its attachments stored again, so it can be sent as it was.
+	// A forked message comes back with its attachments stored again, so it can be sent as it was.
 	const draftOf = (rewound: Rewound | undefined) =>
 		rewound && { view: rewound.view, draft: { text: rewound.prompt, attachments: attachments.fromMessage(rewound.files) } };
-	handle("trivium:rewind", async (path: string, run: number) => draftOf(await host.rewind(path, run)));
+	handle("trivium:editMessage", (path: string, run: number, text: string) => host.editMessage(path, run, text));
 	handle("trivium:fork", async (path: string, run: number) => draftOf(await host.fork(path, run)));
 	handle("trivium:send", async (path: string, text: string, mode: "prompt" | "steer" | "followUp", ids?: string[]) => {
 		await host.send(path, text, mode, ids?.length ? attachments.build(ids) : undefined);

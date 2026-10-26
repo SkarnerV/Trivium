@@ -11,6 +11,7 @@ import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
+import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
@@ -22,6 +23,8 @@ const page = pathToFileURL(join(assets, "index.html")).href;
 let window: BrowserWindow | undefined;
 
 app.setName("Trivium");
+// Before any session loads its extensions.
+installNodeHost();
 if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
 
 mkdirSync(triviumDir, { recursive: true });

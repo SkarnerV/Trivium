@@ -72,13 +72,17 @@ jobs:
           $tag = $env:RELEASE_TAG
           $body = gh release view $tag --repo $repo --json body --jq .body
           if ($LASTEXITCODE -ne 0) { throw 'Existing release could not be read' }
+          $originalNotes = [string]::Join("`n", $body)
+          $windowsLine = '(?m)^- \*\*Windows x64[^\r\n]*'
+          if (-not [regex]::IsMatch($originalNotes, $windowsLine)) { throw 'Windows download instructions could not be found' }
           $archive = @(Get-ChildItem release-source/release/*.zip)[0]
           gh release upload $tag $archive.FullName --repo $repo --clobber
           if ($LASTEXITCODE -ne 0) { throw 'ZIP upload failed' }
           $instructions = '- **Windows x64 (recommended):** download `' + $archive.Name + '`, extract the whole ZIP, and run `Trivium.exe` inside the extracted folder. Extraction happens once; keep the executable with its accompanying files.'
-          $notes = ([string]::Join("`n", $body)) -replace '(?m)^- \*\*Windows x64[^\r\n]*', $instructions
-          if ($notes -eq [string]::Join("`n", $body)) { throw 'Windows download instructions could not be found' }
-          $notes += "`n`nThe original portable Windows EXE remains available, but extracts its runtime on every launch and starts more slowly. The ZIP avoids that repeated extraction."
+          $notes = $originalNotes -replace $windowsLine, $instructions
+          if (-not $notes.Contains('The original portable Windows EXE remains available')) {
+            $notes += "`n`nThe original portable Windows EXE remains available, but extracts its runtime on every launch and starts more slowly. The ZIP avoids that repeated extraction."
+          }
           Set-Content -LiteralPath release-notes.md -Value $notes -Encoding utf8
           gh release edit $tag --repo $repo --notes-file release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }

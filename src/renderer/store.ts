@@ -44,7 +44,7 @@ export interface State {
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
 	overlay: "new" | "search" | null;
-	page: "main" | "settings";
+	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
 	/** Text to put in a session's message box when it next shows. */
@@ -152,7 +152,7 @@ export function dismissNotice(id: string): void {
 	setState((s) => ({ notices: s.notices.filter((n) => n.id !== id) }));
 }
 
-function errorText(error: unknown): string {
+export function errorText(error: unknown): string {
 	const text = error instanceof Error ? error.message : String(error);
 	// Electron prefixes IPC errors with the channel name.
 	return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -378,6 +378,11 @@ export function openSettings(section?: SettingsSection): void {
 	else update();
 }
 
+export function openMemory(): void {
+	if (getState().page !== "memory") transition("page", () => setState({ page: "memory", overlay: null, peek: false }));
+}
+
+/** Back to the session on screen, from Settings or Memory. */
 export function closeSettings(): void {
 	if (getState().page !== "main") transition("page", () => setState({ page: "main" }));
 	const { selected, app, views } = getState();

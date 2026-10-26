@@ -74,6 +74,17 @@ const api: TriviumApi = {
 	setDefaultModel: call("setDefaultModel") as TriviumApi["setDefaultModel"],
 	appInfo: call("appInfo") as TriviumApi["appInfo"],
 	openPath: call("openPath") as TriviumApi["openPath"],
+	memoryOverview: call("memoryOverview") as TriviumApi["memoryOverview"],
+	memoryFile: call("memoryFile") as TriviumApi["memoryFile"],
+	memoryDays: call("memoryDays") as TriviumApi["memoryDays"],
+	memoryDeleted: call("memoryDeleted") as TriviumApi["memoryDeleted"],
+	memoryAdd: call("memoryAdd") as TriviumApi["memoryAdd"],
+	memoryEdit: call("memoryEdit") as TriviumApi["memoryEdit"],
+	memoryDelete: call("memoryDelete") as TriviumApi["memoryDelete"],
+	memoryMoveToTop: call("memoryMoveToTop") as TriviumApi["memoryMoveToTop"],
+	memoryRestore: call("memoryRestore") as TriviumApi["memoryRestore"],
+	setMemoryConsent: call("setMemoryConsent") as TriviumApi["setMemoryConsent"],
+	keepMemoryLocal: call("keepMemoryLocal") as TriviumApi["keepMemoryLocal"],
 	onEvent(listener) {
 		const wrapped = (_event: unknown, payload: HostEvent) => listener(payload);
 		ipcRenderer.on("trivium:event", wrapped);

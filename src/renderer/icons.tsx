@@ -267,6 +267,45 @@ export const StopIcon = () => (
 	</svg>
 );
 
+export const MemoryIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+		<path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+		<path d="M12 5v13" />
+	</Svg>
+);
+export const GlobeIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<circle cx="12" cy="12" r="9" />
+		<path d="M3 12h18" />
+		<path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18" />
+	</Svg>
+);
+export const CalendarIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<rect x="4" y="5" width="16" height="16" rx="2" />
+		<path d="M16 3v4M8 3v4M4 11h16" />
+	</Svg>
+);
+export const UndoIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M4 8v5h5" />
+		<path d="M20 17a8 8 0 0 0-14-5.3L4 13" />
+	</Svg>
+);
+export const ShieldIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M12 21s7-3.5 7-9V6l-7-3-7 3v6c0 5.5 7 9 7 9z" />
+	</Svg>
+);
+export const ToTopIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M5 4h14" />
+		<path d="M12 20V9" />
+		<path d="m7 13 5-5 5 5" />
+	</Svg>
+);
+
 export function AppIcon({ app, size = 14 }: { app: AppId; size?: number }) {
 	if (app === "research") return <SearchIcon size={size} width={2.4} />;
 	if (app === "write") return <PenIcon size={size} />;

@@ -11,8 +11,9 @@ import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { ReviewPanel } from "./ReviewPanel.tsx";
-import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./Overlays.tsx";
+import { ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
 import { EmptyPane, SessionPane } from "./SessionPane.tsx";
+import { MemoryPage } from "./Memory.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { AppSwitcher, PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
 
@@ -117,7 +118,7 @@ function useShortcuts() {
 				else openSettings();
 				return;
 			}
-			if (state.page === "settings") return;
+			if (state.page !== "main") return;
 			if (/^[1-3]$/.test(event.key) && !state.overlay) {
 				switchApp(APP_IDS[Number(event.key) - 1]!);
 			} else if (event.key === "n") {
@@ -140,9 +141,10 @@ function useShortcuts() {
 function useDialogAlerts() {
 	const dialogs = useStore((s) => s.dialogs);
 	useEffect(() => {
-		const { selected, app, sessions } = getState();
+		const { selected, app, sessions, views } = getState();
 		for (const dialog of dialogs) {
-			if (dialog.sessionPath === selected[app]) continue;
+			// A session not on screen yet asks in StartingSessionDialog instead.
+			if (dialog.sessionPath === selected[app] || !views[dialog.sessionPath]) continue;
 			const session = sessions.find((s) => s.path === dialog.sessionPath);
 			notify(`"${session?.title ?? "A session"}" is waiting for your answer`, "warning");
 		}
@@ -182,6 +184,16 @@ export function App() {
 			void trivium.setWindowChrome(vars["--chrome"]!).catch(console.error);
 		}
 	}, [vars["--chrome"]]);
+	if (page === "memory") {
+		return (
+			<div className="shell" style={themeVars(NEUTRAL)}>
+				<WindowTitleBar app={iconApp} />
+				<MemoryPage />
+				<ConfirmDialog />
+				<Toasts />
+			</div>
+		);
+	}
 	if (page === "settings") {
 		return (
 			<div className="shell" style={vars}>
@@ -212,6 +224,7 @@ export function App() {
 			<ConfirmDialog />
 			<ImageLightbox />
 			<TrustDialog />
+			<StartingSessionDialog />
 		</div>
 	);
 }

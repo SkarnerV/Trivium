@@ -11,9 +11,9 @@ import { builtInPackages } from "../src/shared/recommended.ts";
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { dependencies: Record<string, string> };
 
 test("each app ships the chosen packages", () => {
-	assert.deepEqual(builtInPackages("code"), ["@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode", "pi-subagents"]);
-	assert.deepEqual(builtInPackages("research"), ["pi-docparser", "pi-memory", "pi-subagents"]);
-	assert.deepEqual(builtInPackages("write"), ["pi-markdown-preview"]);
+	assert.deepEqual(builtInPackages("code"), ["@gotgenes/pi-permission-system", "@pify/memory", "@narumitw/pi-plan-mode", "pi-subagents"]);
+	assert.deepEqual(builtInPackages("research"), ["pi-docparser", "@pify/memory", "pi-subagents"]);
+	assert.deepEqual(builtInPackages("write"), ["@pify/memory", "pi-markdown-preview"]);
 });
 
 test("every shipped package is a pinned dependency with a pi manifest", () => {
@@ -29,10 +29,10 @@ test("removed packages and ones installed through pi don't load from Trivium", (
 	const find = (name: string) => `/shipped/${name}`;
 	assert.deepEqual(
 		activeBuiltIns("code", [], [], find).map((entry) => entry.name),
-		["@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode", "pi-subagents"],
+		["@gotgenes/pi-permission-system", "@pify/memory", "@narumitw/pi-plan-mode", "pi-subagents"],
 	);
 	const installed = ["npm:pi-subagents@0.80.0", { source: "npm:@narumitw/pi-plan-mode" }];
-	assert.deepEqual(activeBuiltIns("code", ["@gotgenes/pi-permission-system"], installed, find), []);
+	assert.deepEqual(activeBuiltIns("code", ["@gotgenes/pi-permission-system"], installed, find).map((entry) => entry.name), ["@pify/memory"]);
 	assert.deepEqual(activeBuiltIns("write", [], [], () => undefined), []);
 });
 

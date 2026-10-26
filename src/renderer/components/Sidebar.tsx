@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
 import {
 	askConfirm,
@@ -10,6 +10,7 @@ import {
 	deleteSessions,
 	getState,
 	notify,
+	openMemory,
 	openSession,
 	openSettings,
 	setState,
@@ -307,6 +308,10 @@ export function Sidebar() {
 					<PlusIcon />
 					<span className="label">New session</span>
 				</button>
+				<button type="button" className="sb-row" onClick={openMemory}>
+					<MemoryIcon />
+					<span className="label">Memory</span>
+				</button>
 			</div>
 			<div className="sb-label" aria-hidden="true">Projects</div>
 			<div className="sb-sessions">
@@ -362,6 +367,9 @@ export function Rail() {
 			</button>
 			<button type="button" className="rail-btn" aria-label="New session" title="New session" onClick={() => setState({ overlay: "new" })}>
 				<PlusIcon size={17} />
+			</button>
+			<button type="button" className="rail-btn" aria-label="Memory" title="Memory" onClick={openMemory}>
+				<MemoryIcon size={17} />
 			</button>
 			<span style={{ flex: 1 }} />
 			<button type="button" className="rail-btn" aria-label="Settings" title="Settings" onClick={() => openSettings()}>

@@ -28,6 +28,13 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 			note: "Starts with a policy that blocks .env files and asks before rm -rf, sudo, git push and folders outside the project. Edit it in ~/.pi/agent/extensions/pi-permission-system/config.json.",
 		},
 		{
+			name: "@pify/memory",
+			builtIn: true,
+			adds: "memory_write, memory_search, memory_read and /memory",
+			why: "Remembers how each project builds and runs, and the corrections you give, across sessions.",
+			note: "Keeps each project's memory in .pi/memory/MEMORY.md, and asks once per project before loading it. Refuses to save secrets.",
+		},
+		{
 			name: "pi-lens",
 			adds: "Type-checking, linters and language-server diagnostics after each edit",
 			why: "The agent sees the errors its edits caused right away, instead of finishing with broken code.",
@@ -71,11 +78,11 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 			why: "Reads and searches the PDFs and documents you already have, locally.",
 		},
 		{
-			name: "pi-memory",
+			name: "@pify/memory",
 			builtIn: true,
-			adds: "memory_write, memory_search, memory_read and a scratchpad",
+			adds: "memory_write, memory_search, memory_read and /memory",
 			why: "Keeps findings across sessions, with search, so last week's research can be found again.",
-			note: "Keeps memory in ~/.pi/agent/memory. Search needs qmd, installed separately.",
+			note: "Keeps global memory in ~/.pi/agent/memory and each project's in .pi/memory/MEMORY.md.",
 		},
 		{
 			name: "pi-subagents",
@@ -86,6 +93,13 @@ export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 		},
 	],
 	write: [
+		{
+			name: "@pify/memory",
+			builtIn: true,
+			adds: "memory_write, memory_search, memory_read and /memory",
+			why: "Remembers your style, terms and the corrections you give, across documents and sessions.",
+			note: "Shares memory with Code and Research. Keeps each project's in .pi/memory/MEMORY.md.",
+		},
 		{
 			name: "pi-web-search",
 			adds: "web_search and url_context through your model provider",

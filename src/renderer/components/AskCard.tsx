@@ -3,7 +3,7 @@ import type { DialogAnswer, DialogRequest } from "../../shared/protocol.ts";
 import { WarnIcon } from "../icons.tsx";
 import { attempt, trivium, setState } from "../store.ts";
 
-function answer(id: string, value: DialogAnswer): void {
+export function answer(id: string, value: DialogAnswer): void {
 	setState((s) => ({ dialogs: s.dialogs.filter((d) => d.id !== id) }));
 	void attempt(() => trivium.answerDialog(id, value));
 }

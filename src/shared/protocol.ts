@@ -419,6 +419,74 @@ export interface AppInfo {
 	defaultThinkingLevel?: string;
 }
 
+/** pify memory's entry categories, written as `- [category] text`. */
+export const MEMORY_CATEGORIES = ["convention", "failure", "correction", "tool-quirk", "insight", "preference"] as const;
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+
+/** A memory file: the global one, a project's, or one day's log. */
+export type MemoryTarget = { kind: "global" } | { kind: "project"; cwd: string } | { kind: "daily"; date: string };
+
+export interface MemoryEntry {
+	/** 0-based line in the file. */
+	line: number;
+	/** The line as it was read, so a change made on a stale page is refused. */
+	raw: string;
+	category?: MemoryCategory;
+	text: string;
+	/** HH:MM, for daily log entries. */
+	time?: string;
+	/** Within the part of the file that goes into each new session. */
+	loaded: boolean;
+	/** A failure or correction pify still recalls into new sessions, from a day that no longer loads. */
+	recalled?: boolean;
+}
+
+export interface MemoryFile {
+	path: string;
+	exists: boolean;
+	/** Characters pify counts against the limit: the file, trimmed. */
+	chars: number;
+	limit: number;
+	/** Whether this file goes into new sessions at all. Only today's and yesterday's logs do. */
+	loads: boolean;
+	entries: MemoryEntry[];
+}
+
+export interface MemoryDay {
+	date: string;
+	file: MemoryFile;
+}
+
+export interface MemoryWorkspace {
+	cwd: string;
+	name: string;
+	path: string;
+	entries: number;
+	/** The answer to "Load this project's memory?"; unset until asked. */
+	consent?: boolean;
+	git: "tracked" | "untracked" | "ignored" | "none";
+}
+
+export interface MemoryOverview {
+	global: { path: string; entries: number };
+	workspaces: MemoryWorkspace[];
+	days: number;
+	deleted: number;
+}
+
+export interface MemoryDeletion {
+	id: string;
+	timestamp: number;
+	/** "replaced" is a whole-file snapshot, such as pify's /memory consolidate keeps. */
+	kind: "deleted" | "replaced";
+	items: { where: string; category?: MemoryCategory; text: string }[];
+}
+
+/** An edit the store refused with a reason to show beside the field, such as a credential in the text. */
+export interface MemoryResult {
+	error?: string;
+}
+
 export type AuthPromptRequest =
 	| { id: string; type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
 	| { id: string; type: "select"; message: string; options: { id: string; label: string; description?: string }[] };
@@ -534,5 +602,19 @@ export interface TriviumApi {
 	setDefaultModel(modelKey: string, thinkingLevel: string): Promise<void>;
 	appInfo(): Promise<AppInfo>;
 	openPath(path: string): Promise<void>;
+	memoryOverview(): Promise<MemoryOverview>;
+	memoryFile(target: MemoryTarget): Promise<MemoryFile>;
+	/** Every daily log, newest first. */
+	memoryDays(): Promise<MemoryDay[]>;
+	memoryDeleted(): Promise<MemoryDeletion[]>;
+	memoryAdd(target: MemoryTarget, category: MemoryCategory | undefined, text: string): Promise<MemoryResult>;
+	memoryEdit(target: MemoryTarget, entry: Pick<MemoryEntry, "line" | "raw">, category: MemoryCategory | undefined, text: string): Promise<MemoryResult>;
+	/** Deletes an entry, keeping it in pify's recovery folder. Resolves with the recovery id. */
+	memoryDelete(target: MemoryTarget, entry: Pick<MemoryEntry, "line" | "raw">): Promise<string>;
+	memoryMoveToTop(target: MemoryTarget, entry: Pick<MemoryEntry, "line" | "raw">): Promise<void>;
+	memoryRestore(id: string): Promise<void>;
+	setMemoryConsent(cwd: string, allowed: boolean): Promise<void>;
+	/** Keeps a project's memory file out of git on this computer only, through .git/info/exclude. */
+	keepMemoryLocal(cwd: string): Promise<void>;
 	onEvent(listener: (event: HostEvent) => void): () => void;
 }

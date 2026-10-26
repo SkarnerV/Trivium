@@ -11,6 +11,9 @@ import type {
 	CustomProvider,
 	DialogAnswer,
 	HostEvent,
+	MemoryCategory,
+	MemoryEntry,
+	MemoryTarget,
 	NewSessionInput,
 	PresetProviderChanges,
 	TriviumSettings,
@@ -32,12 +35,17 @@ import {
 	savePresetProvider,
 } from "./custom-models.ts";
 import { exportFileName, sessionMarkdown } from "./export.ts";
+import { recallLessons } from "@pify/memory/src/lessons.ts";
+import { scanForSecrets } from "@pify/memory/src/secrets.ts";
+import { MemoryStore } from "./memory.ts";
 import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
 import { SettingsStore } from "./settings.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
+
+type MemoryEntryRef = Pick<MemoryEntry, "line" | "raw">;
 
 const assets = fileURLToPath(new URL("./", import.meta.url));
 const page = pathToFileURL(join(assets, "index.html")).href;
@@ -96,6 +104,10 @@ function thumbnail(data: string, mimeType: string): string | undefined {
 	return mimeType === "image/jpeg" ? `data:image/jpeg;base64,${small.toJPEG(82).toString("base64")}` : small.toDataURL();
 }
 const attachments = new AttachmentStore();
+// The Memory page decides what loads, what is recalled and what counts as a secret with @pify/memory's own code.
+const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
+	...new Set((await host.listSessions()).flatMap((session) => (session.cwd ? [session.cwd] : []))),
+]);
 // pi's login flow asks the host for this installation's device ID.
 const loginSettings = SettingsManager.create(homedir(), getAgentDir());
 const login = new LoginFlow(
@@ -291,6 +303,19 @@ function registerIpc(): void {
 		const error = await shell.openPath(path);
 		if (error) throw new Error(error);
 	});
+	handle("trivium:memoryOverview", () => memory.overview());
+	handle("trivium:memoryFile", (target: MemoryTarget) => memory.file(target));
+	handle("trivium:memoryDays", () => memory.days());
+	handle("trivium:memoryDeleted", () => memory.deleted());
+	handle("trivium:memoryAdd", (target: MemoryTarget, category: MemoryCategory | undefined, text: string) => memory.add(target, category, text));
+	handle("trivium:memoryEdit", (target: MemoryTarget, entry: MemoryEntryRef, category: MemoryCategory | undefined, text: string) =>
+		memory.edit(target, entry, category, text),
+	);
+	handle("trivium:memoryDelete", (target: MemoryTarget, entry: MemoryEntryRef) => memory.delete(target, entry));
+	handle("trivium:memoryMoveToTop", (target: MemoryTarget, entry: MemoryEntryRef) => memory.moveToTop(target, entry));
+	handle("trivium:memoryRestore", (id: string) => memory.restore(id));
+	handle("trivium:setMemoryConsent", (cwd: string, allowed: boolean) => memory.setConsent(cwd, allowed));
+	handle("trivium:keepMemoryLocal", (cwd: string) => memory.keepLocal(cwd));
 	handle("trivium:openFile", async (file: string) => {
 		const error = await shell.openPath(file);
 		if (error) throw new Error(error);

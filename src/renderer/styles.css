@@ -4771,3 +4771,368 @@ body.resizing * {
 .session-item.menu-open .session-row:not([aria-current="page"]) {
 	background: var(--tab);
 }
+
+/* Memory */
+
+.mem-nav-empty {
+	margin: 0;
+	padding: 2px 12px 6px;
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+.mem-meter {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px 16px;
+}
+
+.mem-meter-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+}
+
+.mem-meter-top strong {
+	font-weight: 600;
+}
+
+.mem-meter-top span {
+	color: var(--ink-3);
+	font-size: 12.5px;
+}
+
+.mem-bar {
+	height: 8px;
+	border-radius: 99px;
+	background: var(--soft);
+	overflow: hidden;
+}
+
+.mem-bar i {
+	display: block;
+	height: 100%;
+	border-radius: 99px;
+	background: var(--accent);
+}
+
+.mem-bar.full i {
+	background: #c27803;
+}
+
+.mem-bar.off i {
+	background: var(--ink-4);
+}
+
+/* Rows in a list card, ruled apart; groups (a day, an entry with its cut line) don't add a rule of their own. */
+.mem-list .mem-entry,
+.mem-list .mem-cut,
+.mem-list .mem-day,
+.mem-list .mem-add,
+.mem-list .mem-edit,
+.mem-list > .s-empty {
+	border-top: 1px solid var(--line);
+}
+
+.mem-list > :first-child,
+.mem-list > :first-child > :first-child {
+	border-top: 0;
+	border-top-left-radius: 14px;
+	border-top-right-radius: 14px;
+}
+
+.mem-list > :last-child,
+.mem-list > :last-child > :last-child {
+	border-bottom-left-radius: 14px;
+	border-bottom-right-radius: 14px;
+}
+
+.mem-entry {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 11px 12px 11px 16px;
+}
+
+.mem-entry:hover,
+.mem-entry:focus-within {
+	background: color-mix(in srgb, var(--soft) 45%, #fff);
+}
+
+.mem-text {
+	flex: 1;
+	min-width: 0;
+	padding-top: 1px;
+	color: var(--ink);
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+.mem-entry.out .mem-text {
+	color: var(--ink-4);
+}
+
+.mem-time {
+	flex: none;
+	width: 38px;
+	padding-top: 2px;
+	color: var(--ink-4);
+	font-family: var(--mono);
+	font-size: 12px;
+}
+
+.mem-text code,
+.mem-error code {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--tray);
+	box-shadow: inset 0 0 0 1px var(--line);
+	font-family: var(--mono);
+	font-size: 12px;
+}
+
+.mem-actions {
+	flex: none;
+	display: flex;
+	gap: 2px;
+	margin: -5px -2px -5px 0;
+	visibility: hidden;
+}
+
+.mem-entry:hover .mem-actions,
+.mem-entry:focus-within .mem-actions {
+	visibility: visible;
+}
+
+.mem-cat {
+	flex: none;
+	min-width: 78px;
+	margin-top: 1px;
+	padding: 1px 7px;
+	border-radius: 6px;
+	font-size: 11.5px;
+	line-height: 18px;
+	text-align: center;
+}
+
+.mem-cat.convention {
+	background: #eceefe;
+	color: #3f45b5;
+}
+
+.mem-cat.failure {
+	background: #fdecec;
+	color: #a12a2f;
+}
+
+.mem-cat.correction {
+	background: #fff1dc;
+	color: #8f5208;
+}
+
+.mem-cat.tool-quirk {
+	background: #e3f4f4;
+	color: #17676b;
+}
+
+.mem-cat.insight {
+	background: #e6f4ea;
+	color: #1f6b3a;
+}
+
+.mem-cat.preference {
+	background: #f2ebfb;
+	color: #6a3aa2;
+}
+
+.mem-cat.note {
+	background: var(--tray);
+	box-shadow: inset 0 0 0 1px var(--line);
+	color: var(--ink-3);
+}
+
+.mem-recalled {
+	flex: none;
+	padding-top: 2px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.mem-cut {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 16px;
+	background: #fffaf0;
+	color: #8f5208;
+	font-size: 12px;
+}
+
+.mem-day {
+	display: flex;
+	justify-content: space-between;
+	padding: 8px 16px;
+	background: var(--tray);
+	color: var(--ink-3);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.mem-edit {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 16px;
+	background: color-mix(in srgb, var(--soft) 35%, #fff);
+}
+
+.mem-edit textarea,
+.mem-add input {
+	width: 100%;
+	min-width: 0;
+	padding: 8px 10px;
+	border: 0;
+	border-radius: 8px;
+	outline: none;
+	background: #fff;
+	box-shadow: 0 0 0 1px var(--edge);
+	line-height: 1.5;
+	resize: none;
+}
+
+.mem-edit textarea,
+.mem-add input:focus {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.mem-edit.bad textarea,
+.mem-add.bad input {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--del) 45%, transparent);
+}
+
+.mem-edit-foot,
+.mem-add-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mem-edit-foot .hint {
+	flex: 1;
+}
+
+.mem-add {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 16px;
+}
+
+.mem-add-row .dd,
+.mem-edit-foot .dd {
+	flex: none;
+	width: 124px;
+}
+
+.mem-add-row .dd-trigger,
+.mem-edit-foot .dd-trigger {
+	width: 100%;
+	justify-content: space-between;
+}
+
+.mem-error {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	color: var(--del);
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+
+.mem-error svg {
+	flex: none;
+	margin-top: 2px;
+}
+
+.mem-filters {
+	display: flex;
+	gap: 4px;
+}
+
+.mem-filters button {
+	padding: 3px 9px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.mem-filters button:hover {
+	color: var(--ink);
+}
+
+.mem-filters button[aria-pressed="true"] {
+	background: var(--soft);
+	color: var(--ink);
+	font-weight: 500;
+}
+
+.mem-deleted {
+	align-items: center;
+}
+
+.mem-deleted-items {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.mem-deleted-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.mem-where {
+	color: var(--ink-4);
+}
+
+.mem-undo {
+	position: fixed;
+	left: 50%;
+	bottom: 28px;
+	z-index: 300;
+	max-width: min(560px, calc(100vw - 48px));
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 9px 10px 9px 16px;
+	border-radius: 12px;
+	background: #1f2027;
+	box-shadow: 0 12px 32px rgba(19, 20, 43, 0.24);
+	color: #fff;
+	transform: translateX(-50%);
+	animation: toast-in 180ms ease-out;
+}
+
+.mem-undo button {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.12);
+	color: #fff;
+	font-weight: 500;
+}
+
+.mem-undo button:hover {
+	background: rgba(255, 255, 255, 0.2);
+}

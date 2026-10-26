@@ -4,6 +4,7 @@ import { baseName, relativeTime, shortPath } from "../format.ts";
 import { AppIcon, CloseIcon, FolderIcon } from "../icons.tsx";
 import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { AskCard, answer } from "./AskCard.tsx";
 
 const close = () => setState({ overlay: null });
 
@@ -195,6 +196,56 @@ export function ConfirmDialog() {
 					</button>
 					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
 						{request.confirmLabel}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * A question from a session with nothing on screen to ask it in, such as an extension asking while its session
+ * starts: the session opens only once it is answered.
+ */
+export function StartingSessionDialog() {
+	const request = useStore((s) => s.dialogs.find((dialog) => !s.views[dialog.sessionPath]));
+	const allowButton = useRef<HTMLButtonElement>(null);
+	useEffect(() => allowButton.current?.focus(), [request?.id]);
+	if (!request) return null;
+	if (request.kind !== "confirm") {
+		return (
+			<div className="scrim">
+				<div className="modal" role="dialog" aria-modal="true" style={{ width: 500, padding: 0 }}>
+					<AskCard request={request} />
+				</div>
+			</div>
+		);
+	}
+	return (
+		<div
+			className="scrim"
+			onKeyDown={(event) => {
+				if (event.key === "Escape") {
+					event.preventDefault();
+					answer(request.id, { confirmed: false });
+				}
+			}}
+		>
+			<div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="starting-title" aria-describedby="starting-message" style={{ width: 500, gap: 14 }}>
+				<h2 id="starting-title" style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+					{request.title}
+				</h2>
+				{request.message && (
+					<p id="starting-message" className="set-sub" style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+						{request.message}
+					</p>
+				)}
+				<div className="modal-foot">
+					<button type="button" className="btn ghost" onClick={() => answer(request.id, { confirmed: false })}>
+						Decline
+					</button>
+					<button ref={allowButton} type="button" className="btn primary" onClick={() => answer(request.id, { confirmed: true })}>
+						Allow
 					</button>
 				</div>
 			</div>

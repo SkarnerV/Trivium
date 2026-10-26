@@ -143,6 +143,21 @@ export const AlertIcon = (p: IconProps) => (
 		<path d="M12 16h.01" />
 	</Svg>
 );
+export const DownloadIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M12 4v11" />
+		<path d="m7 10 5 5 5-5" />
+		<path d="M5 20h14" />
+	</Svg>
+);
+export const ExpandIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M15 4h5v5" />
+		<path d="M9 20H4v-5" />
+		<path d="M20 4l-6 6" />
+		<path d="M4 20l6-6" />
+	</Svg>
+);
 export const PaperclipIcon = (p: IconProps) => (
 	<Svg size={16} {...p}>
 		<path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />

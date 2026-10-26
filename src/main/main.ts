@@ -1,6 +1,7 @@
 import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
@@ -214,6 +215,17 @@ function registerIpc(): void {
 		if (error) throw new Error(error);
 	});
 	handle("trivium:readChangedFile", (path: string, file: string) => host.readChangedFile(path, file));
+	handle("trivium:imageData", (path: string, id: string) => {
+		const image = host.image(path, id);
+		return `data:${image.mimeType};base64,${image.data}`;
+	});
+	handle("trivium:saveImage", async (path: string, id: string, name: string) => {
+		const image = host.image(path, id);
+		const result = await dialog.showSaveDialog(window!, { title: "Save image", defaultPath: join(app.getPath("downloads"), basename(name)) });
+		if (result.canceled || !result.filePath) return false;
+		await writeFile(result.filePath, Buffer.from(image.data, "base64"));
+		return true;
+	});
 	handle("trivium:reviewFile", (path: string, file: string) => host.reviewFile(path, file));
 	handle(
 		"trivium:resolveChange",

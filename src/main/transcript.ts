@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { Run, Step } from "../shared/protocol.ts";
+import type { Run, Step, TranscriptImage } from "../shared/protocol.ts";
 
 /**
  * Turns pi's message stream into runs: one user message, the steps the agent
@@ -26,6 +26,7 @@ interface ToolState {
 	durationMs?: number;
 	startedAt?: number;
 	tail?: string;
+	images?: TranscriptImage[];
 }
 
 interface RunState {
@@ -53,19 +54,22 @@ function textOf(content: unknown): string {
 /** Makes a small preview of an image sent with a prompt. The host supplies it, since resizing needs Electron. */
 export type Thumbnail = (data: string, mimeType: string) => string | undefined;
 
-function imagesOf(content: unknown): { data: string; mimeType: string }[] {
+function imagesOf(content: unknown): ImagePart[] {
 	if (!Array.isArray(content)) return [];
 	return content.filter(
 		(part): part is { type: "image"; data: string; mimeType: string } => part?.type === "image" && typeof part.data === "string",
 	);
 }
 
+type ImagePart = { data: string; mimeType: string };
+type KeepImage = (image: ImagePart, name: string) => TranscriptImage;
+
 /**
  * Splits the <file> tags pi's CLI and Trivium put in front of a prompt from the text the user typed.
  * Text files have their content on the following lines; images have an empty tag or a short note,
  * and their image parts follow in the same order.
  */
-export function splitAttachments(content: unknown, thumbnail?: Thumbnail): { prompt: string; attachments?: Run["attachments"] } {
+export function splitAttachments(content: unknown, keep?: KeepImage): { prompt: string; attachments?: Run["attachments"] } {
 	const text = textOf(content);
 	const images = imagesOf(content);
 	const attachments: NonNullable<Run["attachments"]> = [];
@@ -76,8 +80,7 @@ export function splitAttachments(content: unknown, thumbnail?: Thumbnail): { pro
 			attachments.push({ name, kind: "file" });
 		} else {
 			const image = images.shift();
-			const thumb = image && thumbnail ? thumbnail(image.data, image.mimeType) : undefined;
-			attachments.push(thumb ? { name, kind: "image", thumb } : { name, kind: "image" });
+			attachments.push(image && keep ? { kind: "image", ...keep(image, name) } : { name, kind: "image" });
 		}
 		rest = rest.slice(match[0].length);
 	}
@@ -114,6 +117,7 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 	}
 	switch (tool.name) {
 		case "read":
+			if (tool.images?.length) return { target: path, meta: tool.images.length === 1 ? "image" : `${tool.images.length} images`, tone: "plain" };
 			return { target: path, meta: running ? "" : `${result?.split("\n").length ?? 0} lines`, tone: "plain" };
 		case "bash":
 			return { target: firstLine(str(args.command), 120), meta: running ? "running" : "exit 0", tone: "add" };
@@ -160,6 +164,8 @@ export class RunTracker {
 	private messageSeq = 0;
 	private currentAssistantKey: string | undefined;
 	private readonly thumbnail: Thumbnail | undefined;
+	/** Full images by id, for preview and download. These are the strings already in the session's messages. */
+	private images = new Map<string, ImagePart>();
 
 	constructor(messages: AgentMessage[], thumbnail?: Thumbnail) {
 		this.thumbnail = thumbnail;
@@ -168,6 +174,32 @@ export class RunTracker {
 
 	get length(): number {
 		return this.runs.length;
+	}
+
+	image(id: string): ImagePart | undefined {
+		return this.images.get(id);
+	}
+
+	/** Keeps an image's data and makes its thumbnail, once per image. */
+	private keepImage = (image: ImagePart, name: string): TranscriptImage => {
+		const id = `i${this.images.size}`;
+		this.images.set(id, image);
+		const thumb = this.thumbnail?.(image.data, image.mimeType);
+		return thumb ? { id, name, mimeType: image.mimeType, thumb } : { id, name, mimeType: image.mimeType };
+	};
+
+	/** Images a tool returned, named after the file it read when there is one. */
+	private keepToolImages(tool: ToolState, content: unknown): void {
+		if (tool.images) return;
+		const images = imagesOf(content);
+		if (!images.length) return;
+		const path = tool.args.path ?? tool.args.file_path;
+		const base = typeof path === "string" ? path.split(/[\\/]/).pop() : undefined;
+		tool.images = images.map((image, index) => {
+			const extension = image.mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "png";
+			const name = base && images.length === 1 ? base : `image-${index + 1}.${extension}`;
+			return this.keepImage(image, name);
+		});
 	}
 
 	all(): Run[] {
@@ -227,6 +259,7 @@ export class RunTracker {
 				tool.status = event.isError ? "error" : "done";
 				tool.result = textOf(result?.content);
 				tool.details = result?.details;
+				this.keepToolImages(tool, result?.content);
 				tool.durationMs = event.durationMs ?? (tool.startedAt ? now - tool.startedAt : undefined);
 				tool.tail = undefined;
 				return true;
@@ -267,7 +300,7 @@ export class RunTracker {
 			}
 			this.runs.push({
 				id: `r${this.runs.length}`,
-				...splitAttachments(message.content, this.thumbnail),
+				...splitAttachments(message.content, this.keepImage),
 				segments: [],
 				status: live ? "running" : "done",
 				startedAt: live ? Date.now() : timestamp,
@@ -290,6 +323,7 @@ export class RunTracker {
 			tool.status = message.isError ? "error" : "done";
 			tool.result = textOf(message.content);
 			tool.details = message.details;
+			this.keepToolImages(tool, message.content);
 		}
 	}
 
@@ -363,6 +397,7 @@ export class RunTracker {
 				durationMs: tool.durationMs,
 				input: JSON.stringify(tool.args, null, 2),
 				output: tool.result,
+				images: tool.images,
 				tail: tool.tail,
 			});
 		});

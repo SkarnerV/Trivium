@@ -51,6 +51,14 @@ export type TrustChoice = "trust" | "once" | "never";
 
 export type StepStatus = "running" | "done" | "error";
 
+/** An image in the transcript. `id` fetches the full image from the session; `thumb` is a small data URL preview. */
+export interface TranscriptImage {
+	id: string;
+	name: string;
+	mimeType: string;
+	thumb?: string;
+}
+
 export interface Step {
 	id: string;
 	tool: string;
@@ -65,6 +73,8 @@ export interface Step {
 	/** Serialized tool arguments and available text output for the expanded step. */
 	input?: string;
 	output?: string;
+	/** Images the tool returned, such as a read of a PNG. */
+	images?: TranscriptImage[];
 	/** Last lines of live output, shown for a running bash step. */
 	tail?: string;
 }
@@ -72,8 +82,8 @@ export interface Step {
 export interface Run {
 	id: string;
 	prompt: string;
-	/** Files and images sent with the prompt; `thumb` is a small data URL preview of an image. */
-	attachments?: { name: string; kind: "image" | "file"; thumb?: string }[];
+	/** Files and images sent with the prompt; an image carries what fetches and previews it. */
+	attachments?: { name: string; kind: "image" | "file"; id?: string; mimeType?: string; thumb?: string }[];
 	steps: Step[];
 	/** Assistant text after the last tool call: the run's answer. */
 	answer: string;
@@ -328,6 +338,10 @@ export interface TriviumApi {
 	openFile(file: string): Promise<void>;
 	/** Current text of a file this session changed. */
 	readChangedFile(path: string, file: string): Promise<string>;
+	/** A transcript image at full size, as a data URL. */
+	imageData(path: string, id: string): Promise<string>;
+	/** Asks where to save a transcript image and writes it; false when cancelled. */
+	saveImage(path: string, id: string, name: string): Promise<boolean>;
 	reviewFile(path: string, file: string): Promise<FileReview>;
 	/** Accepts or rejects one change. `expect` is the change as shown, so a stale view is refused. */
 	resolveChange(

@@ -8,6 +8,7 @@ import { AskCard } from "./AskCard.tsx";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
 import { Composer } from "./Composer.tsx";
+import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
 
@@ -24,8 +25,8 @@ function RunBlock({ run, live }: { run: Run; live: boolean }) {
 			{run.attachments?.length ? (
 				<div className="bubble-files">
 					{run.attachments.map((file, index) =>
-						file.thumb ? (
-							<img key={index} className="bubble-thumb" src={file.thumb} alt={file.name} title={file.name} />
+						file.id ? (
+							<ImageTile key={index} image={{ id: file.id, name: file.name, mimeType: file.mimeType ?? "image/png", thumb: file.thumb }} />
 						) : (
 							<span key={index} className="bubble-file" title={file.name}>
 								<span className="bubble-file-icon">{file.kind === "image" ? <ImageIcon size={15} /> : <FileIcon size={15} />}</span>

@@ -12,6 +12,7 @@ import type {
 	Notice,
 	SessionSummary,
 	SessionView,
+	TranscriptImage,
 } from "../shared/protocol.ts";
 
 declare global {
@@ -48,6 +49,8 @@ export interface State {
 	drafts: Record<string, string>;
 	/** Projects asking to load their .pi resources, oldest first. */
 	trust: TrustRequest[];
+	/** The transcript image open in the lightbox, and the session it belongs to. */
+	preview?: { path: string; image: TranscriptImage };
 	/** A question waiting for Confirm or Cancel. */
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */

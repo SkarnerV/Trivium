@@ -45,6 +45,8 @@ const api: TriviumApi = {
 	openInEditor: call("openInEditor") as TriviumApi["openInEditor"],
 	openFile: call("openFile") as TriviumApi["openFile"],
 	readChangedFile: call("readChangedFile") as TriviumApi["readChangedFile"],
+	imageData: call("imageData") as TriviumApi["imageData"],
+	saveImage: call("saveImage") as TriviumApi["saveImage"],
 	reviewFile: call("reviewFile") as TriviumApi["reviewFile"],
 	resolveChange: call("resolveChange") as TriviumApi["resolveChange"],
 	getSettings: call("getSettings") as TriviumApi["getSettings"],

@@ -3,6 +3,7 @@ import type { Run } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { Chevron } from "../icons.tsx";
+import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 
 export function Steps({ run, live }: { run: Run; live: boolean }) {
@@ -57,7 +58,17 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 												<div className="step-detail-label">Input</div>
 												<pre>{step.input ?? step.target}</pre>
 												<div className="step-detail-label">Output</div>
-												<pre>{step.output || step.tail || (step.status === "running" ? "Waiting for output…" : "No text output.")}</pre>
+												{step.images?.length ? (
+													<div className="step-images">
+														{step.images.map((image) => (
+															<ImageTile key={image.id} image={image} size="large" />
+														))}
+													</div>
+												) : null}
+												{/* Beside an image, a one-line result like "Read image file [image/png]" says nothing new. */}
+												{!(step.images?.length && !step.output?.includes("\n")) && (
+													<pre>{step.output || step.tail || (step.status === "running" ? "Waiting for output…" : "No text output.")}</pre>
+												)}
 											</>
 										)}
 									</div>

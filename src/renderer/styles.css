@@ -3251,16 +3251,190 @@ body.resizing * {
 	margin-bottom: -14px;
 }
 
-.bubble-thumb {
+/* Transcript images: sent with a message, or returned by a step. Hovering shows Download and Preview. */
+.image-tile {
+	position: relative;
+	display: inline-block;
+	overflow: hidden;
+	border-radius: 12px;
+	background: var(--tray);
+	box-shadow: 0 0 0 1px var(--line);
+}
+
+.image-tile img {
 	display: block;
+	object-fit: cover;
+	cursor: zoom-in;
+}
+
+.image-tile.small img {
 	max-width: 160px;
 	max-height: 120px;
 	min-width: 48px;
 	min-height: 48px;
-	object-fit: cover;
-	border-radius: 12px;
-	background: var(--tray);
-	box-shadow: 0 0 0 1px var(--line);
+}
+
+.image-tile.large img {
+	max-width: 320px;
+	max-height: 240px;
+	min-width: 64px;
+	min-height: 48px;
+}
+
+.image-tile-blank {
+	width: 128px;
+	height: 96px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font-size: 11.5px;
+}
+
+.image-tile-blank .ellipsis {
+	max-width: 100%;
+}
+
+.image-tile-actions {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: flex;
+	gap: 4px;
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.image-tile:hover .image-tile-actions,
+.image-tile:focus-within .image-tile-actions {
+	opacity: 1;
+}
+
+.image-tile-actions button {
+	width: 26px;
+	height: 26px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 7px;
+	background: rgba(22, 23, 27, 0.62);
+	color: #fff;
+	backdrop-filter: blur(4px);
+}
+
+.image-tile-actions button:hover {
+	background: rgba(22, 23, 27, 0.82);
+}
+
+.step-images {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+/* Below the title bar, whose drag region would otherwise take the clicks. */
+.lightbox {
+	position: fixed;
+	inset: var(--window-titlebar-height, 0px) 0 0;
+	z-index: 300;
+	display: flex;
+	flex-direction: column;
+	background: rgba(14, 15, 24, 0.92);
+	backdrop-filter: blur(8px);
+	animation: lightbox-in 140ms ease-out;
+}
+
+.lightbox-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px;
+	color: #fff;
+	font-size: 13px;
+}
+
+.lightbox-bar > span {
+	flex: 1;
+	min-width: 0;
+}
+
+.lightbox-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.12);
+	color: #fff;
+	font-size: 12.5px;
+}
+
+.lightbox-btn:hover {
+	background: rgba(255, 255, 255, 0.2);
+}
+
+.lightbox-btn.icon {
+	width: 30px;
+	justify-content: center;
+	padding: 0;
+}
+
+.lightbox-stage {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	padding: 4px 24px 24px;
+	overflow: auto;
+}
+
+.lightbox-stage img {
+	max-width: 100%;
+	max-height: 100%;
+	height: auto;
+	object-fit: contain;
+	border-radius: 6px;
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+	cursor: zoom-in;
+}
+
+/* Actual size scrolls instead of centring, so a large image can be scrolled to every edge. */
+.lightbox-stage.actual {
+	display: block;
+}
+
+.lightbox-stage.actual img {
+	display: block;
+	max-width: none;
+	max-height: none;
+	margin: 0 auto;
+	cursor: zoom-out;
+}
+
+.lightbox-stage img.loading {
+	width: min(640px, 80vw);
+	opacity: 0.6;
+	filter: blur(6px);
+}
+
+@keyframes lightbox-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lightbox {
+		animation: none;
+	}
 }
 
 .bubble-file {

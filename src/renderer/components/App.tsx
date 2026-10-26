@@ -8,6 +8,7 @@ import { NEUTRAL, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
+import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay, TrustDialog } from "./Overlays.tsx";
@@ -176,6 +177,7 @@ export function App() {
 			{overlay === "new" && <NewSessionDialog />}
 			{overlay === "search" && <SearchOverlay />}
 			<ConfirmDialog />
+			<ImageLightbox />
 			<TrustDialog />
 			<Toasts />
 		</div>

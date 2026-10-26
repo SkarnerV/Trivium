@@ -402,6 +402,13 @@ export class SessionHost {
 		return this.emitChanges(live);
 	}
 
+	/** A transcript image of this session, by the id the transcript gave it. */
+	image(path: string, id: string): { data: string; mimeType: string } {
+		const image = this.require(path).tracker.image(id);
+		if (!image) throw new Error("That image is no longer in this session.");
+		return image;
+	}
+
 	async readChangedFile(path: string, file: string): Promise<string> {
 		const live = this.require(path);
 		// Only files this session changed, so the renderer cannot read arbitrary paths.

@@ -105,9 +105,31 @@ test("sent images get previews in order and text files do not", () => {
 	const [run] = tracker.all();
 	assert.equal(run!.prompt, "What changed?");
 	assert.deepEqual(run!.attachments, [
-		{ name: "a.png", kind: "image", thumb: "thumb:AAA" },
+		{ kind: "image", id: "i0", name: "a.png", mimeType: "image/png", thumb: "thumb:AAA" },
 		{ name: "notes.md", kind: "file" },
-		{ name: "b.jpg", kind: "image", thumb: "thumb:BBB" },
+		{ kind: "image", id: "i1", name: "b.jpg", mimeType: "image/jpeg", thumb: "thumb:BBB" },
 	]);
 	assert.deepEqual(seen, ["AAA image/png", "BBB image/jpeg"]);
+	assert.deepEqual(tracker.image("i1"), { type: "image", data: "BBB", mimeType: "image/jpeg" });
+});
+
+test("a read that returns an image shows it on the step, kept once for preview", () => {
+	const thumbs: string[] = [];
+	const tracker = new RunTracker([
+		{ role: "user", content: "Look at the screenshot", timestamp: 1000 },
+		{ role: "assistant", content: [{ type: "toolCall", id: "tool-1", name: "read", arguments: { path: "docs/screens/ask.png" } }], timestamp: 2000 },
+		{
+			role: "toolResult", toolCallId: "tool-1", toolName: "read", isError: false, timestamp: 3000,
+			content: [{ type: "text", text: "Read image file [image/png]" }, { type: "image", data: "PNGDATA", mimeType: "image/png" }],
+		},
+	] as unknown as Messages, (data) => {
+		thumbs.push(data);
+		return `thumb:${data}`;
+	});
+	const step = tracker.all()[0]!.steps.find((s) => s.tool === "read")!;
+	assert.deepEqual(step.images, [{ id: "i0", name: "ask.png", mimeType: "image/png", thumb: "thumb:PNGDATA" }]);
+	assert.equal(step.meta, "image");
+	assert.equal(tracker.image("i0")?.data, "PNGDATA");
+	tracker.all();
+	assert.deepEqual(thumbs, ["PNGDATA"]);
 });

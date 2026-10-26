@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, BranchIcon, CheckIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
+import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
 import { attempt, editMessage, forkFrom, setState, trivium, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -206,19 +206,36 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 	);
 }
 
-/** Keeps the thread pinned to the bottom while new output arrives, unless the user scrolled up. */
-function useStickToBottom(dep: unknown) {
+/**
+ * Keeps the thread pinned to the bottom while new output arrives, unless the user scrolled up. Opening
+ * another session pins it again.
+ */
+function useStickToBottom(path: string, dep: unknown) {
 	const ref = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
+	const [away, setAway] = useState(false);
+	useLayoutEffect(() => {
+		pinned.current = true;
+		setAway(false);
+	}, [path]);
 	useLayoutEffect(() => {
 		const element = ref.current;
 		if (element && pinned.current) element.scrollTop = element.scrollHeight;
-	}, [dep]);
+	}, [path, dep]);
 	const onScroll = () => {
 		const element = ref.current;
-		if (element) pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+		if (!element) return;
+		pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+		setAway(!pinned.current);
 	};
-	return { ref, onScroll };
+	const toBottom = () => {
+		const element = ref.current;
+		if (!element) return;
+		pinned.current = true;
+		setAway(false);
+		element.scrollTo({ top: element.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+	};
+	return { ref, onScroll, away, toBottom };
 }
 
 export function SessionPane({ view }: { view: SessionView }) {
@@ -227,7 +244,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
-	const scroll = useStickToBottom(`${view.path}:${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
+	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
 	return (
 		<main className="pane">
 			<header className="pane-head drag">
@@ -256,15 +273,24 @@ export function SessionPane({ view }: { view: SessionView }) {
 					)}
 				</button>
 			</header>
-			<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
-				<div className="thread">
-					{view.runs.map((run, index) => (
-						<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
-					))}
-					{dialogs.map((request) => (
-						<AskCard key={request.id} request={request} />
-					))}
+			<div className="thread-frame">
+				<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
+					<div className="thread">
+						{view.runs.map((run, index) => (
+							<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+						))}
+						{dialogs.map((request) => (
+							<AskCard key={request.id} request={request} />
+						))}
+					</div>
 				</div>
+				{scroll.away && (
+					<button type="button" className="to-latest" onClick={scroll.toBottom}>
+						{/* While the agent works, the dot says there is more coming below. */}
+						{view.running ? <span className="run-dot" /> : <Chevron open={false} down size={12} />}
+						Latest
+					</button>
+				)}
 			</div>
 			<Composer key={view.path} view={view} />
 		</main>

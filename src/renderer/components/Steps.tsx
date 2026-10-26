@@ -57,6 +57,8 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const end = live ? now : run.endedAt;
 	const total = run.startedAt && end ? duration(end - run.startedAt) : "";
 	const count = run.steps.length;
+	// A failed command or tool would otherwise only show once the steps are open.
+	const failed = run.steps.filter((step) => step.status === "error" || step.tone === "error").length;
 	// Size the tool column to the longest tool name so targets line up.
 	const toolWidth = Math.max(36, ...run.steps.map((step) => step.tool.length * 7.3 + 2));
 	// Once the answer is coming in, it shows what is happening on its own.
@@ -70,6 +72,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					{total && ` for ${total}`}
 				</span>
 				{count > 0 && <span>· {count} {count === 1 ? "step" : "steps"}</span>}
+				{failed > 0 && <span className="steps-failed">· {failed} failed</span>}
 				{count > 0 && <Chevron open={open} />}
 			</button>
 			{open && count > 0 && (

@@ -766,10 +766,65 @@ body.resizing * {
 	font-weight: 600;
 }
 
+.thread-frame {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
 .scroller {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
+}
+
+/* Shown once the user scrolls up from the end of the thread; takes them back and follows again. */
+.to-latest {
+	position: absolute;
+	left: 50%;
+	bottom: 12px;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	height: 30px;
+	padding: 0 13px 0 11px;
+	border: 0;
+	border-radius: 15px;
+	background: #fff;
+	color: var(--ink-2);
+	font-size: 12.5px;
+	font-weight: 500;
+	box-shadow:
+		0 6px 18px rgba(19, 20, 43, 0.12),
+		0 0 0 1px rgba(19, 20, 43, 0.07);
+	transform: translateX(-50%);
+	animation: to-latest-in 140ms ease-out;
+}
+
+.to-latest:hover {
+	color: var(--ink);
+}
+
+.to-latest .run-dot {
+	width: 5px;
+	height: 5px;
+	margin: 0 2px;
+}
+
+@keyframes to-latest-in {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 4px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.to-latest {
+		animation: none;
+	}
 }
 
 .thread {
@@ -907,6 +962,10 @@ body.resizing * {
 .steps-toggle strong {
 	color: var(--ink);
 	font-weight: 500;
+}
+
+.steps-failed {
+	color: var(--del);
 }
 
 .run-dot {

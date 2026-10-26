@@ -209,7 +209,12 @@ them off in that app's settings.
 ```bash
 npm run check   # type-check
 npm start       # build and launch
+npm run dev     # launch and rebuild on save
 ```
+
+`npm run dev` reloads the window when renderer or preload code changes (the selected session
+reopens), applies `styles.css` without a reload, and restarts the app when main-process code
+changes.
 
 You don't need a real provider to work on the UI. `TRIVIUM_DEV_FAUX=1` loads a scripted model,
 `trivium-faux/scripted`, that plays a whole bug fix: it reads a file, runs commands, asks a

@@ -28,6 +28,7 @@
 	"scripts": {
 		"build": "node scripts/build.mjs",
 		"start": "node scripts/build.mjs && node scripts/start.mjs",
+		"dev": "node scripts/dev.mjs",
 		"check": "tsc --noEmit -p tsconfig.json"
 	},
 	"dependencies": {

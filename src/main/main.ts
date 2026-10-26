@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -221,6 +221,32 @@ function registerIpc(): void {
 	});
 }
 
+/** Development aid: `npm run dev` rebuilds into dist; reload the page, or swap only the stylesheet when that is all that changed. */
+function reloadOnRebuild(target: BrowserWindow): void {
+	const changed = new Set<string>();
+	let timer: NodeJS.Timeout | undefined;
+	const watcher = watch(assets, (_event, file) => {
+		if (!file || !["renderer.js", "preload.cjs", "index.html", "styles.css"].includes(file)) return;
+		changed.add(file);
+		// One save can write a file several times; act once it settles.
+		clearTimeout(timer);
+		timer = setTimeout(() => {
+			const styleOnly = [...changed].every((name) => name === "styles.css");
+			changed.clear();
+			if (target.isDestroyed()) return;
+			console.log(styleOnly ? "[dev] updated styles" : "[dev] reloaded window");
+			if (styleOnly) {
+				void target.webContents
+					.executeJavaScript(`document.querySelector('link[href^="styles.css"]').href = "styles.css?" + Date.now()`)
+					.catch(console.error);
+			} else {
+				target.webContents.reloadIgnoringCache();
+			}
+		}, 150);
+	});
+	target.on("closed", () => watcher.close());
+}
+
 function createWindow(): void {
 	window = new BrowserWindow({
 		width: 1440,
@@ -272,6 +298,7 @@ function createWindow(): void {
 			}, Number(process.env.TRIVIUM_CAPTURE_DELAY ?? 3000));
 		});
 	}
+	if (process.env.TRIVIUM_DEV) reloadOnRebuild(window);
 	void window.loadURL(page);
 	window.on("closed", () => {
 		window = undefined;

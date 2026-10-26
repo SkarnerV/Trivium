@@ -246,9 +246,10 @@ function handleEvent(event: HostEvent): void {
 	}
 }
 
-export async function refreshSessions(): Promise<void> {
+export async function refreshSessions(): Promise<SessionSummary[] | undefined> {
 	const sessions = await attempt(() => trivium.listSessions());
 	if (sessions) setState({ sessions });
+	return sessions;
 }
 
 /**
@@ -393,11 +394,19 @@ export async function init(): Promise<void> {
 	trivium.onEvent(handleEvent);
 	const settings = await attempt(() => trivium.getSettings());
 	if (settings) setState({ settings });
-	await refreshSessions();
+	const sessions = await refreshSessions();
+	// Forget remembered sessions that are gone or filed under another app, so switching apps never opens them.
+	if (sessions) {
+		setState((s) => ({
+			selected: Object.fromEntries(
+				Object.entries(s.selected).filter(([app, path]) => sessions.some((session) => session.path === path && session.app === app)),
+			),
+		}));
+	}
 	await refreshModels();
-	const { app, selected, sessions } = getState();
+	const { app, selected } = getState();
 	const path = selected[app];
-	if (path && sessions.some((session) => session.path === path)) await openSession(path);
+	if (path && getState().sessions.some((session) => session.path === path)) await openSession(path);
 }
 
 // Lets development scripts (TRIVIUM_EVAL) drive the UI the same way the components do.

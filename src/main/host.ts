@@ -162,6 +162,8 @@ function titleOf(text: string | undefined): string {
 export class SessionHost {
 	private live = new Map<string, Live>();
 	private appIndex: Record<string, AppId> = {};
+	/** Sessions unloaded before their first message was saved, so they can start again where they were. */
+	private unsaved = new Map<string, { app: AppId; cwd: string }>();
 	private summaries: SessionSummary[] = [];
 	private modelRuntime!: ModelRuntime;
 	private readonly agentDir = getAgentDir();
@@ -281,9 +283,17 @@ export class SessionHost {
 		let live = this.live.get(path);
 		if (live) live.lastActive = Date.now();
 		if (!live) {
-			const manager = SessionManager.open(path);
-			const app = this.appIndex[manager.getSessionId()] ?? "code";
+			const unsaved = this.unsaved.get(path);
+			// pi would start a new, empty session at a path that is gone, and it would show under Code.
+			if (!unsaved && !existsSync(path)) throw new Error("This session no longer exists.");
+			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
+			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
 			live = await this.start(app, manager.getCwd(), manager);
+			if (unsaved) {
+				this.unsaved.delete(path);
+				this.appIndex[manager.getSessionId()] = app;
+				await this.saveIndex();
+			}
 		}
 		if (live.unread) {
 			live.unread = false;
@@ -565,6 +575,7 @@ export class SessionHost {
 			const live = this.live.get(path);
 			const id = live?.session.sessionId ?? this.summaries.find((summary) => summary.path === path)?.id;
 			if (live) this.unload(live);
+			this.unsaved.delete(path);
 			if (this.viewing === path) this.viewing = undefined;
 			// A new session has no file until its first message.
 			if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
@@ -585,6 +596,7 @@ export class SessionHost {
 		live.unsubscribe();
 		live.session.dispose();
 		this.live.delete(live.path);
+		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd });
 	}
 
 	private unloadIdle(): void {

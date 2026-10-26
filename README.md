@@ -112,7 +112,9 @@ changed line.
 
 Download the latest build from [GitHub Releases](https://github.com/SkarnerV/Trivium/releases/latest).
 On macOS, choose the `arm64` (Apple Silicon) or `x64` (Intel) DMG and drag Trivium to Applications.
-On Windows, download the single portable `.exe` and run it. The app includes its runtime.
+On Windows, download the ZIP, extract the whole archive once, and run `Trivium.exe` inside
+the extracted folder. Keep its accompanying files together. The app includes its runtime.
+The older self-extracting portable EXE remains available in v0.1.0, but starts more slowly.
 These preview builds are unsigned; macOS builds are not notarized. If macOS blocks the first
 launch, allow Trivium in **System Settings → Privacy & Security**.
 
@@ -222,13 +224,14 @@ npm run check   # type-check
 npm start       # build and launch
 npm run dev     # launch and rebuild on save
 npm test        # run the test suite
-npm run package -- --win --x64 --publish never # portable Windows .exe
+npm run package -- --win --x64 --publish never # Windows ZIP
 npm run package -- --mac --arm64 --publish never # macOS DMG (run on macOS)
 ```
 
 Packages are written to `release/`. Pushing a version tag such as `v0.1.0` runs the release
 workflow on Windows and both Mac architectures. It checks and launches each packaged app,
-then publishes the Windows `.exe` and two macOS DMGs together on GitHub Releases.
+then publishes the Windows ZIP and two macOS DMGs together on GitHub Releases. Windows
+startup checks fail if the packaged app does not become ready within 20 seconds on the runner.
 
 `npm run dev` reloads the window when renderer or preload code changes (the selected session
 reopens), applies `styles.css` without a reload, and restarts the app when main-process code

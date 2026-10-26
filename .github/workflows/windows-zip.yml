@@ -1,0 +1,84 @@
+name: Add Windows ZIP to release
+
+on:
+  push:
+    tags:
+      - 'v*-windows-zip.*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to package
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-zip-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve existing release tag
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          RELEASE_TAG="${REQUESTED_TAG:-${GITHUB_REF_NAME%-windows-zip.*}}"
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+      - name: Check out the exact released application
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: release-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+          cache: npm
+          cache-dependency-path: release-source/package-lock.json
+      - run: npm ci
+        working-directory: release-source
+      - run: npm run check
+        working-directory: release-source
+      - run: npm test
+        working-directory: release-source
+      - name: Build ZIP from the released code
+        run: npm run package -- --win zip --x64 --publish never
+        working-directory: release-source
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Extract the actual ZIP
+        shell: pwsh
+        run: |
+          $archive = @(Get-ChildItem release-source/release/*.zip)
+          if ($archive.Count -ne 1) { throw 'Expected exactly one Windows ZIP' }
+          Expand-Archive -LiteralPath $archive[0].FullName -DestinationPath extracted
+      - name: Require extracted app startup within 20 seconds
+        run: node scripts/smoke-packaged.mjs extracted/Trivium.exe
+        env:
+          TRIVIUM_STARTUP_TIMEOUT_MS: '20000'
+      - name: Add ZIP and update download instructions
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $env:GITHUB_REPOSITORY
+          $tag = $env:RELEASE_TAG
+          $body = gh release view $tag --repo $repo --json body --jq .body
+          if ($LASTEXITCODE -ne 0) { throw 'Existing release could not be read' }
+          $archive = @(Get-ChildItem release-source/release/*.zip)[0]
+          gh release upload $tag $archive.FullName --repo $repo --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP upload failed' }
+          $instructions = '- **Windows x64 (recommended):** download `' + $archive.Name + '`, extract the whole ZIP, and run `Trivium.exe` inside the extracted folder. Extraction happens once; keep the executable with its accompanying files.'
+          $notes = ([string]::Join("`n", $body)) -replace '(?m)^- \*\*Windows x64[^\r\n]*', $instructions
+          if ($notes -eq [string]::Join("`n", $body)) { throw 'Windows download instructions could not be found' }
+          $notes += "`n`nThe original portable Windows EXE remains available, but extracts its runtime on every launch and starts more slowly. The ZIP avoids that repeated extraction."
+          Set-Content -LiteralPath release-notes.md -Value $notes -Encoding utf8
+          gh release edit $tag --repo $repo --notes-file release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }

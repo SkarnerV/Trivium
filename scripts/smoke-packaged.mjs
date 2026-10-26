@@ -31,11 +31,14 @@ const env = {
 		})();`,
 };
 delete env.ELECTRON_RUN_AS_NODE;
+const timeoutMs = Number(process.env.TRIVIUM_STARTUP_TIMEOUT_MS ?? 60_000);
+assert.ok(Number.isFinite(timeoutMs) && timeoutMs > 0, "Startup timeout must be a positive number of milliseconds.");
+const started = performance.now();
 const child = spawn(executable, [], { env, cwd: directory, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 let output = "";
 try {
 	await new Promise((done, fail) => {
-		const timer = setTimeout(() => fail(new Error(`Packaged startup timed out:\n${output}`)), 60_000);
+		const timer = setTimeout(() => fail(new Error(`Packaged startup exceeded ${timeoutMs} ms:\n${output}`)), timeoutMs);
 		const finish = (error) => {
 			clearTimeout(timer);
 			error ? fail(error) : done();
@@ -49,7 +52,7 @@ try {
 		child.once("error", finish);
 		child.once("exit", (code) => finish(new Error(`Packaged app exited (${code}):\n${output}`)));
 	});
-	console.log("Packaged app launched; preload, profiles, settings, models and renderer passed.");
+	console.log(`Packaged startup: ${Math.round(performance.now() - started)} ms. Preload, profiles, settings, models and renderer passed.`);
 } finally {
 	if (child.pid && child.exitCode === null) {
 		const stopped = new Promise(done => child.once("exit", done));

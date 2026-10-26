@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '!v*-windows-zip.*'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +25,7 @@ jobs:
             os: windows-latest
             args: --win --x64
             executable: release/win-unpacked/Trivium.exe
-            asset: release/*.exe
+            asset: release/*.zip
           - name: macOS arm64
             os: macos-14
             args: --mac --arm64
@@ -55,6 +56,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Launch packaged app
         run: node scripts/smoke-packaged.mjs "${{ matrix.executable }}"
+        env:
+          TRIVIUM_STARTUP_TIMEOUT_MS: ${{ matrix.os == 'windows-latest' && '20000' || '60000' }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
@@ -77,12 +80,12 @@ jobs:
       - name: Verify release assets
         shell: bash
         run: |
-          test "$(find release -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
+          test "$(find release -maxdepth 1 -name '*.zip' | wc -l)" -eq 1
           test "$(find release -maxdepth 1 -name '*.dmg' | wc -l)" -eq 2
           test "$(find release -maxdepth 1 -type f | wc -l)" -eq 3
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/*.exe release/*.dmg \
+          gh release create "$GITHUB_REF_NAME" release/*.zip release/*.dmg \
             --verify-tag --title "Trivium $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" --latest

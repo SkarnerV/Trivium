@@ -25,9 +25,7 @@ mac:
 win:
   icon: src/assets/trivium-icon.ico
   target:
-    - target: portable
+    - target: zip
       arch:
         - x64
   artifactName: Trivium-${version}-Windows-${arch}.${ext}
-portable:
-  requestExecutionLevel: user

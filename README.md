@@ -218,7 +218,8 @@ changes.
 
 You don't need a real provider to work on the UI. `TRIVIUM_DEV_FAUX=1` loads a scripted model,
 `trivium-faux/scripted`, that plays a whole bug fix: it reads a file, runs commands, asks a
-question, edits, writes a test and explains. Keep test runs out of your real data:
+question, edits, writes a test and explains. Keep test runs out of your real data; `TRIVIUM_HOME`
+also holds that copy's window state, so it doesn't change the open session or layout of your own:
 
 ```bash
 PI_CODING_AGENT_DIR=/tmp/pi-dev TRIVIUM_HOME=/tmp/trivium-dev TRIVIUM_DEV_FAUX=1 npm start

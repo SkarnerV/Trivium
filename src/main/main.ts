@@ -23,6 +23,8 @@ const page = pathToFileURL(join(assets, "index.html")).href;
 let window: BrowserWindow | undefined;
 
 app.setName("Trivium");
+// A separate home is a separate copy: its window state and storage stay with it, not the real profile.
+if (process.env.TRIVIUM_HOME) app.setPath("userData", join(triviumDir, "electron"));
 // Before any session loads its extensions.
 installNodeHost();
 if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);

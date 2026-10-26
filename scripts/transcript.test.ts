@@ -167,3 +167,11 @@ test("an edited message goes out with the files and images the original carried"
 	assert.deepEqual(attachmentsOf([{ type: "text", text: `${prefix}Old wording` }, image]), { prefix, images: [image] });
 	assert.deepEqual(attachmentsOf("Just text"), { prefix: "", images: [] });
 });
+
+test("a command step leaves out the cd into the project in front of it", () => {
+	const command = 'cd "/Users/me/my app" && npm test';
+	const tracker = history([{ type: "toolCall", id: "tool-1", name: "bash", arguments: { command } }], "ok");
+	const step = tracker.all()[0]!.steps[0]!;
+	assert.equal(step.target, "npm test");
+	assert.equal(JSON.parse(step.input!).command, command);
+});

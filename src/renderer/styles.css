@@ -1055,36 +1055,61 @@ body.resizing * {
 	color: var(--del);
 }
 
-.terminal {
-	border-radius: 12px;
-	background: var(--ink);
-	color: #d9dae0;
-	overflow: hidden;
+/* The command running now, shown quietly under the run's header with its latest line of output. */
+.live-cmd {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 8px 12px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--tray);
+	font-size: 12px;
 }
 
-.terminal-head {
+.live-cmd-head {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 8px 12px;
-	font-size: 12px;
-	color: #8b8d97;
-	border-bottom: 1px solid #24252b;
+	min-width: 0;
 }
 
-.terminal-head .cmd {
-	font-family: var(--mono);
-	color: #e8e8ec;
+.live-cmd-label {
+	flex: none;
+	color: var(--ink-3);
 }
 
-.terminal pre {
-	margin: 0;
-	padding: 10px 12px;
+.live-cmd-prose {
+	flex: 1;
+	color: var(--ink-2);
+}
+
+/* Between steps the dot rests, so the line reads as the last thing done rather than something under way. */
+.live-cmd.idle .live-dot {
+	background: var(--border);
+	box-shadow: none;
+}
+
+.live-cmd-head code {
+	flex: 1;
 	font-family: var(--mono);
-	font-size: 12px;
-	line-height: 1.6;
-	overflow-x: auto;
-	white-space: pre-wrap;
+	font-size: 11.5px;
+	color: var(--ink-2);
+}
+
+.live-cmd-time {
+	flex: none;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.live-cmd-out {
+	padding-left: 14px;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+	white-space: pre;
 }
 
 /* Changes panel */

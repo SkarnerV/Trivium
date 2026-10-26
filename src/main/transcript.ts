@@ -128,6 +128,11 @@ function firstLine(text: string, max = 140): string {
 	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
+/** A command as worth reading: its first line, without a leading `cd <dir> &&` into the project. */
+function commandLine(command: string): string {
+	return firstLine(command.replace(/^\s*cd\s+("[^"]*"|'[^']*'|\S+)\s*&&\s*/, ""), 120);
+}
+
 function countLines(text: string | undefined): number {
 	if (!text) return 0;
 	return text.split("\n").filter((line) => line.trim().length > 0).length;
@@ -151,7 +156,7 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 			if (tool.images?.length) return { target: path, meta: tool.images.length === 1 ? "image" : `${tool.images.length} images`, tone: "plain" };
 			return { target: path, meta: running ? "" : `${result?.split("\n").length ?? 0} lines`, tone: "plain" };
 		case "bash":
-			return { target: firstLine(str(args.command), 120), meta: running ? "running" : "exit 0", tone: "add" };
+			return { target: commandLine(str(args.command)), meta: running ? "running" : "exit 0", tone: "add" };
 		case "edit": {
 			const diff = str((tool.details as { diff?: unknown } | undefined)?.diff);
 			const lines = diff.split("\n");
@@ -184,7 +189,9 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 		}
 		default: {
 			const first = Object.values(args).find((value) => typeof value === "string");
-			return { target: firstLine(str(first) || JSON.stringify(args), 120), meta: "", tone: "plain" };
+			// Arguments still streaming in arrive as {}, which says nothing.
+			const rest = Object.keys(args).length ? JSON.stringify(args) : "";
+			return { target: firstLine(str(first) || rest, 120), meta: "", tone: "plain" };
 		}
 	}
 }

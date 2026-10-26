@@ -1,10 +1,54 @@
 import { useState } from "react";
-import type { Run } from "../../shared/protocol.ts";
+import type { Run, Step } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { Chevron } from "../icons.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
+
+/** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". A note is its own words. */
+const VERBS: Record<string, string> = {
+	read: "Reading",
+	edit: "Editing",
+	write: "Writing",
+	bash: "Running",
+	grep: "Searching for",
+	find: "Finding",
+	ls: "Listing",
+	think: "Thinking",
+};
+
+/**
+ * The step under way, or the last one while the agent decides what to do next. It stays until the next
+ * step starts, so quick reads and edits do not flash by. Commands also show their latest line of output.
+ */
+function LiveStep({ step, now }: { step: Step; now: number }) {
+	const running = step.status === "running";
+	const prose = step.tool === "think" || step.tool === "note";
+	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
+	return (
+		<div className={`live-cmd${running ? "" : " idle"}`}>
+			<div className="live-cmd-head">
+				<span className="live-dot" />
+				{step.tool !== "note" && <span className="live-cmd-label">{VERBS[step.tool] ?? `Using ${step.tool}`}</span>}
+				{prose ? (
+					<span className="live-cmd-prose ellipsis">{step.target}</span>
+				) : (
+					<code className="ellipsis" title={step.target}>
+						{step.target}
+					</code>
+				)}
+				<span className="live-cmd-time">{time}</span>
+			</div>
+			{/* Only the latest line: enough to see it is moving. The full output is in the step. */}
+			{step.tool === "bash" && running && <div className="live-cmd-out ellipsis">{lastLine(step.tail) || "\u00a0"}</div>}
+		</div>
+	);
+}
+
+function lastLine(text: string | undefined): string {
+	return text?.split("\n").findLast((line) => line.trim())?.trim() ?? "";
+}
 
 export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const [open, setOpen] = useState(false);
@@ -15,7 +59,8 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const count = run.steps.length;
 	// Size the tool column to the longest tool name so targets line up.
 	const toolWidth = Math.max(36, ...run.steps.map((step) => step.tool.length * 7.3 + 2));
-	const runningBash = live ? run.steps.find((step) => step.status === "running" && step.tool === "bash") : undefined;
+	// Once the answer is coming in, it shows what is happening on its own.
+	const current = live && !run.answer ? (run.steps.findLast((step) => step.status === "running") ?? run.steps.at(-1)) : undefined;
 	return (
 		<>
 			<button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -78,18 +123,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					})}
 				</ol>
 			)}
-			{runningBash && (
-				<div className="terminal">
-					<div className="terminal-head">
-						<span className="live-dot" />
-						<span className="cmd ellipsis">{runningBash.target}</span>
-						<span className="mono" style={{ marginLeft: "auto" }}>
-							{runningBash.startedAt ? duration(now - runningBash.startedAt) : ""}
-						</span>
-					</div>
-					{runningBash.tail && <pre>{runningBash.tail}</pre>}
-				</div>
-			)}
+			{current && <LiveStep step={current} now={now} />}
 		</>
 	);
 }

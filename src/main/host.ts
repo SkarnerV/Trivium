@@ -112,6 +112,17 @@ const TRIVIUM_COMMANDS: SlashCommand[] = [
 	{ name: "name", description: "Rename this session", argumentHint: "<title>", source: "trivium", completes: false },
 ];
 
+/** The description in a package's package.json, if it has one. */
+async function packageDescription(dir: string | undefined): Promise<string | undefined> {
+	if (!dir) return undefined;
+	try {
+		const { description } = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+		return typeof description === "string" && description.trim() ? description.trim() : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function registers(extension: Extension): string[] {
 	return [
 		...[...extension.tools.keys()].map((name) => `tool ${name}`),
@@ -605,22 +616,25 @@ export class SessionHost {
 			return "Global";
 		};
 		const result = loader.getExtensions();
-		const extensions: ExtensionInfo[] = result.extensions
-			.filter((extension) => !extension.hidden && !extension.path.startsWith("<"))
-			.map((extension) => ({
-				path: extension.resolvedPath,
-				name: extensionName(
-					extension.resolvedPath,
-					builtInOf(extension.resolvedPath) ?? (extension.sourceInfo.origin === "package" ? extension.sourceInfo.source : undefined),
-				),
-				display:
-					builtInOf(extension.resolvedPath) ??
-					(extension.sourceInfo.origin === "package" ? extension.sourceInfo.source : shortPath(extension.resolvedPath)),
-				source: sourceOf(extension.resolvedPath, extension),
-				on: !disabled.has(extension.resolvedPath),
-				registers: registers(extension),
-				builtIn: builtInOf(extension.resolvedPath),
-			}));
+		const extensions: ExtensionInfo[] = await Promise.all(
+			result.extensions
+				.filter((extension) => !extension.hidden && !extension.path.startsWith("<"))
+				.map(async (extension) => {
+					const builtIn = builtIns.find((entry) => extension.resolvedPath.startsWith(entry.dir + sep));
+					const fromPackage = extension.sourceInfo.origin === "package";
+					return {
+						path: extension.resolvedPath,
+						name: extensionName(extension.resolvedPath, builtIn?.name ?? (fromPackage ? extension.sourceInfo.source : undefined)),
+						display: builtIn?.name ?? (fromPackage ? extension.sourceInfo.source : shortPath(extension.resolvedPath)),
+						// pi sets baseDir to an installed package's root.
+						description: await packageDescription(builtIn?.dir ?? (fromPackage ? extension.sourceInfo.baseDir : undefined)),
+						source: sourceOf(extension.resolvedPath, extension),
+						on: !disabled.has(extension.resolvedPath),
+						registers: registers(extension),
+						builtIn: builtIn?.name,
+					};
+				}),
+		);
 		for (const error of result.errors) {
 			extensions.push({
 				path: error.path,

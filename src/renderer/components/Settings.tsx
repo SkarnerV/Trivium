@@ -3,7 +3,9 @@ import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
 import type { AppDetails, AppId, AppInfo, ExtensionInfo, ExtensionSource, PermissionSettings, ProviderInfo } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { shortPath } from "../format.ts";
-import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
+import { packageName } from "../../shared/packages.ts";
+import { RECOMMENDED } from "../../shared/recommended.ts";
+import { AppIcon, BackIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
@@ -342,8 +344,31 @@ const SOURCE_HINT: Record<ExtensionSource, string> = {
 	Dev: "Development only",
 };
 
-function ExtensionRow({ extension, onToggle, onRemove }: { extension: ExtensionInfo; onToggle: () => void; onRemove?: () => void }) {
+/** What an extension registers, by kind, as pi names them: "tool x", "/x" and "on x". */
+const REGISTER_KINDS = [
+	{ label: "Tools", one: "tool", many: "tools", match: (item: string) => item.startsWith("tool ") },
+	{ label: "Commands", one: "command", many: "commands", match: (item: string) => item.startsWith("/") },
+	{ label: "Hooks", one: "hook", many: "hooks", match: (item: string) => item.startsWith("on ") },
+];
+
+function ExtensionRow({
+	extension,
+	summary,
+	onToggle,
+	onRemove,
+}: {
+	extension: ExtensionInfo;
+	/** One line on what it does: Trivium's own words for packages it recommends, else the package's description. */
+	summary?: string;
+	onToggle: () => void;
+	onRemove?: () => void;
+}) {
+	const [open, setOpen] = useState(false);
 	const failed = Boolean(extension.error && extension.on);
+	const kinds = REGISTER_KINDS.map((kind) => ({ ...kind, items: extension.registers.filter(kind.match) })).filter(
+		(kind) => kind.items.length,
+	);
+	const counts = kinds.map((kind) => `${kind.items.length} ${kind.items.length === 1 ? kind.one : kind.many}`).join(" · ");
 	return (
 		<div className={`s-row s-ext${extension.on ? "" : " off"}`}>
 			<div className="s-row-text">
@@ -354,18 +379,33 @@ function ExtensionRow({ extension, onToggle, onRemove }: { extension: ExtensionI
 					</span>
 					{failed && <span className="s-tag error">Failed to load</span>}
 				</div>
-				{extension.registers.length > 0 && (
-					<div className="s-chips">
-						{extension.registers.map((item) => (
-							<span key={item} className="s-chip mono">
-								{item}
-							</span>
+				{summary && <span className="s-ext-desc">{summary}</span>}
+				<button type="button" className="s-ext-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+					{counts || "Details"}
+					<Chevron open={open} size={10} />
+				</button>
+				{open && (
+					<dl className="s-ext-details">
+						{kinds.map((kind) => (
+							<div key={kind.label}>
+								<dt>{kind.label}</dt>
+								<dd className="s-chips">
+									{kind.items.map((item) => (
+										<span key={item} className="s-chip mono">
+											{item.replace(/^(tool|on) /, "")}
+										</span>
+									))}
+								</dd>
+							</div>
 						))}
-					</div>
+						<div>
+							<dt>From</dt>
+							<dd className="mono s-path" title={extension.path}>
+								{extension.display}
+							</dd>
+						</div>
+					</dl>
 				)}
-				<span className="mono s-path" title={extension.path}>
-					{extension.display}
-				</span>
 				{failed && (
 					<pre className="s-error mono" title={extension.error}>
 						{/* pi appends the require stack; the first line says what went wrong. */}
@@ -571,6 +611,10 @@ function AppPage({ app }: { app: AppId }) {
 					<ExtensionRow
 						key={extension.path}
 						extension={extension}
+						summary={
+							RECOMMENDED[app].find((item) => item.name === (extension.builtIn ?? packageName(extension.display)))?.adds ??
+							extension.description
+						}
 						onToggle={() => void toggle(extension)}
 						onRemove={extension.builtIn ? () => void setRemoved(extension.builtIn!, true) : undefined}
 					/>

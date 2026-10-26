@@ -1776,9 +1776,26 @@ body.resizing * {
 	color: var(--ink-3);
 }
 
-/* Add an extension: the source the input resolves to, and the package gallery. */
+/* Add an extension: the source box, what it resolves to, and the recommended packages. */
+.add-ext-intro {
+	margin: -8px 0 0;
+	color: var(--ink-3);
+	font-size: 12.5px;
+}
+
+.add-ext-input {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.add-ext-input .ask-field:focus-within {
+	border-color: color-mix(in srgb, var(--accent) 45%, #e4e4e9);
+}
+
 .add-ext-source {
 	min-height: 18px;
+	padding: 0 2px;
 	font-size: 12px;
 	color: var(--ink-4);
 }
@@ -1791,51 +1808,22 @@ body.resizing * {
 	color: var(--ink-2);
 }
 
-.add-ext-gallery {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 12px 14px;
-	border-radius: 12px;
-	background: var(--tray);
-	box-shadow: inset 0 0 0 1px var(--line);
-	color: var(--ink-3);
-	text-decoration: none;
-}
-
-.add-ext-gallery:hover {
-	box-shadow: inset 0 0 0 1px var(--edge);
-	color: var(--accent);
-}
-
-.add-ext-gallery > span {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.add-ext-gallery strong {
-	font-size: 13px;
-	font-weight: 500;
-	color: var(--ink);
-}
-
-.add-ext-gallery .mono {
-	font-size: 11.5px;
-	color: var(--ink-4);
-}
-
-/* Recommended packages for the app, each with its own Install. */
 .rec {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 }
 
+.rec-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 2px;
+}
+
 .rec h3 {
-	margin: 4px 0 0;
+	margin: 0;
 	font-size: 11px;
 	font-weight: 500;
 	letter-spacing: 0.04em;
@@ -1843,66 +1831,136 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
-.rec-item {
-	display: flex;
-	align-items: flex-start;
-	gap: 14px;
-	padding: 12px 12px 12px 14px;
+.rec-gallery {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--accent-text);
+	font-size: 12.5px;
+	text-decoration: none;
+}
+
+.rec-gallery:hover {
+	text-decoration: underline;
+}
+
+.rec-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
 	border-radius: 12px;
 	box-shadow: inset 0 0 0 1px var(--line);
 }
 
+.rec-item {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 0 12px;
+	padding: 6px 10px 6px 6px;
+}
+
+.rec-item + .rec-item {
+	border-top: 1px solid var(--line);
+}
+
 .rec-text {
-	flex: 1;
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
-	font-size: 12.5px;
-	line-height: 1.45;
+	gap: 1px;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+
+.rec-text:hover {
+	background: var(--tray);
 }
 
 .rec-name {
-	align-self: flex-start;
-	font-size: 12.5px;
-	font-weight: 500;
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	color: var(--ink);
-	text-decoration: none;
+	font-size: 13px;
+	font-weight: 500;
 }
 
-.rec-name:hover {
-	color: var(--accent);
-	text-decoration: underline;
+.rec-name svg {
+	color: var(--ink-4);
 }
 
 .rec-adds {
-	color: var(--ink-2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ink-3);
+	font-size: 12.5px;
 }
 
-.rec-why {
-	color: var(--ink-3);
+.rec-item.open .rec-adds {
+	white-space: normal;
+}
+
+.rec-details {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 2px 8px 8px;
+	color: var(--ink-2);
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+
+.rec-details p {
+	margin: 0;
 }
 
 .rec-note {
 	display: flex;
 	align-items: flex-start;
 	gap: 6px;
-	margin-top: 2px;
 	color: #844705;
-	font-size: 11.5px;
+	font-size: 12px;
 }
 
 .rec-note svg {
 	flex: none;
-	margin-top: 2px;
+	margin-top: 3px;
+}
+
+.rec-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+	text-decoration: none;
+}
+
+.rec-link:hover {
+	color: var(--accent-text);
 }
 
 .btn.rec-btn {
-	flex: none;
-	min-width: 92px;
+	min-width: 86px;
 	min-height: 30px;
 	padding: 0 12px;
 	font-size: 12.5px;
+}
+
+.rec-warn {
+	margin: 0;
+	padding: 0 2px;
+	color: var(--ink-4);
+	font-size: 12px;
 }
 
 .modal-foot {
@@ -2579,6 +2637,65 @@ body.resizing * {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
+}
+
+.s-ext-desc {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	color: var(--ink-3);
+	font-size: 12.5px;
+	line-height: 1.45;
+}
+
+.s-ext-more {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin: 1px 0 0 -6px;
+	padding: 2px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+.s-ext-more:hover {
+	background: var(--tray);
+	color: var(--ink-2);
+}
+
+.s-ext-details {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 4px 0 0;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: var(--tray);
+}
+
+.s-ext-details > div {
+	display: grid;
+	grid-template-columns: 72px minmax(0, 1fr);
+	align-items: baseline;
+	gap: 10px;
+}
+
+.s-ext-details dt {
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.s-ext-details dd {
+	margin: 0;
+}
+
+.s-ext-details .s-chip {
+	background: #fff;
 }
 
 .s-tag {

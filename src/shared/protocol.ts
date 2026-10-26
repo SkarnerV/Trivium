@@ -226,6 +226,8 @@ export interface ExtensionInfo {
 	name: string;
 	/** Path as shown: shortened, or a package or builtin name. */
 	display: string;
+	/** The package's own one-line description, when it comes from a package that has one. */
+	description?: string;
 	source: ExtensionSource;
 	on: boolean;
 	/** What it adds: tools, commands, event handlers. */

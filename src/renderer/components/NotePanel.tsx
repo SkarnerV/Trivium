@@ -4,6 +4,7 @@ import { baseName } from "../format.ts";
 import { CloseIcon, ExternalIcon, PenIcon } from "../icons.tsx";
 import { attempt, setState, startSession, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
+import { Resizer } from "./Resizer.tsx";
 
 const isNote = (change: FileChange) => /\.(md|markdown|mdx|txt)$/i.test(change.path) && change.status !== "deleted";
 
@@ -64,6 +65,7 @@ export function NotePanel({ view }: { view: SessionView }) {
 
 	return (
 		<aside className="side-panel note-panel" aria-label="Note preview">
+			<Resizer target="panel" />
 			<div className="side-head">
 				<h2 className="mono">{baseName(note.rel)}</h2>
 				<div className="seg" role="tablist" aria-label="Note view">

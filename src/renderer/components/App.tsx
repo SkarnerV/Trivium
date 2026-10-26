@@ -131,7 +131,12 @@ export function App() {
 	useDialogAlerts();
 	const sectionApp = section === "code" || section === "research" || section === "write" ? section : undefined;
 	const iconApp = page === "settings" ? sectionApp ?? "code" : app;
+	const sidebarWidth = useStore((s) => s.sidebarWidth);
+	const panelWidth = useStore((s) => s.panelWidth);
 	const vars = page === "settings" ? themeVars(sectionApp ?? NEUTRAL) : themeVars(app);
+	const widths: Record<string, string> = {};
+	if (sidebarWidth) widths["--sidebar-width"] = `${sidebarWidth}px`;
+	if (panelWidth) widths["--panel-width"] = `${panelWidth}px`;
 	useEffect(() => {
 		const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 		if (favicon) favicon.href = appIconFilename(iconApp);
@@ -153,7 +158,7 @@ export function App() {
 		);
 	}
 	return (
-		<div className={`shell${folded ? " folded" : ""}`} style={vars}>
+		<div className={`shell${folded ? " folded" : ""}`} style={{ ...vars, ...widths }}>
 			<WindowTitleBar app={iconApp} showAppSwitcher />
 			{folded ? <Rail /> : <Sidebar />}
 			<div className="workspace">

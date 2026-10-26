@@ -5,6 +5,7 @@ import { baseName } from "../format.ts";
 import { CloseIcon } from "../icons.tsx";
 import { askConfirm, attempt, setState, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
+import { Resizer } from "./Resizer.tsx";
 
 type Change = Extract<ReviewSegment, { kind: "change" }>;
 
@@ -93,6 +94,7 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 	const pending = shown?.pending ?? 0;
 	return (
 		<aside className="side-panel review-panel" aria-label="Document review">
+			<Resizer target="panel" />
 			<div className="side-head">
 				<h2 className="mono">{baseName(file.rel)}</h2>
 				{pending > 0 && <span className="pending-pill">{pending === 1 ? "1 change" : `${pending} changes`} to review</span>}

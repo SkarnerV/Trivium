@@ -35,6 +35,9 @@ export interface State {
 	peek: boolean;
 	/** Project groups folded in the sidebar, keyed "app:cwd". */
 	collapsed: Record<string, boolean>;
+	/** Widths the user dragged the sidebar and the right panel to; unset means the default. */
+	sidebarWidth?: number;
+	panelWidth?: number;
 	/** Sessions whose Changes panel the user closed. */
 	changesHidden: Record<string, boolean>;
 	overlay: "new" | "search" | null;
@@ -62,7 +65,9 @@ export type SettingsSection = "general" | "models" | "shortcuts" | AppId | "abou
 
 const PREFS_KEY = "trivium.prefs";
 
-function loadPrefs(): Pick<State, "app" | "folded" | "selected" | "collapsed"> {
+const PREF_KEYS = ["app", "folded", "selected", "collapsed", "sidebarWidth", "panelWidth"] as const;
+
+function loadPrefs(): Pick<State, (typeof PREF_KEYS)[number]> {
 	try {
 		const parsed = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<State>;
 		return {
@@ -70,6 +75,8 @@ function loadPrefs(): Pick<State, "app" | "folded" | "selected" | "collapsed"> {
 			folded: parsed.folded ?? false,
 			selected: parsed.selected ?? {},
 			collapsed: parsed.collapsed ?? {},
+			sidebarWidth: parsed.sidebarWidth,
+			panelWidth: parsed.panelWidth,
 		};
 	} catch {
 		return { app: "code", folded: false, selected: {}, collapsed: {} };
@@ -101,12 +108,9 @@ export function getState(): State {
 export function setState(patch: Partial<State> | ((current: State) => Partial<State>)): void {
 	const next = typeof patch === "function" ? patch(state) : patch;
 	state = { ...state, ...next };
-	if ("app" in next || "folded" in next || "selected" in next || "collapsed" in next) {
+	if (PREF_KEYS.some((key) => key in next)) {
 		try {
-			localStorage.setItem(
-				PREFS_KEY,
-				JSON.stringify({ app: state.app, folded: state.folded, selected: state.selected, collapsed: state.collapsed }),
-			);
+			localStorage.setItem(PREFS_KEY, JSON.stringify(Object.fromEntries(PREF_KEYS.map((key) => [key, state[key]]))));
 		} catch {
 			// Preferences are a convenience; the app works without them.
 		}

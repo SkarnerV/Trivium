@@ -6,6 +6,7 @@ import { AppIcon, FolderIcon, FolderOpenIcon, GearIcon, PanelIcon, PlusIcon, Sea
 import { useNow } from "../hooks.ts";
 import { askConfirm, deleteSessions, getState, notify, openSession, openSettings, setState, startSession, switchApp, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { Resizer } from "./Resizer.tsx";
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 const IS_WINDOWS = navigator.userAgent.includes("Windows");
@@ -218,6 +219,7 @@ export function Sidebar() {
 	const app = useStore((s) => s.app);
 	return (
 		<nav className="sidebar" aria-label="Apps and sessions">
+			<Resizer target="sidebar" />
 			{/* On macOS the app switcher shares the title bar row with the window buttons. */}
 			{IS_MAC && (
 				<div className="sb-titlebar drag">

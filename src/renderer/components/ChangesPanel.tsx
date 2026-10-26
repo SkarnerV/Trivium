@@ -3,6 +3,7 @@ import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { CloseIcon, ExternalIcon } from "../icons.tsx";
 import { attempt, trivium, setState } from "../store.ts";
+import { Resizer } from "./Resizer.tsx";
 
 function totals(changes: FileChange[]): { adds: number; dels: number } {
 	return changes.reduce((sum, change) => ({ adds: sum.adds + change.adds, dels: sum.dels + change.dels }), { adds: 0, dels: 0 });
@@ -73,6 +74,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 	const files = changes.length === 1 ? "1 file" : `${changes.length} files`;
 	return (
 		<aside className="changes" aria-label="Changes">
+			<Resizer target="panel" />
 			<div className="changes-head">
 				<h2>Changes</h2>
 				<ChangeCount changes={changes} />

@@ -184,6 +184,79 @@ button:disabled {
 	padding-top: 0;
 }
 
+/* Drag handles on the sidebar's right edge and the right panel's left edge. */
+.resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	z-index: 5;
+	width: 10px;
+	cursor: col-resize;
+	touch-action: none;
+	-webkit-app-region: no-drag;
+}
+
+.resizer-sidebar {
+	right: -5px;
+}
+
+/* The line traces the card's whole left edge, rounded corners included; it matches the workspace padding. */
+.resizer.resizer-sidebar::after {
+	top: 8px;
+	bottom: 8px;
+	width: 14px;
+	border-left: 2px solid var(--accent);
+	border-radius: 14px 0 0 14px;
+	background: none;
+}
+
+.windows .resizer.resizer-sidebar::after {
+	top: 0;
+}
+
+/* Mostly inside the panel, so it stays clear of the transcript's scrollbar. */
+.resizer-panel {
+	left: -2px;
+}
+
+.resizer.resizer-panel::after {
+	left: 1px;
+}
+
+.resizer::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 4px;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--accent);
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+
+.resizer:hover::after {
+	opacity: 0.35;
+	transition-delay: 0.15s;
+}
+
+.resizer:active::after,
+.resizer:focus-visible::after {
+	opacity: 0.7;
+	transition-delay: 0s;
+}
+
+.resizer:focus-visible {
+	outline: none;
+}
+
+body.resizing,
+body.resizing * {
+	cursor: col-resize !important;
+	user-select: none !important;
+}
+
 .card {
 	flex: 1;
 	min-width: 0;
@@ -200,7 +273,8 @@ button:disabled {
 /* Sidebar */
 
 .sidebar {
-	flex: 0 0 272px;
+	position: relative;
+	flex: 0 0 var(--sidebar-width, 272px);
 	/* Without this, a long session title widens the sidebar to fit it. */
 	min-width: 0;
 	display: flex;
@@ -910,7 +984,8 @@ button:disabled {
 /* Changes panel */
 
 .changes {
-	flex: 0 1 min(46%, 600px);
+	position: relative;
+	flex: 0 1 var(--panel-width, min(46%, 600px));
 	min-width: 340px;
 	display: flex;
 	flex-direction: column;
@@ -2772,7 +2847,8 @@ button:disabled {
 /* Side panels: Research notes and Write review */
 
 .side-panel {
-	flex: 0 1 min(50%, 640px);
+	position: relative;
+	flex: 0 1 var(--panel-width, min(50%, 640px));
 	min-width: 360px;
 	display: flex;
 	flex-direction: column;

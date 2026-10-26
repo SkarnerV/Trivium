@@ -43,18 +43,22 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 				</svg>
 			</button>
 			{open && (
-				<div className="tooltip" role="tooltip">
-					<div className="head">
-						<span style={{ fontWeight: 500 }}>Context</span>
-						<span className="num">
-							{tokens(used)} / {tokens(context.window)} · {Math.round(percent)}%
+				<div className="ctx-card" role="tooltip">
+					<span className="ctx-title">Context</span>
+					<div className="ctx-head">
+						<span className="ctx-percent">{Math.round(percent)}%</span>
+						<span className="ctx-total">
+							{tokens(used)} of {tokens(context.window)} tokens
 						</span>
 					</div>
-					<div className="bar">
-						<span style={{ width: share(system), background: "var(--ctx-system)" }} />
-						<span style={{ width: share(conversation), background: "var(--ctx-conversation)" }} />
+					<div className="ctx-bar">
+						<div className="ctx-fill">
+							<span style={{ width: share(system), background: "var(--ctx-system)" }} />
+							<span style={{ width: share(conversation), background: "var(--ctx-conversation)" }} />
+						</div>
+						{context.compactAt !== null && <i className="ctx-limit" style={{ left: `${context.compactAt}%` }} />}
 					</div>
-					<div className="legend">
+					<div className="ctx-legend">
 						<span className="swatch" style={{ background: "var(--ctx-system)" }} />
 						<span>System prompt and tools</span>
 						<span className="num">~{tokens(system)}</span>
@@ -62,7 +66,7 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 						<span>Conversation</span>
 						<span className="num">{context.tokens === null ? "?" : tokens(conversation)}</span>
 					</div>
-					<span className="note">
+					<span className="ctx-note">
 						{context.tokens === null
 							? "Exact count arrives with the next response"
 							: context.compactAt === null

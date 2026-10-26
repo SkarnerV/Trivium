@@ -1316,68 +1316,120 @@ button:disabled {
 	background: var(--soft);
 }
 
-.tooltip {
+/* Context parts: a quiet neutral for what every request carries, the app's accent for the conversation. */
+.ctx-card {
+	--ctx-system: #b7b9c6;
+	--ctx-conversation: var(--accent);
 	position: absolute;
 	right: -8px;
-	bottom: 36px;
+	bottom: 38px;
 	z-index: 10;
-	width: 240px;
+	width: 272px;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 12px 14px;
-	border-radius: 12px;
-	background: var(--ink);
-	color: #e8e8ec;
-	font-size: 12px;
-	box-shadow: 0 12px 32px rgba(19, 20, 43, 0.28);
+	gap: 12px;
+	padding: 14px 16px;
+	border-radius: 14px;
+	background: #fff;
+	color: var(--ink-2);
+	font-size: 12.5px;
+	box-shadow:
+		0 12px 32px rgba(19, 20, 43, 0.14),
+		0 0 0 1px rgba(19, 20, 43, 0.06);
+	animation: ctx-in 120ms ease-out;
 }
 
-.tooltip .head {
+.ctx-title {
+	margin-bottom: -6px;
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink-4);
+}
+
+.ctx-head {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
+	gap: 12px;
 }
 
-.tooltip .num {
-	font-family: var(--mono);
-	font-size: 11px;
-	color: #b4b6c2;
+.ctx-percent {
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.1;
+	color: var(--ink);
+	font-variant-numeric: tabular-nums;
 }
 
-.tooltip .bar {
+.ctx-total {
+	color: var(--ink-4);
+	font-variant-numeric: tabular-nums;
+}
+
+.ctx-bar {
+	position: relative;
+}
+
+.ctx-fill {
 	display: flex;
-	height: 6px;
-	border-radius: 3px;
+	height: 8px;
+	border-radius: 4px;
 	overflow: hidden;
-	background: #2a2b33;
+	background: var(--ring-track);
 }
 
-.tooltip .legend {
+/* Where automatic compaction starts. */
+.ctx-limit {
+	position: absolute;
+	top: -3px;
+	bottom: -3px;
+	width: 2px;
+	margin-left: -1px;
+	border-radius: 1px;
+	background: var(--ink-4);
+	opacity: 0.55;
+}
+
+.ctx-legend {
 	display: grid;
-	grid-template-columns: 10px minmax(0, 1fr) auto;
+	grid-template-columns: 8px minmax(0, 1fr) auto;
 	align-items: center;
-	gap: 4px 8px;
+	gap: 8px 10px;
+}
+
+.ctx-legend .swatch {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+
+.ctx-legend .num {
+	justify-self: end;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-3);
+}
+
+.ctx-note {
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+	color: var(--ink-4);
 	font-size: 11.5px;
 }
 
-.tooltip .swatch {
-	width: 8px;
-	height: 8px;
-	border-radius: 2px;
+@keyframes ctx-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
 }
 
-.tooltip .note {
-	padding-top: 2px;
-	border-top: 1px solid #2a2b33;
-	color: #9a9ca7;
-	font-size: 11px;
-}
-
-/* Context parts on the dark tooltip: a light neutral and the theme's bright tint stay apart in every app. */
-.tooltip {
-	--ctx-system: #c9cad3;
-	--ctx-conversation: var(--dot);
+@media (prefers-reduced-motion: reduce) {
+	.ctx-card {
+		animation: none;
+	}
 }
 
 .round-btn {

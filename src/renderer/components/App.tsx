@@ -3,7 +3,7 @@ import { appIconFilename } from "../../shared/branding.ts";
 import type { AppId } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
-import { dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
+import { closeSettings, dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
@@ -82,7 +82,7 @@ function useShortcuts() {
 			const state = getState();
 			if (event.key === ",") {
 				event.preventDefault();
-				if (state.page === "settings") setState({ page: "main" });
+				if (state.page === "settings") closeSettings();
 				else openSettings();
 				return;
 			}

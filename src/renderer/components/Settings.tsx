@@ -7,6 +7,7 @@ import { AppIcon, BackIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIco
 import {
 	attempt,
 	closeSettings,
+	openSettings,
 	refreshModels,
 	type SettingsSection,
 	setState,
@@ -797,7 +798,7 @@ export function SettingsPage() {
 			type="button"
 			className="set-nav-item"
 			aria-current={section === id ? "page" : undefined}
-			onClick={() => setState({ settingsSection: id })}
+			onClick={() => openSettings(id)}
 		>
 			<span className="s-nav-icon" style={color ? { color, background: `color-mix(in srgb, ${color} 14%, #fff)` } : undefined}>
 				{icon}

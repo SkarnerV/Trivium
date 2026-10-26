@@ -14,6 +14,7 @@ import type {
 	SessionView,
 	TranscriptImage,
 } from "../shared/protocol.ts";
+import { transition } from "./transition.ts";
 
 declare global {
 	interface Window {
@@ -243,14 +244,20 @@ export async function refreshSessions(): Promise<void> {
 export async function openSession(path: string): Promise<void> {
 	const view = await attempt(() => trivium.openSession(path));
 	if (!view) return;
-	setState((s) => ({
-		views: { ...s.views, [path]: view },
-		selected: { ...s.selected, [view.app]: path },
-		app: view.app,
-		peek: false,
-		overlay: null,
-		sessions: s.sessions.map((session) => (session.path === path ? { ...session, unread: false } : session)),
-	}));
+	const before = getState();
+	const show = () =>
+		setState((s) => ({
+			views: { ...s.views, [path]: view },
+			selected: { ...s.selected, [view.app]: path },
+			app: view.app,
+			peek: false,
+			overlay: null,
+			sessions: s.sessions.map((session) => (session.path === path ? { ...session, unread: false } : session)),
+		}));
+	// Reloading the session already on screen is not a switch.
+	const shown = before.page === "main" && before.app === view.app && before.selected[view.app] === path && before.views[path];
+	if (shown) show();
+	else transition(before.app === view.app ? "session" : "app", show);
 	void refreshModels();
 }
 
@@ -264,20 +271,24 @@ export async function refreshModels(): Promise<void> {
 export async function startSession(input: NewSessionInput, draft?: string): Promise<SessionView | undefined> {
 	const view = await attempt(() => trivium.newSession(input));
 	if (!view) return undefined;
-	setState((s) => ({
-		drafts: draft ? { ...s.drafts, [view.path]: draft } : s.drafts,
-		views: { ...s.views, [view.path]: view },
-		selected: { ...s.selected, [input.app]: view.path },
-		app: input.app,
-		overlay: null,
-	}));
+	transition(getState().app === input.app ? "session" : "app", () =>
+		setState((s) => ({
+			drafts: draft ? { ...s.drafts, [view.path]: draft } : s.drafts,
+			views: { ...s.views, [view.path]: view },
+			selected: { ...s.selected, [input.app]: view.path },
+			app: input.app,
+			overlay: null,
+		})),
+	);
 	void refreshSessions();
 	void refreshModels();
 	return view;
 }
 
 export function switchApp(app: AppId): void {
-	setState({ app, peek: false, page: "main" });
+	const { app: current, page } = getState();
+	if (app === current && page === "main") return;
+	transition(page === "main" ? "app" : "page", () => setState({ app, peek: false, page: "main" }));
 	const path = getState().selected[app];
 	if (path && !getState().views[path]) void openSession(path);
 }
@@ -314,11 +325,15 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 }
 
 export function openSettings(section?: SettingsSection): void {
-	setState((s) => ({ page: "settings", settingsSection: section ?? s.settingsSection, overlay: null, peek: false }));
+	const update = () => setState((s) => ({ page: "settings", settingsSection: section ?? s.settingsSection, overlay: null, peek: false }));
+	const { page, settingsSection } = getState();
+	if (page !== "settings") transition("page", update);
+	else if (section && section !== settingsSection) transition("section", update);
+	else update();
 }
 
 export function closeSettings(): void {
-	setState({ page: "main" });
+	if (getState().page !== "main") transition("page", () => setState({ page: "main" }));
 	const { selected, app, views } = getState();
 	const path = selected[app];
 	if (path && !views[path]) void openSession(path);

@@ -3644,3 +3644,86 @@ body.resizing * {
 	color: var(--ink-4);
 	font-size: 12px;
 }
+
+/* Switch transitions (transition.ts). Regions are named only while one runs, so each animates on its own and
+   the rest of the window, such as the accent color of another app, crossfades. */
+
+:root[data-transition] .pane {
+	view-transition-name: pane;
+}
+
+:root[data-transition] .set-content {
+	view-transition-name: set-content;
+}
+
+/* The session list changes only with the app, or when it comes back from settings. */
+:root[data-transition="app"] .sb-sessions,
+:root[data-transition="page"] .sb-sessions {
+	view-transition-name: sessions;
+}
+
+:root[data-transition] .changes > .diff,
+:root[data-transition] .side-body {
+	view-transition-name: panel-body;
+}
+
+::view-transition-group(*) {
+	animation-duration: 220ms;
+	animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 180ms;
+}
+
+::view-transition-old(pane),
+::view-transition-old(set-content),
+::view-transition-old(sessions),
+::view-transition-old(panel-body) {
+	animation: vt-out 110ms ease-in both;
+}
+
+::view-transition-new(pane),
+::view-transition-new(set-content),
+::view-transition-new(panel-body) {
+	animation: vt-rise 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Another app's sessions slide in beside the switcher. */
+::view-transition-new(sessions) {
+	animation: vt-slide 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* A tab within a panel changes less than the whole conversation does. */
+:root[data-transition="tab"] ::view-transition-new(panel-body) {
+	animation-name: vt-rise-small;
+	animation-duration: 180ms;
+}
+
+@keyframes vt-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes vt-rise {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+
+@keyframes vt-rise-small {
+	from {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+}
+
+@keyframes vt-slide {
+	from {
+		opacity: 0;
+		transform: translateX(-8px);
+	}
+}

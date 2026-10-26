@@ -5,6 +5,7 @@ import { CloseIcon, ExternalIcon, PenIcon } from "../icons.tsx";
 import { attempt, setState, startSession, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
 import { Resizer } from "./Resizer.tsx";
+import { transition } from "../transition.ts";
 
 const isNote = (change: FileChange) => /\.(md|markdown|mdx|txt)$/i.test(change.path) && change.status !== "deleted";
 
@@ -69,10 +70,10 @@ export function NotePanel({ view }: { view: SessionView }) {
 			<div className="side-head">
 				<h2 className="mono">{baseName(note.rel)}</h2>
 				<div className="seg" role="tablist" aria-label="Note view">
-					<button type="button" role="tab" aria-selected={tab === "preview"} onClick={() => setTab("preview")}>
+					<button type="button" role="tab" aria-selected={tab === "preview"} onClick={() => transition("tab", () => setTab("preview"))}>
 						Preview
 					</button>
-					<button type="button" role="tab" aria-selected={tab === "sources"} onClick={() => setTab("sources")}>
+					<button type="button" role="tab" aria-selected={tab === "sources"} onClick={() => transition("tab", () => setTab("sources"))}>
 						Sources {sources.length}
 					</button>
 				</div>
@@ -89,7 +90,7 @@ export function NotePanel({ view }: { view: SessionView }) {
 			{notes.length > 1 && (
 				<div className="chips" role="tablist" aria-label="Notes">
 					{notes.map((n) => (
-						<button key={n.path} type="button" role="tab" className="chip" aria-selected={n === note} title={n.rel} onClick={() => setSelected(n.path)}>
+						<button key={n.path} type="button" role="tab" className="chip" aria-selected={n === note} title={n.rel} onClick={() => transition("tab", () => setSelected(n.path))}>
 							{baseName(n.rel)}
 						</button>
 					))}

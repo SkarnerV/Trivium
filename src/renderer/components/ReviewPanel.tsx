@@ -6,6 +6,7 @@ import { CloseIcon } from "../icons.tsx";
 import { askConfirm, attempt, setState, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
 import { Resizer } from "./Resizer.tsx";
+import { transition } from "../transition.ts";
 
 type Change = Extract<ReviewSegment, { kind: "change" }>;
 
@@ -119,7 +120,7 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 			{files.length > 1 && (
 				<div className="chips" role="tablist" aria-label="Changed documents">
 					{files.map((f) => (
-						<button key={f.path} type="button" role="tab" className="chip" aria-selected={f === file} title={f.rel} onClick={() => setSelected(f.path)}>
+						<button key={f.path} type="button" role="tab" className="chip" aria-selected={f === file} title={f.rel} onClick={() => transition("tab", () => setSelected(f.path))}>
 							{baseName(f.rel)}
 						</button>
 					))}

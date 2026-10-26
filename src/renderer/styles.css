@@ -2033,34 +2033,47 @@ body.resizing * {
 
 /* Toasts */
 
-/* Top right of the content card, below the session header and clear of the message box. */
+/* Centered at the top of the content card, over the session header's empty middle. */
 .toasts {
 	position: fixed;
-	top: calc(var(--window-titlebar-height, 12px) + 72px);
-	right: 24px;
+	top: calc(var(--window-titlebar-height, 12px) + 10px);
+	left: 50%;
 	z-index: 200;
-	width: 360px;
-	max-width: calc(100vw - 48px);
+	width: 460px;
+	max-width: calc(100% - 48px);
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 6px;
+	transform: translateX(-50%);
 	pointer-events: none;
+}
+
+.card > .toasts {
+	position: absolute;
+	top: 10px;
 }
 
 .toast {
 	--toast-fg: var(--accent);
 	--toast-bg: var(--soft);
 	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 12px 10px 12px 12px;
-	border-radius: 14px;
+	align-items: center;
+	gap: 10px;
+	height: 40px;
+	padding: 0 6px 0 8px;
+	border-radius: 12px;
 	background: #fff;
 	box-shadow:
-		0 12px 32px rgba(19, 20, 43, 0.14),
+		0 10px 28px rgba(19, 20, 43, 0.14),
 		0 0 0 1px rgba(19, 20, 43, 0.06);
 	pointer-events: auto;
 	animation: toast-in 180ms ease-out;
+}
+
+.toast.expanded {
+	height: auto;
+	align-items: flex-start;
+	padding-block: 6px;
 }
 
 .toast.warning {
@@ -2074,12 +2087,12 @@ body.resizing * {
 }
 
 .toast-icon {
-	width: 28px;
-	height: 28px;
+	width: 26px;
+	height: 26px;
 	flex: none;
 	display: grid;
 	place-items: center;
-	border-radius: 8px;
+	border-radius: 7px;
 	background: var(--toast-bg);
 	color: var(--toast-fg);
 }
@@ -2088,23 +2101,35 @@ body.resizing * {
 	flex: 1;
 	min-width: 0;
 	margin: 0;
-	padding-top: 5px;
 	font-size: 13px;
-	line-height: 1.45;
+	line-height: 20px;
 	color: var(--ink-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.toast.expanded .toast-text {
+	max-height: 40vh;
+	padding: 3px 0;
+	overflow-y: auto;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+	user-select: text;
 }
 
 .toast .mini-btn {
-	margin-top: 1px;
 	color: var(--ink-4);
+}
+
+.toast .mini-btn + .mini-btn {
+	margin-left: -6px;
 }
 
 @keyframes toast-in {
 	from {
 		opacity: 0;
-		transform: translateY(-6px);
+		translate: 0 -6px;
 	}
 }
 

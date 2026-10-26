@@ -132,13 +132,22 @@ export function useStore<T>(select: (state: State) => T): T {
 	);
 }
 
+const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function notify(message: string, level: Notice["level"] = "error"): void {
 	const notice: Notice = { id: crypto.randomUUID(), message, level };
 	setState((s) => ({ notices: [...s.notices, notice] }));
-	setTimeout(() => dismissNotice(notice.id), level === "error" ? 8000 : 4000);
+	noticeTimers.set(notice.id, setTimeout(() => dismissNotice(notice.id), level === "error" ? 8000 : 4000));
+}
+
+/** Keeps a notice up until the user dismisses it, such as once they expand it to read. */
+export function holdNotice(id: string): void {
+	clearTimeout(noticeTimers.get(id));
+	noticeTimers.delete(id);
 }
 
 export function dismissNotice(id: string): void {
+	holdNotice(id);
 	setState((s) => ({ notices: s.notices.filter((n) => n.id !== id) }));
 }
 

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { appIconFilename } from "../../shared/branding.ts";
-import type { AppId } from "../../shared/protocol.ts";
+import type { AppId, Notice } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { AlertIcon, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
-import { closeSettings, dismissNotice, getState, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
+import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
+import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
@@ -56,20 +56,51 @@ function WindowTitleBar({ app, showAppSwitcher = false }: { app: AppId; showAppS
 	);
 }
 
+/** One line high, so a long error doesn't cover the thread; the user can expand it to read the rest. */
+function Toast({ notice }: { notice: Notice }) {
+	const text = useRef<HTMLParagraphElement>(null);
+	const [expanded, setExpanded] = useState(false);
+	const [clipped, setClipped] = useState(false);
+	useLayoutEffect(() => {
+		const element = text.current;
+		if (element && !expanded) setClipped(element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1);
+	}, [notice.message, expanded]);
+	return (
+		<div className={`toast ${notice.level}${expanded ? " expanded" : ""}`} role={notice.level === "error" ? "alert" : "status"}>
+			<span className="toast-icon">
+				{notice.level === "error" ? <AlertIcon size={14} /> : notice.level === "warning" ? <WarnIcon size={13} width={2} /> : <InfoIcon size={14} />}
+			</span>
+			<p className="toast-text" ref={text} title={clipped && !expanded ? notice.message : undefined}>
+				{notice.message}
+			</p>
+			{(clipped || expanded) && (
+				<button
+					type="button"
+					className="mini-btn"
+					aria-expanded={expanded}
+					aria-label={expanded ? "Show less" : "Show full message"}
+					title={expanded ? "Show less" : "Show full message"}
+					onClick={() => {
+						holdNotice(notice.id);
+						setExpanded(!expanded);
+					}}
+				>
+					<Chevron open={expanded} down size={12} />
+				</button>
+			)}
+			<button type="button" className="mini-btn" aria-label="Dismiss" title="Dismiss" onClick={() => dismissNotice(notice.id)}>
+				<CloseIcon size={12} />
+			</button>
+		</div>
+	);
+}
+
 function Toasts() {
 	const notices = useStore((s) => s.notices);
 	return (
 		<div className="toasts" aria-live="polite">
 			{notices.map((notice) => (
-				<div key={notice.id} className={`toast ${notice.level}`} role={notice.level === "error" ? "alert" : "status"}>
-					<span className="toast-icon">
-						{notice.level === "error" ? <AlertIcon size={15} /> : notice.level === "warning" ? <WarnIcon size={14} width={2} /> : <InfoIcon size={15} />}
-					</span>
-					<p className="toast-text">{notice.message}</p>
-					<button type="button" className="mini-btn" aria-label="Dismiss" onClick={() => dismissNotice(notice.id)}>
-						<CloseIcon size={12} />
-					</button>
-				</div>
+				<Toast key={notice.id} notice={notice} />
 			))}
 		</div>
 	);
@@ -173,6 +204,7 @@ export function App() {
 					{view && panel === "note" && <NotePanel view={view} />}
 					{view && panel === "review" && <ReviewPanel view={view} />}
 					{view && open && !panel && <EmptyPanel view={view} kind={panelKind(app)} />}
+					<Toasts />
 				</div>
 			</div>
 			{overlay === "new" && <NewSessionDialog />}
@@ -180,7 +212,6 @@ export function App() {
 			<ConfirmDialog />
 			<ImageLightbox />
 			<TrustDialog />
-			<Toasts />
 		</div>
 	);
 }

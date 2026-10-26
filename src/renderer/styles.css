@@ -1612,21 +1612,6 @@ button:disabled {
 	color: #fff;
 }
 
-.modal textarea.first {
-	width: 100%;
-	padding: 12px 14px;
-	border: 1px solid var(--edge);
-	border-radius: 12px;
-	resize: none;
-	outline: none;
-	font-size: 14px;
-	background: #fff;
-}
-
-.modal textarea.first:focus {
-	border-color: var(--accent);
-}
-
 .group-label {
 	padding: 0 4px 6px;
 	font-size: 11px;
@@ -1675,39 +1660,6 @@ button:disabled {
 	flex: 1;
 	font-family: var(--mono);
 	font-size: 11.5px;
-	color: var(--ink-3);
-}
-
-.setup {
-	border-radius: 12px;
-	background: var(--tray);
-}
-
-.setup > button {
-	width: 100%;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-height: 40px;
-	padding: 0 12px;
-	border: 0;
-	border-radius: 12px;
-	background: transparent;
-	color: var(--ink-2);
-	text-align: left;
-	font-size: 12px;
-}
-
-.setup-grid {
-	display: grid;
-	grid-template-columns: 84px minmax(0, 1fr);
-	row-gap: 6px;
-	column-gap: 12px;
-	padding: 0 12px 12px 32px;
-	font-size: 12px;
-}
-
-.setup-grid .k {
 	color: var(--ink-3);
 }
 

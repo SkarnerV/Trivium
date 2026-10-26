@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AppProfileInfo, SessionSummary, TrustChoice } from "../../shared/protocol.ts";
+import type { SessionSummary, TrustChoice } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
-import { AppIcon, Chevron, CloseIcon, FolderIcon } from "../icons.tsx";
+import { AppIcon, CloseIcon, FolderIcon } from "../icons.tsx";
 import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 
@@ -9,14 +9,11 @@ const close = () => setState({ overlay: null });
 
 export function NewSessionDialog() {
 	const app = useStore((s) => s.app);
-	const models = useStore((s) => s.models);
-	const [message, setMessage] = useState("");
 	const [projects, setProjects] = useState<string[]>([]);
 	const [cwd, setCwd] = useState<string | undefined>();
-	const [profile, setProfile] = useState<AppProfileInfo | undefined>();
-	const [openSetup, setOpenSetup] = useState(false);
 	const [busy, setBusy] = useState(false);
-	const ref = useRef<HTMLTextAreaElement>(null);
+	// Focus the dialog itself so Esc and the ⌘ shortcuts work right away.
+	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		ref.current?.focus();
@@ -27,7 +24,6 @@ export function NewSessionDialog() {
 			setProjects(merged);
 			setCwd((current) => current ?? merged[0]);
 		});
-		void attempt(() => trivium.profiles()).then((list) => setProfile(list?.find((p) => p.id === app)));
 	}, [app]);
 
 	const pickFolder = async () => {
@@ -40,12 +36,11 @@ export function NewSessionDialog() {
 	const start = async () => {
 		if (!cwd || busy) return;
 		setBusy(true);
-		await startSession({ app, cwd, message });
+		await startSession({ app, cwd });
 		setBusy(false);
 	};
 
 	const name = THEMES[app].name;
-	const extensions = profile?.extensions.map(baseName) ?? [];
 	return (
 		<div
 			className="scrim"
@@ -58,7 +53,7 @@ export function NewSessionDialog() {
 				event.preventDefault();
 			}}
 		>
-			<div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
+			<div ref={ref} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-labelledby="new-session-title" style={{ outline: "none" }}>
 				<div className="modal-head">
 					<span className="app-badge">
 						<AppIcon app={app} />
@@ -68,23 +63,6 @@ export function NewSessionDialog() {
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
-				<label style={{ display: "block" }}>
-					<span className="sr-only">First message</span>
-					<textarea
-						ref={ref}
-						className="first"
-						rows={3}
-						value={message}
-						onChange={(event) => setMessage(event.target.value)}
-						placeholder={
-							app === "code"
-								? "What should it build or fix? (optional)"
-								: app === "research"
-									? "What should it find out? (optional)"
-									: "What should it write or revise? (optional)"
-						}
-					/>
-				</label>
 				<div role="radiogroup" aria-label="Project" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
 					<span className="group-label">Project</span>
 					{projects.map((path, index) => (
@@ -106,24 +84,6 @@ export function NewSessionDialog() {
 						<FolderIcon />
 						Open another folder…
 					</button>
-				</div>
-				<div className="setup">
-					<button type="button" aria-expanded={openSetup} onClick={() => setOpenSetup(!openSetup)}>
-						<Chevron open={openSetup} />
-						<span style={{ flex: 1 }}>
-							{models.length ? "Default model" : "No models configured"} · {extensions.length}{" "}
-							{extensions.length === 1 ? "extension" : "extensions"} · {profile?.tools.length ?? 0} tools
-						</span>
-						<span className="kbd">{profile ? shortPath(profile.extensionDir) : ""}</span>
-					</button>
-					{openSetup && profile && (
-						<div className="setup-grid">
-							<span className="k">Tools</span>
-							<span className="mono">{profile.tools.join(", ")}</span>
-							<span className="k">Extensions</span>
-							<span className="mono">{extensions.length ? extensions.join(", ") : "Only those in ~/.pi/agent"}</span>
-						</div>
-					)}
 				</div>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={close}>

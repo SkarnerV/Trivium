@@ -27,6 +27,8 @@
 	"main": "dist/main.mjs",
 	"scripts": {
 		"build": "node scripts/build.mjs",
+		"package": "node scripts/build.mjs --production && electron-builder",
+		"test": "node --experimental-strip-types --test scripts/*.test.ts scripts/*.test.mjs",
 		"start": "node scripts/build.mjs && node scripts/start.mjs",
 		"dev": "node scripts/dev.mjs",
 		"check": "tsc --noEmit -p tsconfig.json"
@@ -48,6 +50,7 @@
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
 		"electron": "45.0.0",
+		"electron-builder": "26.18.0",
 		"esbuild": "0.28.2",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",

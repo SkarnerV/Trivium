@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            args: --win --x64
+            executable: release/win-unpacked/Trivium.exe
+            asset: release/*.exe
+          - name: macOS arm64
+            os: macos-14
+            args: --mac --arm64
+            executable: release/mac-arm64/Trivium.app/Contents/MacOS/Trivium
+            asset: release/*.dmg
+          - name: macOS x64
+            os: macos-15-intel
+            args: --mac --x64
+            executable: release/mac/Trivium.app/Contents/MacOS/Trivium
+            asset: release/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - run: npm ci
+      - name: Check release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node --input-type=module -e 'import fs from "node:fs"; const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version; if (process.env.GITHUB_REF_NAME !== `v${version}`) throw new Error("Tag and package version differ");'
+      - run: npm run check
+      - run: npm test
+      - name: Package
+        run: npm run package -- ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Launch packaged app
+        run: node scripts/smoke-packaged.mjs "${{ matrix.executable }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Verify release assets
+        shell: bash
+        run: |
+          test "$(find release -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
+          test "$(find release -maxdepth 1 -name '*.dmg' | wc -l)" -eq 2
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 3
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.exe release/*.dmg \
+            --verify-tag --title "Trivium $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" --latest

@@ -1,0 +1,33 @@
+appId: com.coresmos.trivium.desktop
+productName: Trivium
+directories:
+  output: release
+# Extensions load TypeScript and start helper processes from their package directories.
+# Keep those packages on the real filesystem, including their runtime assets.
+asar: false
+files:
+  - dist/main.mjs
+  - dist/preload.cjs
+  - dist/renderer.js
+  - dist/index.html
+  - dist/styles.css
+  - dist/trivium-icon*.png
+  - dist/trivium-icon*.ico
+  - package.json
+  - LICENSE
+mac:
+  category: public.app-category.developer-tools
+  icon: src/assets/trivium-icon.png
+  identity: null
+  target:
+    - dmg
+  artifactName: Trivium-${version}-macOS-${arch}.${ext}
+win:
+  icon: src/assets/trivium-icon.ico
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: Trivium-${version}-Windows-${arch}.${ext}
+portable:
+  requestExecutionLevel: user

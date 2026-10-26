@@ -11,7 +11,7 @@ extensions and model, so the agent fixing your code is not the one citing your s
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Platform](https://img.shields.io/badge/platform-macOS-16171B?style=flat-square&logo=apple&logoColor=white)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-16171B?style=flat-square)](#requirements)
 [![Status](https://img.shields.io/badge/status-early%20preview-A65A08?style=flat-square)](#roadmap)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B7A6E?style=flat-square)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/SkarnerV/Trivium?style=flat-square&color=0B7A6E)](https://github.com/SkarnerV/Trivium/stargazers)
@@ -104,11 +104,21 @@ changed line.
 
 ### Requirements
 
-- macOS (Windows and Linux builds are on the [roadmap](#roadmap))
-- Node.js 22.19 or newer
+- macOS (Apple Silicon or Intel), or Windows x64
 - At least one model provider. Connect it in **Settings → Models and logins**, or with the pi CLI (`pi`, then `/login`).
+- Coding tools need a shell and your project's tools. On Windows, install Git for Windows for Bash.
+
+### Download
+
+Download the latest build from [GitHub Releases](https://github.com/SkarnerV/Trivium/releases/latest).
+On macOS, choose the `arm64` (Apple Silicon) or `x64` (Intel) DMG and drag Trivium to Applications.
+On Windows, download the single portable `.exe` and run it. The app includes its runtime.
+These preview builds are unsigned; macOS builds are not notarized. If macOS blocks the first
+launch, allow Trivium in **System Settings → Privacy & Security**.
 
 ### Run from source
+
+Building from source requires Node.js 22.19 or newer.
 
 ```bash
 git clone https://github.com/SkarnerV/Trivium.git
@@ -211,7 +221,14 @@ them off in that app's settings.
 npm run check   # type-check
 npm start       # build and launch
 npm run dev     # launch and rebuild on save
+npm test        # run the test suite
+npm run package -- --win --x64 --publish never # portable Windows .exe
+npm run package -- --mac --arm64 --publish never # macOS DMG (run on macOS)
 ```
+
+Packages are written to `release/`. Pushing a version tag such as `v0.1.0` runs the release
+workflow on Windows and both Mac architectures. It checks and launches each packaged app,
+then publishes the Windows `.exe` and two macOS DMGs together on GitHub Releases.
 
 `npm run dev` reloads the window when renderer or preload code changes (the selected session
 reopens), applies `styles.css` without a reload, and restarts the app when main-process code

@@ -2,6 +2,7 @@ import { copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const production = process.argv.includes("--production");
 export const dist = `${root}dist/`;
 
 export const bundles = {
@@ -14,7 +15,7 @@ export const bundles = {
 		format: "esm",
 		target: "node22",
 		external: ["electron", "@earendil-works/*"],
-		sourcemap: true,
+		sourcemap: !production,
 	},
 	preload: {
 		entryPoints: [`${root}src/preload/preload.ts`],
@@ -32,8 +33,9 @@ export const bundles = {
 		format: "esm",
 		jsx: "automatic",
 		loader: { ".svg": "text" },
-		sourcemap: true,
-		define: { "process.env.NODE_ENV": '"development"' },
+		sourcemap: !production,
+		minify: production,
+		define: { "process.env.NODE_ENV": JSON.stringify(production ? "production" : "development") },
 	},
 };
 

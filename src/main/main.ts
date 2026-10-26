@@ -1,7 +1,7 @@
 import { mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { copyFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
@@ -412,11 +412,14 @@ function createWindow(): void {
 app.whenReady().then(async () => {
 	if (process.platform === "win32") {
 		try {
+			const portableLauncher = app.isPackaged ? process.env.PORTABLE_EXECUTABLE_FILE : undefined;
 			const repaired = registerWindowsShortcuts(shell, {
 				appData: app.getPath("appData"),
-				appPath: app.getAppPath(),
-				executable: process.execPath,
-				icon: join(assets, appIconFilename("code", "ico")),
+				appPath: portableLauncher ? dirname(portableLauncher) : app.getAppPath(),
+				// A portable build extracts its runtime to a temporary directory on each launch.
+				// Shortcuts must point to the durable launcher and its embedded icon instead.
+				executable: portableLauncher ?? process.execPath,
+				icon: portableLauncher ?? join(assets, appIconFilename("code", "ico")),
 				packaged: !process.defaultApp && app.isPackaged,
 			});
 			if (repaired.length) await refreshWindowsIcons();

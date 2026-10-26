@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Run, Step, TranscriptImage } from "../shared/protocol.ts";
+import { explainLimit } from "./limits.ts";
 
 /**
  * Turns pi's message stream into runs: one user message, the steps the agent
@@ -40,6 +41,8 @@ interface RunState {
 	startedAt?: number;
 	endedAt?: number;
 	error?: string;
+	/** The provider that reported the error, which tells apart errors that read alike. */
+	errorProvider?: string;
 }
 
 type ContentPart = { type: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
@@ -262,9 +265,12 @@ export class RunTracker {
 			case "message_end":
 				if (event.message.role === "assistant" && this.currentAssistantKey) {
 					this.applyAssistant(event.message, this.currentAssistantKey, true, "done");
-					const error = (event.message as { errorMessage?: string; stopReason?: string }).errorMessage;
+					const { errorMessage: error, provider } = event.message as { errorMessage?: string; provider?: string };
 					const run = this.runs.at(-1);
-					if (run && error) run.error = error;
+					if (run && error) {
+						run.error = error;
+						run.errorProvider = provider;
+					}
 					this.currentAssistantKey = undefined;
 					return true;
 				}
@@ -339,10 +345,11 @@ export class RunTracker {
 		}
 		if (message.role === "assistant") {
 			this.applyAssistant(message, `m${this.messageSeq++}`, false);
-			const error = (message as { errorMessage?: string }).errorMessage;
+			const { errorMessage: error, provider } = message as { errorMessage?: string; provider?: string };
 			const run = this.runs.at(-1);
 			if (run && error) {
 				run.error = error;
+				run.errorProvider = provider;
 				run.status = "error";
 			}
 			return;
@@ -441,6 +448,7 @@ export class RunTracker {
 			startedAt: run.startedAt,
 			endedAt: run.endedAt,
 			error: run.error,
+			limit: run.error ? explainLimit(run.error, run.errorProvider) : undefined,
 		};
 	}
 }

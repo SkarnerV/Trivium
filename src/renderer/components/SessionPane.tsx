@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
-import type { Run, SessionView } from "../../shared/protocol.ts";
+import type { LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { AppIcon, BranchIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
+import { AppIcon, BranchIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
 import { askConfirm, forkFrom, rewindTo, setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -17,6 +17,27 @@ function fileKind(name: string, kind: "image" | "file"): string {
 	if (kind === "image") return "Image";
 	const extension = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1];
 	return extension ? `${extension.toUpperCase()} file` : "File";
+}
+
+/** A usage limit or empty balance, said plainly, with the provider's own message a click away. */
+function LimitCard({ limit }: { limit: LimitNotice }) {
+	return (
+		<div className="run-error limit">
+			<p>{limit.message}</p>
+			<div className="limit-foot">
+				{limit.link && (
+					<a href={limit.link.url} target="_blank" rel="noreferrer">
+						{limit.link.label}
+						<ExternalIcon size={12} />
+					</a>
+				)}
+				<details>
+					<summary>Provider's message</summary>
+					<div className="limit-detail">{limit.detail}</div>
+				</details>
+			</div>
+		</div>
+	);
 }
 
 /** Asks before taking the conversation back, since the later messages leave it and Trivium can't show them again. */
@@ -94,7 +115,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 						<Markdown text={run.answer} />
 					</div>
 				)}
-				{run.error && run.status !== "aborted" && <div className="run-error">{run.error}</div>}
+				{run.error && run.status !== "aborted" && (run.limit ? <LimitCard limit={run.limit} /> : <div className="run-error">{run.error}</div>)}
 			</div>
 		</div>
 	);

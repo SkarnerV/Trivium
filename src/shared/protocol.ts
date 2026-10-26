@@ -79,6 +79,16 @@ export interface Step {
 	tail?: string;
 }
 
+/** A provider's usage-limit, quota or balance error, explained. */
+export interface LimitNotice {
+	/** What happened and what to do, in plain words. */
+	message: string;
+	/** Where to check usage, top up or renew. */
+	link?: { label: string; url: string };
+	/** The provider's own words. */
+	detail: string;
+}
+
 export interface Run {
 	id: string;
 	prompt: string;
@@ -91,6 +101,8 @@ export interface Run {
 	startedAt?: number;
 	endedAt?: number;
 	error?: string;
+	/** Set when `error` is a usage limit or an empty balance Trivium recognizes. */
+	limit?: LimitNotice;
 }
 
 export interface ContextInfo {

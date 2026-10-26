@@ -295,6 +295,7 @@ export function Sidebar() {
 					<span className="label">New session</span>
 				</button>
 			</div>
+			<div className="sb-label" aria-hidden="true">Projects</div>
 			<div className="sb-sessions">
 				<SessionGroups />
 			</div>

@@ -323,10 +323,10 @@ body.resizing * {
 }
 
 .app-name {
-	color: var(--accent);
+	color: var(--ink);
 	font-weight: 600;
-	font-size: 20px;
-	letter-spacing: -0.02em;
+	font-size: 15px;
+	letter-spacing: -0.015em;
 }
 
 .switcher {
@@ -392,11 +392,11 @@ body.resizing * {
 .sb-row {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	min-height: 36px;
+	gap: 9px;
+	min-height: 32px;
 	padding: 0 10px;
 	border: 0;
-	border-radius: 9px;
+	border-radius: 8px;
 	background: transparent;
 	color: var(--secondary);
 	text-align: left;
@@ -407,8 +407,26 @@ body.resizing * {
 	background: var(--tab);
 }
 
+.sb-row svg {
+	flex: none;
+	color: var(--muted);
+}
+
+.sb-row:hover svg {
+	color: var(--secondary);
+}
+
 .sb-row .label {
 	flex: 1;
+}
+
+.sb-label {
+	flex: none;
+	margin: 4px 0 -10px;
+	padding: 0 10px;
+	font-size: 11.5px;
+	font-weight: 500;
+	color: var(--muted);
 }
 
 .sb-sessions {
@@ -417,7 +435,7 @@ body.resizing * {
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 2px;
 	margin-right: -6px;
 	padding-right: 6px;
 }
@@ -428,13 +446,17 @@ body.resizing * {
 	gap: 2px;
 }
 
+/* Folded projects stack tightly; an open one keeps a little room before the next. */
+.project:has(.session-item):not(:last-child) {
+	margin-bottom: 8px;
+}
+
 .project-head {
 	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	min-height: 32px;
-	margin-bottom: 2px;
 	padding-right: 4px;
 	border-radius: 8px;
 	color: var(--secondary);
@@ -460,7 +482,6 @@ body.resizing * {
 	border-radius: 8px;
 	background: transparent;
 	color: inherit;
-	font-size: 12.5px;
 	font-weight: 500;
 	text-align: left;
 }
@@ -476,8 +497,8 @@ body.resizing * {
 
 .project-head .count {
 	padding: 0 6px;
-	font-family: var(--mono);
 	font-size: 11px;
+	font-variant-numeric: tabular-nums;
 	color: var(--muted);
 }
 
@@ -517,7 +538,7 @@ body.resizing * {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	min-height: 36px;
+	min-height: 32px;
 	/* Aligns sessions under the project name, not its icon. */
 	padding: 0 10px 0 33px;
 	border: 0;

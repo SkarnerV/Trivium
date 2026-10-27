@@ -5,7 +5,7 @@ import { CloseIcon, PaperclipIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } fr
 import { attempt, setState, trivium, useStore } from "../store.ts";
 import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
-import { ModelSelect } from "./ModelSelect.tsx";
+import { ModelMenu } from "./ModelSelect.tsx";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
 	const [open, setOpen] = useState(false);
@@ -80,8 +80,7 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 }
 
 function ModelPicker({ view }: { view: SessionView }) {
-	const change = async (key: string | undefined, level: string) => {
-		if (!key) return;
+	const change = async (key: string, level: string) => {
 		const ok = await attempt(() => trivium.setModel(view.path, key, level).then(() => true));
 		if (!ok) return;
 		setState((s) => {
@@ -89,7 +88,7 @@ function ModelPicker({ view }: { view: SessionView }) {
 			return current ? { views: { ...s.views, [view.path]: { ...current, model: key, thinkingLevel: level } } } : {};
 		});
 	};
-	return <ModelSelect value={view.model} level={view.thinkingLevel} variant="ghost" align="right" onChange={(k, l) => void change(k, l)} />;
+	return <ModelMenu value={view.model} level={view.thinkingLevel} onChange={(k, l) => void change(k, l)} />;
 }
 
 function Tray({ view }: { view: SessionView }) {

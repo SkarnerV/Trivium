@@ -3724,10 +3724,21 @@ body.resizing * {
 }
 
 .dd-ghost .dd-trigger {
-	padding: 0 6px 0 8px;
+	gap: 4px;
+	min-height: 28px;
+	padding: 0 7px;
 	background: transparent;
 	color: var(--ink-2);
 	font-size: 12px;
+}
+
+/* The composer's controls drop the caret; the hover fill shows they open. */
+.dd-ghost .dd-trigger > svg:last-child {
+	display: none;
+}
+
+.dd-ghost .dd-value {
+	max-width: 150px;
 }
 
 .dd-ghost .dd-trigger:hover,
@@ -3854,6 +3865,146 @@ body.resizing * {
 	align-items: center;
 	gap: 4px;
 	min-width: 0;
+}
+
+/* Composer model and effort picker */
+
+.dd-options {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.mm-effort {
+	display: inline-grid;
+	color: var(--ink-4);
+}
+
+.mm-effort > span {
+	grid-area: 1 / 1;
+}
+
+.mm-effort > .hidden {
+	visibility: hidden;
+}
+
+/* Centred on the trigger; translate rather than transform so the open animation still applies. */
+.mm-menu {
+	left: 50%;
+	width: 264px;
+	translate: -50% 0;
+}
+
+.mm-effort-pane {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 10px 10px 8px;
+}
+
+.mm-level {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--accent-text);
+}
+
+.mm-model,
+.mm-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.mm-model:hover,
+.mm-back:hover {
+	background: var(--soft);
+	color: var(--ink);
+}
+
+.mm-back {
+	align-self: flex-start;
+	margin: 2px 2px 4px;
+}
+
+/* A native range input over a drawn track, so it keeps keyboard and drag for free. */
+.mm-scale {
+	position: relative;
+	align-self: stretch;
+	height: 26px;
+	margin-top: 12px;
+	border-radius: 13px;
+	--mm-stop: calc(13px + (100% - 26px) * var(--mm-fill));
+	background: linear-gradient(to right, color-mix(in srgb, var(--accent) 18%, transparent) var(--mm-stop), var(--soft) var(--mm-stop));
+}
+
+.mm-ticks {
+	position: absolute;
+	inset: 0 13px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	pointer-events: none;
+}
+
+.mm-ticks span {
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--ink-4);
+	opacity: 0.45;
+}
+
+.mm-ticks span.on {
+	background: var(--accent);
+	opacity: 0.8;
+}
+
+.mm-scale input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	background: transparent;
+	appearance: none;
+	cursor: pointer;
+}
+
+.mm-scale input::-webkit-slider-thumb {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 1px 4px rgba(19, 20, 43, 0.18);
+	appearance: none;
+}
+
+.mm-scale input:focus-visible {
+	outline: none;
+}
+
+.mm-scale input:focus-visible::-webkit-slider-thumb {
+	box-shadow:
+		0 0 0 2px var(--accent),
+		0 1px 4px rgba(19, 20, 43, 0.18);
+}
+
+.mm-ends {
+	align-self: stretch;
+	display: flex;
+	justify-content: space-between;
+	margin-top: 6px;
+	padding: 0 2px;
+	font-size: 11px;
+	color: var(--ink-4);
 }
 
 /* Slash command menu */

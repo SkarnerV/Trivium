@@ -28,6 +28,120 @@ function CaretIcon() {
 	);
 }
 
+/** Opens a menu above its trigger when there is not enough room below it. */
+export function menuPlacement(trigger: HTMLElement | null): "up" | "down" {
+	const rect = trigger?.getBoundingClientRect();
+	if (!rect) return "down";
+	const below = window.innerHeight - rect.bottom;
+	return below < MENU_MAX + MENU_GAP && rect.top > below ? "up" : "down";
+}
+
+/**
+ * The searchable, keyboard-driven list inside a dropdown menu. Takes focus when
+ * it mounts; arrows, Home and End move, Enter picks, Escape and Tab call onClose.
+ */
+export function OptionList({
+	value,
+	options,
+	label,
+	onChoose,
+	onClose,
+	searchThreshold = 9,
+}: {
+	value: string;
+	options: DropdownOption[];
+	label: string;
+	onChoose: (option: DropdownOption) => void;
+	/** refocus is false when Tab moves focus on by itself. */
+	onClose: (refocus: boolean) => void;
+	searchThreshold?: number;
+}) {
+	const [query, setQuery] = useState("");
+	const [active, setActive] = useState(() => Math.max(0, options.findIndex((option) => option.value === value)));
+	const list = useRef<HTMLDivElement>(null);
+	const search = useRef<HTMLInputElement>(null);
+	const id = useId();
+	const searchable = options.length >= searchThreshold;
+
+	const visible = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return options;
+		return options.filter((option) =>
+			[option.label, option.hint, option.group].some((text) => text?.toLowerCase().includes(q)),
+		);
+	}, [options, query]);
+
+	useEffect(() => {
+		(searchable ? search.current : list.current)?.focus();
+	}, [searchable]);
+
+	// Keep the highlighted row in view while moving with the keyboard.
+	useLayoutEffect(() => {
+		list.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+	}, [active]);
+
+	const onKey = (event: KeyboardEvent) => {
+		const last = visible.length - 1;
+		if (event.key === "ArrowDown") setActive((index) => Math.min(last, index + 1));
+		else if (event.key === "ArrowUp") setActive((index) => Math.max(0, index - 1));
+		else if (event.key === "Home") setActive(0);
+		else if (event.key === "End") setActive(last);
+		else if (event.key === "Enter") visible[active] && onChoose(visible[active]);
+		else if (event.key === "Escape") onClose(true);
+		else if (event.key === "Tab") onClose(false);
+		else return;
+		event.preventDefault();
+		event.stopPropagation();
+	};
+
+	let lastGroup: string | undefined;
+	return (
+		<div className="dd-options" onKeyDown={onKey}>
+			{searchable && (
+				<input
+					ref={search}
+					className="dd-search"
+					placeholder="Search…"
+					value={query}
+					onChange={(event) => {
+						setQuery(event.target.value);
+						setActive(0);
+					}}
+					aria-controls={id}
+					aria-activedescendant={visible[active] ? `${id}-${active}` : undefined}
+				/>
+			)}
+			<div ref={list} id={id} role="listbox" aria-label={label} tabIndex={-1} className="dd-list" aria-activedescendant={visible[active] ? `${id}-${active}` : undefined}>
+				{visible.map((option, index) => {
+					const heading = option.group && option.group !== lastGroup ? option.group : undefined;
+					lastGroup = option.group;
+					const isSelected = option.value === value;
+					return (
+						<div key={option.value} role="presentation">
+							{heading && <div className="dd-group">{heading}</div>}
+							<div
+								id={`${id}-${index}`}
+								data-index={index}
+								role="option"
+								aria-selected={isSelected}
+								className={`dd-option${index === active ? " active" : ""}`}
+								onMouseMove={() => index !== active && setActive(index)}
+								onMouseDown={(event) => event.preventDefault()}
+								onClick={() => onChoose(option)}
+							>
+								<span className="dd-check">{isSelected && <CheckIcon />}</span>
+								<span className="dd-label">{option.label}</span>
+								{option.hint && <span className="dd-hint">{option.hint}</span>}
+							</div>
+						</div>
+					);
+				})}
+				{!visible.length && <div className="dd-empty">Nothing matches</div>}
+			</div>
+		</div>
+	);
+}
+
 /**
  * A select replacement: a button that opens a list of options. Opens upward when
  * there is no room below, filters with a search box when the list is long, and
@@ -58,33 +172,13 @@ export function Dropdown({
 	icon?: ReactNode;
 }) {
 	const [open, setOpen] = useState(false);
-	const [query, setQuery] = useState("");
-	const [active, setActive] = useState(0);
 	const [placement, setPlacement] = useState<"up" | "down">("down");
 	const root = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
-	const list = useRef<HTMLDivElement>(null);
-	const search = useRef<HTMLInputElement>(null);
-	const id = useId();
-	const searchable = options.length >= searchThreshold;
 	const selected = options.find((option) => option.value === value);
 
-	const visible = useMemo(() => {
-		const q = query.trim().toLowerCase();
-		if (!q) return options;
-		return options.filter((option) =>
-			[option.label, option.hint, option.group].some((text) => text?.toLowerCase().includes(q)),
-		);
-	}, [options, query]);
-
 	const show = () => {
-		const rect = trigger.current?.getBoundingClientRect();
-		if (rect) {
-			const below = window.innerHeight - rect.bottom;
-			setPlacement(below < MENU_MAX + MENU_GAP && rect.top > below ? "up" : "down");
-		}
-		setQuery("");
-		setActive(Math.max(0, options.findIndex((option) => option.value === value)));
+		setPlacement(menuPlacement(trigger.current));
 		setOpen(true);
 	};
 
@@ -93,8 +187,7 @@ export function Dropdown({
 		if (refocus) trigger.current?.focus();
 	};
 
-	const choose = (option: DropdownOption | undefined) => {
-		if (!option) return;
+	const choose = (option: DropdownOption) => {
 		close();
 		if (option.value !== value) onChange(option.value);
 	};
@@ -109,33 +202,6 @@ export function Dropdown({
 		return () => document.removeEventListener("mousedown", onDown);
 	}, [open]);
 
-	useEffect(() => {
-		if (open) (searchable ? search.current : list.current)?.focus();
-	}, [open, searchable]);
-
-	useEffect(() => setActive(0), [query]);
-
-	// Keep the highlighted row in view while moving with the keyboard.
-	useLayoutEffect(() => {
-		if (!open) return;
-		list.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
-	}, [active, open]);
-
-	const onMenuKey = (event: KeyboardEvent) => {
-		const last = visible.length - 1;
-		if (event.key === "ArrowDown") setActive((index) => Math.min(last, index + 1));
-		else if (event.key === "ArrowUp") setActive((index) => Math.max(0, index - 1));
-		else if (event.key === "Home") setActive(0);
-		else if (event.key === "End") setActive(last);
-		else if (event.key === "Enter") choose(visible[active]);
-		else if (event.key === "Escape") close();
-		else if (event.key === "Tab") close(false);
-		else return;
-		event.preventDefault();
-		event.stopPropagation();
-	};
-
-	let lastGroup: string | undefined;
 	return (
 		<div ref={root} className={`dd dd-${variant}${open ? " open" : ""}`}>
 			<button
@@ -159,45 +225,8 @@ export function Dropdown({
 				<CaretIcon />
 			</button>
 			{open && (
-				<div className={`dd-menu ${placement} ${align}`} onKeyDown={onMenuKey}>
-					{searchable && (
-						<input
-							ref={search}
-							className="dd-search"
-							placeholder="Search…"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							aria-controls={id}
-							aria-activedescendant={visible[active] ? `${id}-${active}` : undefined}
-						/>
-					)}
-					<div ref={list} id={id} role="listbox" aria-label={label} tabIndex={-1} className="dd-list" aria-activedescendant={visible[active] ? `${id}-${active}` : undefined}>
-						{visible.map((option, index) => {
-							const heading = option.group && option.group !== lastGroup ? option.group : undefined;
-							lastGroup = option.group;
-							const isSelected = option.value === value;
-							return (
-								<div key={option.value} role="presentation">
-									{heading && <div className="dd-group">{heading}</div>}
-									<div
-										id={`${id}-${index}`}
-										data-index={index}
-										role="option"
-										aria-selected={isSelected}
-										className={`dd-option${index === active ? " active" : ""}`}
-										onMouseMove={() => index !== active && setActive(index)}
-										onMouseDown={(event) => event.preventDefault()}
-										onClick={() => choose(option)}
-									>
-										<span className="dd-check">{isSelected && <CheckIcon />}</span>
-										<span className="dd-label">{option.label}</span>
-										{option.hint && <span className="dd-hint">{option.hint}</span>}
-									</div>
-								</div>
-							);
-						})}
-						{!visible.length && <div className="dd-empty">Nothing matches</div>}
-					</div>
+				<div className={`dd-menu ${placement} ${align}`}>
+					<OptionList value={value} options={options} label={label} searchThreshold={searchThreshold} onChoose={choose} onClose={close} />
 				</div>
 			)}
 		</div>

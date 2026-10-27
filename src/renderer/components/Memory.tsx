@@ -508,16 +508,27 @@ function DailyPage({ version, reload, onDeleted }: { version: number; reload: ()
 			<Header icon={<CalendarIcon size={20} />} title="Daily log" subtitle="Notes the agent keeps as it works, by day, across every project.">
 				<Search value={query} onChange={setQuery} placeholder="Search the log" />
 			</Header>
-			<div className="s-stats">
-				<span>
-					<strong>Today and yesterday</strong> load into each session
-				</span>
-				<span>Older days are found by search</span>
-				<span>
-					<strong>Failures and corrections</strong> from 30 days are recalled
-				</span>
+			<div className="s-card mem-rules">
+				<div>
+					<strong>Loaded</strong>
+					<span>Today and yesterday, in every session</span>
+				</div>
+				<div>
+					<strong>Recalled</strong>
+					<span>Failures and corrections from the last 30 days</span>
+				</div>
+				<div>
+					<strong>Searched</strong>
+					<span>Every older day, when the agent looks</span>
+				</div>
 			</div>
 			<section className="s-group">
+				<div className="s-group-head">
+					<div>
+						<h3>Days</h3>
+						<p>One file per day, newest first.</p>
+					</div>
+				</div>
 				<div className="s-card mem-list">
 					{!days.length && <p className="s-empty">No log yet. The agent writes here as it works.</p>}
 					{days.length > 0 && !shown.length && <p className="s-empty">No entries match.</p>}

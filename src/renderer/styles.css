@@ -5140,6 +5140,33 @@ body.resizing * {
 	font-size: 12.5px;
 }
 
+/* How the daily log reaches a session: three rules side by side, ruled apart. */
+.mem-rules {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.mem-rules > div {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 14px 16px;
+}
+
+.mem-rules > div + div {
+	border-left: 1px solid var(--line);
+}
+
+.mem-rules strong {
+	font-weight: 600;
+}
+
+.mem-rules span {
+	color: var(--ink-3);
+	font-size: 12.5px;
+	line-height: 1.45;
+}
+
 .mem-bar {
 	height: 8px;
 	border-radius: 99px;

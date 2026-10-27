@@ -42,8 +42,9 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 				)}
 				<span className="live-cmd-time">{time}</span>
 			</div>
-			{/* Only the latest line: enough to see it is moving. The full output is in the step. */}
-			{step.tool === "bash" && running && <div className="live-cmd-out ellipsis">{lastLine(step.tail) || "\u00a0"}</div>}
+			{/* Only the latest line: enough to see it is moving. The full output is in the step. Until the
+			    command prints something, the line says so rather than sitting empty. */}
+			{step.tool === "bash" && running && <div className="live-cmd-out ellipsis">{lastLine(step.tail) || "Waiting for output\u2026"}</div>}
 		</div>
 	);
 }

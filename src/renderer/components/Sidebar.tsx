@@ -336,6 +336,18 @@ function SidebarToggle({ rail = false }: { rail?: boolean }) {
 	);
 }
 
+/** The current mode's name beside a tile carrying its icon, both in the mode's accent. */
+function ModeTitle({ app }: { app: AppId }) {
+	return (
+		<span className="app-name">
+			<span className="app-name-mark" aria-hidden="true">
+				<AppIcon app={app} size={14} />
+			</span>
+			<span className="ellipsis">{THEMES[app].name}</span>
+		</span>
+	);
+}
+
 export function Sidebar() {
 	const app = useStore((s) => s.app);
 	return (
@@ -348,7 +360,7 @@ export function Sidebar() {
 				</div>
 			)}
 			<div className="sb-head drag">
-				<span className="app-name ellipsis">{THEMES[app].name}</span>
+				<ModeTitle app={app} />
 				{!IS_MAC && !IS_WINDOWS && <AppSwitcher />}
 				<SidebarToggle />
 			</div>
@@ -437,7 +449,9 @@ export function PeekPanel() {
 	useEffect(() => () => cancelPeekClose(), []);
 	return (
 		<div className="peek" role="region" aria-label="Sessions" onMouseEnter={cancelPeekClose} onMouseLeave={schedulePeekClose}>
-			<div className="peek-title">{THEMES[app].name}</div>
+			<div className="peek-title">
+				<ModeTitle app={app} />
+			</div>
 			<SessionGroups />
 		</div>
 	);

@@ -323,10 +323,26 @@ body.resizing * {
 }
 
 .app-name {
-	color: var(--ink);
-	font-weight: 600;
-	font-size: 15px;
-	letter-spacing: -0.015em;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-width: 0;
+	color: var(--accent-text);
+	font-weight: 650;
+	font-size: 16px;
+	letter-spacing: -0.02em;
+}
+
+.app-name-mark {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 8px;
+	color: #fff;
+	background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 78%, #fff), var(--accent));
+	box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.22);
 }
 
 .switcher {
@@ -725,9 +741,6 @@ body.resizing * {
 
 .peek-title {
 	padding: 0 10px;
-	font-size: 18px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
 }
 
 /* Session pane */

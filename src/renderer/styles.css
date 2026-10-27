@@ -2612,6 +2612,8 @@ body.resizing * {
 		0 10px 28px rgba(19, 20, 43, 0.14),
 		0 0 0 1px rgba(19, 20, 43, 0.06);
 	pointer-events: auto;
+	/* Toasts sit over the pane header, a window drag region that would otherwise take their clicks. */
+	-webkit-app-region: no-drag;
 	animation: toast-in 180ms ease-out;
 }
 

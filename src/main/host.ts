@@ -182,6 +182,8 @@ export class SessionHost {
 	/** One question per project, shared by sessions that start while it is open. */
 	private trustAsks = new Map<string, Promise<boolean>>();
 	private trustAnswers = new Map<string, { cwd: string; resolve: (choice: TrustChoice | undefined) => void }>();
+	/** Extension info and warnings already shown in this run of the app, such as pi-memory's qmd setup at every session start. */
+	private extensionNotices = new Set<string>();
 
 	constructor(options: {
 		emit: (event: HostEvent) => void;
@@ -880,7 +882,7 @@ export class SessionHost {
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
 		await session.bindExtensions({
-			uiContext: createUiContext(this.broker, () => path, (message, level) => this.notice(message, level)),
+			uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
 			mode: "rpc",
 			onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
 		});
@@ -1025,6 +1027,15 @@ export class SessionHost {
 
 	private notice(message: string, level: "info" | "warning" | "error"): void {
 		this.emit({ type: "notice", notice: { id: randomUUID(), message, level } });
+	}
+
+	/** Errors always show; an extension repeating the same info or warning in every session shows it once. */
+	private extensionNotice(message: string, level: "info" | "warning" | "error"): void {
+		if (level !== "error") {
+			if (this.extensionNotices.has(message)) return;
+			this.extensionNotices.add(message);
+		}
+		this.notice(message, level);
 	}
 
 	private require(path: string): Live {

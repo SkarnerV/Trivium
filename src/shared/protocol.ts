@@ -205,9 +205,21 @@ export interface GitStatus {
 	upstream?: string;
 	ahead: number;
 	behind: number;
+	/** The newest commits not pushed to the upstream yet, newest first; at most a few of `ahead`. */
+	outgoing?: GitCommit[];
+	/** The newest commits on the upstream that this branch does not have, as of the last fetch. */
+	incoming?: GitCommit[];
+	/** When the remote was last fetched, so `behind` is only as fresh as this. Unset if it never was. */
+	fetchedAt?: number;
 	files: GitFile[];
 	/** More files changed than are listed. */
 	truncated: boolean;
+}
+
+export interface GitCommit {
+	/** Short commit id. */
+	id: string;
+	subject: string;
 }
 
 export interface GitDiff {

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { parseDiff, parseStatus, readGitDiff, readGitStatus } from "../src/main/git.ts";
+import { parseDiff, parseLog, parseStatus, readGitDiff, readGitStatus } from "../src/main/git.ts";
 
 /** A repository in a temporary folder with one commit, which git outside it is never asked about. */
 function setup() {
@@ -181,4 +181,48 @@ test("a merge conflict is listed once, and its diff shows the markers against HE
 	} finally {
 		cleanup();
 	}
+});
+
+test("commits each way between a branch and its upstream, and when the remote was fetched", async () => {
+	const { root, repo, git, cleanup } = setup();
+	const run = (cwd: string, ...args: string[]) =>
+		execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { cwd, stdio: "pipe" });
+	try {
+		// No upstream yet: nothing to push or pull, and no fetch to date.
+		const local = await readGitStatus(repo);
+		assert.equal(local?.upstream, undefined);
+		assert.equal(local?.outgoing, undefined);
+
+		run(root, "init", "-q", "--bare", "-b", "main", "origin.git");
+		git("remote", "add", "origin", join(root, "origin.git"));
+		git("push", "-q", "-u", "origin", "main");
+		run(root, "clone", "-q", join(root, "origin.git"), "other");
+		writeFileSync(join(root, "other", "README.md"), "# Shop, from elsewhere\n");
+		run(join(root, "other"), "commit", "-q", "-am", "Change the title elsewhere");
+		run(join(root, "other"), "push", "-q");
+
+		writeFileSync(join(repo, "src", "cart.ts"), "export const items = [1];\n");
+		git("commit", "-q", "-am", "Fix --watch flag parsing");
+		writeFileSync(join(repo, "src", "cart.ts"), "export const items = [2];\n");
+		git("commit", "-q", "-am", "Add HTML test report");
+		git("fetch", "-q");
+
+		const status = await readGitStatus(join(repo, "src"));
+		assert.equal(status?.upstream, "origin/main");
+		assert.deepEqual([status?.ahead, status?.behind], [2, 1]);
+		assert.deepEqual(status?.outgoing?.map((commit) => commit.subject), ["Add HTML test report", "Fix --watch flag parsing"]);
+		assert.match(status?.outgoing?.[0]?.id ?? "", /^[0-9a-f]{7,}$/);
+		assert.deepEqual(status?.incoming?.map((commit) => commit.subject), ["Change the title elsewhere"]);
+		assert.ok(status?.fetchedAt && Math.abs(Date.now() - status.fetchedAt) < 60_000);
+	} finally {
+		cleanup();
+	}
+});
+
+test("log lines become commits, keeping subjects that hold odd characters", () => {
+	assert.deepEqual(parseLog("a1f3c9e\0Fix --watch flag parsing\n7be20d4\0Say \"hi\" — again\n\n"), [
+		{ id: "a1f3c9e", subject: "Fix --watch flag parsing" },
+		{ id: "7be20d4", subject: 'Say "hi" — again' },
+	]);
+	assert.deepEqual(parseLog(""), []);
 });

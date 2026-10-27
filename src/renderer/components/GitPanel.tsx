@@ -77,8 +77,8 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 				<BranchIcon size={13} />
 				<span className="mono ellipsis">{branchLabel(git)}</span>
 				{git.upstream && <span className="git-upstream mono ellipsis">{git.upstream}</span>}
-				{git.ahead > 0 && <span title={`${git.ahead} commits not pushed`}>↑{git.ahead}</span>}
-				{git.behind > 0 && <span title={`${git.behind} commits not pulled`}>↓{git.behind}</span>}
+				{git.ahead > 0 && <span className="git-sync">{git.ahead} to push</span>}
+				{git.behind > 0 && <span className="git-sync is-pull">{git.behind} to pull</span>}
 			</div>
 			{!current ? (
 				<div className="side-body panel-empty">

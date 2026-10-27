@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
@@ -6,7 +6,8 @@ import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, triv
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
-import { codeTab, panelFor, panelKind, panelOpen } from "../panels.ts";
+import { BranchSummary, branchTitle } from "./BranchSummary.tsx";
+import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
 import { branchLabel, gitFileCount } from "./GitPanel.tsx";
 import { Composer } from "./Composer.tsx";
@@ -272,29 +273,35 @@ function useGitStatus(view: SessionView, app: AppId) {
 	return useStore((s) => (enabled ? s.git[view.path] : undefined));
 }
 
-/** The branch in the header, which opens the Code panel on its Git tab, or closes it when it is showing. */
-function BranchButton({ view, git, open }: { view: SessionView; git: GitStatus; open: boolean }) {
-	const showing = useStore((s) => open && codeTab(view, git, s.panelTab[view.path]) === "git");
+/**
+ * The branch in the header: its name, how many files changed, and a dot when there are commits to push
+ * (blue) or to pull (amber). It opens the branch summary, which says the rest in words.
+ */
+function BranchButton({ view, git }: { view: SessionView; git: GitStatus }) {
+	const [open, setOpen] = useState(false);
+	const ref = useRef<HTMLButtonElement>(null);
 	const count = gitFileCount(git);
+	const dot = git.behind > 0 ? "pull" : git.ahead > 0 ? "push" : undefined;
+	const close = useCallback(() => setOpen(false), []);
 	return (
-		<button
-			type="button"
-			className="changes-toggle branch-toggle"
-			aria-pressed={showing}
-			title={`${git.branch ? `On ${git.branch}` : `HEAD ${branchLabel(git)}`}${count ? `, ${count === 1 ? "1 file" : `${count} files`} changed` : ""}`}
-			onClick={() =>
-				setState((s) => ({
-					changesHidden: { ...s.changesHidden, [view.path]: showing },
-					panelTab: { ...s.panelTab, [view.path]: "git" },
-				}))
-			}
-		>
-			<BranchIcon size={14} />
-			<span className="mono ellipsis">{branchLabel(git)}</span>
-			{git.ahead > 0 && <span>↑{git.ahead}</span>}
-			{git.behind > 0 && <span>↓{git.behind}</span>}
-			{count > 0 && <span className="branch-count">{count}</span>}
-		</button>
+		<>
+			<button
+				ref={ref}
+				type="button"
+				className="changes-toggle branch-toggle"
+				aria-haspopup="dialog"
+				aria-expanded={open}
+				title={branchTitle(git, count)}
+				onClick={() => setOpen(!open)}
+			>
+				<BranchIcon size={14} />
+				<span className="mono ellipsis">{branchLabel(git)}</span>
+				{count > 0 && <span className="branch-count">{count}</span>}
+				{dot && <span className={`branch-dot is-${dot}`} aria-hidden="true" />}
+				<Chevron open={open} down size={11} />
+			</button>
+			{open && ref.current && <BranchSummary view={view} git={git} anchor={ref.current} onClose={close} />}
+		</>
 	);
 }
 
@@ -318,7 +325,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
-				{git && <BranchButton view={view} git={git} open={open} />}
+				{git && <BranchButton view={view} git={git} />}
 				<button
 					type="button"
 					className="changes-toggle"

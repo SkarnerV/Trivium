@@ -1,13 +1,16 @@
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { DiffLine, GitArea, GitDiff, GitFile, GitStatus } from "../shared/protocol.ts";
+import type { DiffLine, GitArea, GitCommit, GitDiff, GitFile, GitStatus } from "../shared/protocol.ts";
 
 /** Diffs bigger than this are listed without lines, like the Changes panel's. */
 const MAX_DIFF_BYTES = 512 * 1024;
 
 /** A repository with more changed files than this lists only the first ones. */
 const MAX_FILES = 1000;
+
+/** Commits listed each way between a branch and its upstream; the counts say how many more there are. */
+const MAX_COMMITS = 5;
 
 /** Bytes of an untracked file checked for a NUL byte, as git does, to tell binary from text. */
 const BINARY_PROBE = 8000;
@@ -82,17 +85,53 @@ export function parseStatus(text: string, root: string): GitStatus {
 	return status;
 }
 
-/** The branch and changed files of the repository `cwd` is in, or null when it is in none or git is missing. */
+/** Reads `git log --format=%h%x00%s`: one commit per line, its short id and subject split by a NUL. */
+export function parseLog(text: string): GitCommit[] {
+	return text
+		.split("\n")
+		.filter((line) => line.includes("\0"))
+		.map((line) => {
+			const [id = "", subject = ""] = line.split("\0");
+			return { id, subject: subject.trimEnd() };
+		});
+}
+
+/** The newest commits in `range`, or none when git cannot list them. */
+async function commits(root: string, range: string): Promise<GitCommit[]> {
+	try {
+		return parseLog(await git(root, ["log", "--no-color", "--format=%h%x00%s", `-n${MAX_COMMITS}`, range, "--"]));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * The branch and changed files of the repository `cwd` is in, or null when it is in none or git is missing.
+ * With an upstream, also the commits each way between them, and when the remote was last fetched.
+ */
 export async function readGitStatus(cwd: string): Promise<GitStatus | null> {
 	let root: string;
+	let gitDir: string;
 	try {
-		// git prints forward slashes, even on Windows.
-		root = resolve((await git(cwd, ["rev-parse", "--show-toplevel"])).trim());
+		// git prints forward slashes, even on Windows, and the common folder relative to `cwd`.
+		const [top = "", common = ".git"] = (await git(cwd, ["rev-parse", "--show-toplevel", "--git-common-dir"])).trim().split(/\r?\n/);
+		root = resolve(top);
+		gitDir = resolve(cwd, common);
 	} catch {
 		return null;
 	}
 	const text = await git(root, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"]);
-	return parseStatus(text, root);
+	const status = parseStatus(text, root);
+	if (!status.upstream) return status;
+	const [outgoing, incoming, fetched] = await Promise.all([
+		status.ahead ? commits(root, "@{upstream}..HEAD") : [],
+		status.behind ? commits(root, "HEAD..@{upstream}") : [],
+		stat(join(gitDir, "FETCH_HEAD")).catch(() => undefined),
+	]);
+	if (outgoing.length) status.outgoing = outgoing;
+	if (incoming.length) status.incoming = incoming;
+	if (fetched) status.fetchedAt = Math.round(fetched.mtimeMs);
+	return status;
 }
 
 /** Turns `git diff` output for one file into the lines the diff view shows. */

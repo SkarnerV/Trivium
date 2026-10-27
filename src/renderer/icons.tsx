@@ -233,6 +233,25 @@ export const ViewsIcon = (p: IconProps) => (
 		<path d="M11 7h9M11 17h9" />
 	</Svg>
 );
+const CLOUD = "M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.5 3.5 0 0 1-.5 7.5";
+export const CloudUpIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d={CLOUD} />
+		<path d="M12 21v-8m-3 3 3-3 3 3" />
+	</Svg>
+);
+export const CloudDownIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d={CLOUD} />
+		<path d="M12 13v8m-3-3 3 3 3-3" />
+	</Svg>
+);
+export const CloudOffIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d={CLOUD} />
+		<path d="m3 3 18 18" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />

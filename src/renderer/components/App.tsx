@@ -212,10 +212,11 @@ export function App() {
 				<div className="card">
 					{folded && peek && <PeekPanel />}
 					{view ? <SessionPane view={view} /> : <EmptyPane />}
-					{view && panel === "changes" && <ChangesPanel view={view} />}
+					{/* The Code panel has its own empty state, beside the repository's changes. */}
+					{view && open && app === "code" && <ChangesPanel view={view} />}
 					{view && panel === "note" && <NotePanel view={view} />}
 					{view && panel === "review" && <ReviewPanel view={view} />}
-					{view && open && !panel && <EmptyPanel view={view} kind={panelKind(app)} />}
+					{view && open && !panel && app !== "code" && <EmptyPanel view={view} kind={panelKind(app)} />}
 					<Toasts />
 				</div>
 			</div>

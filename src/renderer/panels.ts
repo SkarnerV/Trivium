@@ -1,4 +1,4 @@
-import type { AppId, SessionView } from "../shared/protocol.ts";
+import type { AppId, GitStatus, SessionView } from "../shared/protocol.ts";
 
 /** Each app's side panel, and whether this session has anything to show in it. */
 export function panelFor(app: AppId, view: SessionView): "changes" | "note" | "review" | undefined {
@@ -18,4 +18,10 @@ export function panelKind(app: AppId): PanelKind {
 /** Open or closed as the user last set it for this session; otherwise open once there is something to show. */
 export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undefined): boolean {
 	return hidden === undefined ? panelFor(app, view) !== undefined : !hidden;
+}
+
+/** The Code panel's tab: the user's pick, else this session's edits when it has any, else the repository's changes. */
+export function codeTab(view: SessionView, git: GitStatus | null | undefined, picked: "session" | "git" | undefined): "session" | "git" {
+	if (!git) return "session";
+	return picked ?? (view.changes.length ? "session" : "git");
 }

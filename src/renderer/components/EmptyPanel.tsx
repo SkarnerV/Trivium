@@ -40,11 +40,19 @@ export function EmptyPanel({ view, kind }: { view: SessionView; kind: PanelKind 
 					<CloseIcon size={13} />
 				</button>
 			</div>
-			<div className="side-body panel-empty">
-				<span className="panel-empty-icon">{kind === "changes" ? <FileIcon size={18} /> : <PenIcon size={18} />}</span>
-				<h3>{copy.heading}</h3>
-				<p>{copy.text}</p>
-			</div>
+			<EmptyBody kind={kind} />
 		</aside>
+	);
+}
+
+/** What the panel says while there is nothing in it, below its head. */
+export function EmptyBody({ kind }: { kind: PanelKind }) {
+	const copy = COPY[kind];
+	return (
+		<div className="side-body panel-empty">
+			<span className="panel-empty-icon">{kind === "changes" ? <FileIcon size={18} /> : <PenIcon size={18} />}</span>
+			<h3>{copy.heading}</h3>
+			<p>{copy.text}</p>
+		</div>
 	);
 }

@@ -34,6 +34,9 @@ import type {
 	ExtensionSource,
 	FileChange,
 	FileReview,
+	GitDiff,
+	GitFile,
+	GitStatus,
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
@@ -48,6 +51,7 @@ import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
 import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
+import { readGitDiff, readGitStatus } from "./git.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -66,6 +70,9 @@ interface Live {
 	flushTimer?: ReturnType<typeof setTimeout>;
 	sentRuns: number;
 	lastActive: number;
+	/** The git status last sent to the renderer, as JSON, so an unchanged one is not sent again. */
+	git?: string;
+	gitTimer?: ReturnType<typeof setTimeout>;
 }
 
 /** A session forked before a message, and that message taken back out to edit and send. */
@@ -78,6 +85,8 @@ export interface Rewound {
 type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: "user" }> };
 
 const FLUSH_MS = 40;
+/** Several tool calls in a row read git once. */
+const GIT_MS = 300;
 const devFaux = fileURLToPath(new URL("../dev/faux-extension.ts", import.meta.url));
 
 function isChat(cwd: string): boolean {
@@ -553,7 +562,50 @@ export class SessionHost {
 	private async emitChanges(live: Live): Promise<FileChange[]> {
 		const changes = await live.changes.list();
 		this.emit({ type: "changes", path: live.path, changes });
+		this.scheduleGit(live);
 		return changes;
+	}
+
+	/** Chats and the Research and Write apps have no repository to show. */
+	private hasGit(live: Live): boolean {
+		return live.app === "code" && !isChat(live.cwd);
+	}
+
+	async gitStatus(path: string): Promise<GitStatus | null> {
+		const live = this.require(path);
+		const git = this.hasGit(live) ? await readGitStatus(live.cwd) : null;
+		live.git = JSON.stringify(git);
+		return git;
+	}
+
+	async gitDiff(path: string, file: Pick<GitFile, "rel" | "area">): Promise<GitDiff> {
+		const live = this.require(path);
+		const git = this.hasGit(live) ? await readGitStatus(live.cwd) : null;
+		// Only files git lists as changed, so the renderer cannot read arbitrary paths.
+		const listed = git?.files.find((f) => f.rel === file.rel && f.area === file.area);
+		if (!git || !listed) {
+			this.scheduleGit(live);
+			throw new Error("That file has no changes any more.");
+		}
+		return readGitDiff(git.root, listed);
+	}
+
+	/** Reads git again once files may have changed, and sends the status when it differs from the last one. */
+	private scheduleGit(live: Live): void {
+		if (!this.hasGit(live) || live.gitTimer) return;
+		live.gitTimer = setTimeout(() => {
+			live.gitTimer = undefined;
+			if (!this.live.has(live.path)) return;
+			readGitStatus(live.cwd)
+				.then((git) => {
+					const text = JSON.stringify(git);
+					if (text === live.git) return;
+					live.git = text;
+					this.emit({ type: "git", path: live.path, git });
+				})
+				// The last status stays up; the next run or window focus reads again.
+				.catch(() => {});
+		}, GIT_MS);
 	}
 
 	/** The conversation on a session's current branch, read from its file, for export. */
@@ -595,6 +647,7 @@ export class SessionHost {
 	/** Unloads a session from memory. Its file stays; opening it again reloads it. */
 	private unload(live: Live): void {
 		this.broker.cancelAll(live.path);
+		clearTimeout(live.gitTimer);
 		live.unsubscribe();
 		live.session.dispose();
 		this.live.delete(live.path);
@@ -906,10 +959,14 @@ export class SessionHost {
 				this.flush(live);
 				this.emitStatus(live);
 				this.scheduleList();
+				this.scheduleGit(live);
 				break;
 			case "tool_execution_end":
 				if (event.toolName === "edit" || event.toolName === "write") {
 					void this.emitChanges(live).catch((error: unknown) => this.notice(String(error), "error"));
+				} else if (event.toolName === "bash") {
+					// A command can change files, commit or switch branches.
+					this.scheduleGit(live);
 				}
 				break;
 			case "queue_update":

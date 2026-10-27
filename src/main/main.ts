@@ -10,6 +10,7 @@ import type {
 	AppId,
 	CustomProvider,
 	DialogAnswer,
+	GitFile,
 	HostEvent,
 	MemoryCategory,
 	MemoryEntry,
@@ -338,6 +339,8 @@ function registerIpc(): void {
 		(path: string, file: string, id: number, action: "accept" | "reject", expect: { del: string; ins: string }) =>
 			host.resolveChange(path, file, id, action, expect),
 	);
+	handle("trivium:gitStatus", (path: string) => host.gitStatus(path));
+	handle("trivium:gitDiff", (path: string, file: Pick<GitFile, "rel" | "area">) => host.gitDiff(path, file));
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		// VS Code's URL handler opens the file at a line; fall back to the system default app.
 		const url = `vscode://file${encodeURI(file)}${line ? `:${line}` : ""}`;

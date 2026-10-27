@@ -181,6 +181,43 @@ export interface FileChange {
 	tooLarge: boolean;
 }
 
+/** Where a changed file sits in git: in the index, the working tree only, not tracked, or mid-merge. */
+export type GitArea = "staged" | "unstaged" | "untracked" | "conflicted";
+
+export interface GitFile {
+	/** Path relative to the repository root, with forward slashes, as git prints it. */
+	rel: string;
+	/** Absolute path. */
+	path: string;
+	/** The old path of a staged rename or copy. */
+	from?: string;
+	area: GitArea;
+	status: "added" | "modified" | "deleted" | "renamed" | "copied" | "typechange" | "untracked" | "conflicted";
+}
+
+/** The repository a Code session's folder is in. */
+export interface GitStatus {
+	root: string;
+	/** null when HEAD is detached. */
+	branch: string | null;
+	/** Short commit id, or null before the first commit. */
+	head: string | null;
+	upstream?: string;
+	ahead: number;
+	behind: number;
+	files: GitFile[];
+	/** More files changed than are listed. */
+	truncated: boolean;
+}
+
+export interface GitDiff {
+	lines: DiffLine[];
+	adds: number;
+	dels: number;
+	tooLarge: boolean;
+	binary: boolean;
+}
+
 /** A file as text with the agent's changes marked, for reviewing one change at a time. */
 export type ReviewSegment =
 	| { kind: "same"; text: string }
@@ -231,6 +268,7 @@ export type HostEvent =
 	| { type: "run"; path: string; index: number; run: Run }
 	| { type: "status"; path: string; running: boolean; context?: ContextInfo; queue: QueueInfo; title: string }
 	| { type: "changes"; path: string; changes: FileChange[] }
+	| { type: "git"; path: string; git: GitStatus | null }
 	| { type: "dialog"; request: DialogRequest }
 	| { type: "dialog_closed"; id: string }
 	| { type: "notice"; notice: Notice }
@@ -555,6 +593,10 @@ export interface TriviumApi {
 	keepChanges(path: string, files?: string[]): Promise<FileChange[]>;
 	/** Restores files to their state before the agent touched them; all files when `files` is omitted. */
 	revertChanges(path: string, files?: string[]): Promise<FileChange[]>;
+	/** The branch and changed files of the repository a Code session works in, or null when it is in none. */
+	gitStatus(path: string): Promise<GitStatus | null>;
+	/** One changed file's diff, as the session's latest git status lists it. */
+	gitDiff(path: string, file: Pick<GitFile, "rel" | "area">): Promise<GitDiff>;
 	openInEditor(file: string, line?: number): Promise<void>;
 	/** Opens a file with its default app. */
 	openFile(file: string): Promise<void>;

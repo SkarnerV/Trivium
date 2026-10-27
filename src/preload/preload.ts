@@ -44,6 +44,8 @@ const api: TriviumApi = {
 	answerDialog: call("answerDialog") as TriviumApi["answerDialog"],
 	keepChanges: call("keepChanges") as TriviumApi["keepChanges"],
 	revertChanges: call("revertChanges") as TriviumApi["revertChanges"],
+	gitStatus: call("gitStatus") as TriviumApi["gitStatus"],
+	gitDiff: call("gitDiff") as TriviumApi["gitDiff"],
 	openInEditor: call("openInEditor") as TriviumApi["openInEditor"],
 	openFile: call("openFile") as TriviumApi["openFile"],
 	readChangedFile: call("readChangedFile") as TriviumApi["readChangedFile"],

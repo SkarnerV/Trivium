@@ -6,6 +6,7 @@ import type {
 	TriviumSettings,
 	LoginEvent,
 	DialogRequest,
+	GitStatus,
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
@@ -43,6 +44,10 @@ export interface State {
 	panelWidth?: number;
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
+	/** The Code panel's tab the user picked for each session; unset shows this session's edits when it has any. */
+	panelTab: Record<string, "session" | "git">;
+	/** The repository each Code session works in, by session path; null when it is in none. */
+	git: Record<string, GitStatus | null>;
 	overlay: "new" | "search" | null;
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
@@ -97,6 +102,8 @@ let state: State = {
 	models: [],
 	peek: false,
 	changesHidden: {},
+	panelTab: {},
+	git: {},
 	drafts: {},
 	trust: [],
 	page: "main",
@@ -212,6 +219,9 @@ function handleEvent(event: HostEvent): void {
 				return view ? { views: { ...s.views, [event.path]: { ...view, changes: event.changes } } } : {};
 			});
 			break;
+		case "git":
+			setState((s) => ({ git: { ...s.git, [event.path]: event.git } }));
+			break;
 		case "dialog":
 			setState((s) => ({ dialogs: [...s.dialogs, event.request] }));
 			break;
@@ -244,6 +254,18 @@ function handleEvent(event: HostEvent): void {
 			break;
 		}
 	}
+}
+
+/** Reads a Code session's git status, keeping the one on screen when nothing changed. */
+export async function refreshGit(path: string): Promise<void> {
+	let git: GitStatus | null;
+	try {
+		git = await trivium.gitStatus(path);
+	} catch {
+		// A folder git cannot read shows no git info, as one outside a repository does.
+		git = null;
+	}
+	if (JSON.stringify(git) !== JSON.stringify(state.git[path])) setState((s) => ({ git: { ...s.git, [path]: git } }));
 }
 
 export async function refreshSessions(): Promise<SessionSummary[] | undefined> {

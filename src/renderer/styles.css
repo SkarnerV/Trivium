@@ -1542,6 +1542,189 @@ body.resizing * {
 	flex: none;
 }
 
+/* The branch beside the panel toggle, and the Code panel's Git tab. */
+
+.branch-toggle {
+	min-width: 0;
+	max-width: 240px;
+}
+
+.branch-toggle .mono {
+	font-size: 12px;
+}
+
+.branch-count {
+	flex: none;
+	min-width: 18px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--tab);
+	color: var(--ink-3);
+	font-size: 11px;
+	line-height: 18px;
+	text-align: center;
+}
+
+.branch-toggle[aria-pressed="true"] .branch-count {
+	background: #fff;
+	color: var(--accent-text);
+}
+
+.changes-head .seg {
+	margin-left: 0;
+}
+
+.seg-count {
+	margin-left: 2px;
+	color: var(--ink-4);
+	font-weight: 400;
+}
+
+.git-branch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 0 16px 10px;
+	color: var(--ink-2);
+	font-size: 12px;
+}
+
+.git-branch svg {
+	flex: none;
+	color: var(--ink-4);
+}
+
+.git-branch .mono {
+	min-width: 0;
+}
+
+.git-upstream {
+	color: var(--ink-4);
+}
+
+.git-files {
+	flex: 0 1 auto;
+	max-height: 40%;
+	margin: 0 12px 10px;
+	padding: 4px 0;
+	border-radius: 12px;
+	background: #fff;
+	border: 1px solid var(--line);
+	overflow: auto;
+}
+
+.git-section-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 6px 12px 4px;
+	border: 0;
+	background: transparent;
+	color: var(--ink-4);
+	font-size: 11.5px;
+	font-weight: 500;
+	text-align: left;
+}
+
+.git-section-head:hover {
+	color: var(--ink-2);
+}
+
+.git-section-count {
+	color: var(--ink-4);
+	font-weight: 400;
+}
+
+.git-file {
+	display: grid;
+	grid-template-columns: 14px minmax(0, max-content) minmax(0, 1fr);
+	align-items: baseline;
+	gap: 8px;
+	width: 100%;
+	min-height: 26px;
+	padding: 3px 12px 3px 28px;
+	border: 0;
+	background: transparent;
+	color: var(--ink-2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.git-file:hover {
+	background: var(--tab);
+}
+
+.git-file[aria-current="true"] {
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.git-mark {
+	font-family: var(--mono);
+	font-size: 11px;
+	font-weight: 600;
+	text-align: center;
+	color: var(--ink-3);
+}
+
+.git-mark.is-added,
+.git-mark.is-untracked {
+	color: var(--add);
+}
+
+.git-mark.is-deleted,
+.git-mark.is-conflicted {
+	color: var(--del);
+}
+
+.git-mark.is-modified,
+.git-mark.is-renamed,
+.git-mark.is-copied,
+.git-mark.is-typechange {
+	color: #9a6700;
+}
+
+.git-name {
+	font-family: var(--mono);
+	font-size: 12px;
+}
+
+.git-dir {
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.git-more {
+	margin: 4px 12px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.git-diff {
+	margin-bottom: 12px;
+}
+
+.git-diff-path {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	z-index: 1;
+	padding: 4px 4px 4px 12px;
+	min-height: 36px;
+}
+
+.git-diff-path .ellipsis {
+	flex: 1;
+	min-width: 0;
+}
+
+.git-diff-path .icon-btn {
+	width: 26px;
+	height: 26px;
+}
+
 .chips {
 	display: flex;
 	flex-wrap: wrap;

@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { CloseIcon, ExternalIcon } from "../icons.tsx";
-import { attempt, trivium, setState } from "../store.ts";
+import { codeTab } from "../panels.ts";
+import { attempt, trivium, setState, useStore } from "../store.ts";
+import { DiffView } from "./DiffView.tsx";
+import { EmptyBody } from "./EmptyPanel.tsx";
+import { GitChanges, gitFileCount } from "./GitPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { transition } from "../transition.ts";
 
@@ -19,32 +23,12 @@ export function ChangeCount({ changes }: { changes: FileChange[] }) {
 	);
 }
 
-function DiffView({ change }: { change: FileChange }) {
-	if (change.tooLarge) return <p className="diff-note">This file is too large to show a diff.</p>;
-	if (!change.lines.length) return <p className="diff-note">{change.status === "deleted" ? "File deleted." : "Empty file."}</p>;
-	return (
-		<>
-			{change.lines.map((line, index) =>
-				line.kind === "hunk" ? (
-					<div key={index} className="diff-hunk">
-						{line.text}
-					</div>
-				) : (
-					<div key={index} className={`diff-line is-${line.kind}`}>
-						<span className="no">{line.kind === "del" ? line.oldNo : line.newNo}</span>
-						<span className="text">{line.text || " "}</span>
-					</div>
-				),
-			)}
-		</>
-	);
-}
-
 function firstChangedLine(change: FileChange): number | undefined {
 	return change.lines.find((line) => line.kind === "add" || line.kind === "ctx")?.newNo;
 }
 
-export function ChangesPanel({ view }: { view: SessionView }) {
+/** The files this session edited, to keep or revert. */
+function SessionChanges({ view }: { view: SessionView }) {
 	const { changes } = view;
 	const [selected, setSelected] = useState<string | undefined>();
 	const [confirmRevert, setConfirmRevert] = useState(false);
@@ -74,22 +58,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 
 	const files = changes.length === 1 ? "1 file" : `${changes.length} files`;
 	return (
-		<aside className="changes" aria-label="Changes">
-			<Resizer target="panel" />
-			<div className="changes-head">
-				<h2>Changes</h2>
-				<ChangeCount changes={changes} />
-				<button
-					type="button"
-					className="icon-btn"
-					style={{ marginLeft: "auto" }}
-					aria-label="Hide changes"
-					title="Hide changes"
-					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
-				>
-					<CloseIcon size={13} />
-				</button>
-			</div>
+		<>
 			<div className="chips" role="tablist" aria-label="Changed files">
 				{changes.map((change) => (
 					<button
@@ -112,7 +81,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 			{current && (
 				<div className="diff" role="tabpanel">
 					<div className="diff-path">{current.rel}</div>
-					<DiffView change={current} />
+					<DiffView lines={current.lines} tooLarge={current.tooLarge} empty={current.status === "deleted" ? "File deleted." : "Empty file."} />
 				</div>
 			)}
 			<div className="changes-foot">
@@ -140,6 +109,54 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					</button>
 				)}
 			</div>
+		</>
+	);
+}
+
+/**
+ * The Code app's side panel. In a git repository it has two tabs: the files this session edited, and every
+ * change in the working tree on the current branch, whoever made it.
+ */
+export function ChangesPanel({ view }: { view: SessionView }) {
+	const git = useStore((s) => s.git[view.path]);
+	const picked = useStore((s) => s.panelTab[view.path]);
+	const tab = codeTab(view, git, picked);
+	const pick = (next: "session" | "git") => transition("tab", () => setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } })));
+	return (
+		<aside className="changes" aria-label="Changes">
+			<Resizer target="panel" />
+			<div className="changes-head">
+				{git ? (
+					<div className="seg" role="tablist" aria-label="Changes">
+						<button type="button" role="tab" aria-selected={tab === "session"} onClick={() => pick("session")}>
+							This session {view.changes.length > 0 && <span className="seg-count">{view.changes.length}</span>}
+						</button>
+						<button type="button" role="tab" aria-selected={tab === "git"} onClick={() => pick("git")}>
+							Git {gitFileCount(git) > 0 && <span className="seg-count">{gitFileCount(git)}</span>}
+						</button>
+					</div>
+				) : (
+					<h2>Changes</h2>
+				)}
+				{tab === "session" && view.changes.length > 0 && <ChangeCount changes={view.changes} />}
+				<button
+					type="button"
+					className="icon-btn"
+					style={{ marginLeft: "auto" }}
+					aria-label="Hide changes"
+					title="Hide changes"
+					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
+				>
+					<CloseIcon size={13} />
+				</button>
+			</div>
+			{tab === "git" && git ? (
+				<GitChanges view={view} git={git} />
+			) : view.changes.length ? (
+				<SessionChanges view={view} />
+			) : (
+				<EmptyBody kind="changes" />
+			)}
 		</aside>
 	);
 }

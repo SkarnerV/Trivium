@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
+import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
-import { attempt, editMessage, forkFrom, setState, trivium, useStore } from "../store.ts";
+import { attempt, editMessage, forkFrom, refreshGit, setState, trivium, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
-import { panelFor, panelKind, panelOpen } from "../panels.ts";
+import { codeTab, panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
+import { branchLabel, gitFileCount } from "./GitPanel.tsx";
 import { Composer } from "./Composer.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -254,10 +255,53 @@ function useStickToBottom(path: string, dep: unknown) {
 	return { ref, onScroll, away, toBottom };
 }
 
+/**
+ * Keeps a Code session's git status current: read when the session shows and when the window regains focus,
+ * after files may have changed outside Trivium. The main process sends it again after the agent's tool calls.
+ */
+function useGitStatus(view: SessionView, app: AppId) {
+	const enabled = app === "code" && !view.chat;
+	useEffect(() => {
+		if (!enabled) return;
+		void refreshGit(view.path);
+		const onFocus = () => void refreshGit(view.path);
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [view.path, enabled]);
+	return useStore((s) => (enabled ? s.git[view.path] : undefined));
+}
+
+/** The branch in the header, which opens the Code panel on its Git tab, or closes it when it is showing. */
+function BranchButton({ view, git, open }: { view: SessionView; git: GitStatus; open: boolean }) {
+	const showing = useStore((s) => open && codeTab(view, git, s.panelTab[view.path]) === "git");
+	const count = gitFileCount(git);
+	return (
+		<button
+			type="button"
+			className="changes-toggle branch-toggle"
+			aria-pressed={showing}
+			title={`${git.branch ? `On ${git.branch}` : `HEAD ${branchLabel(git)}`}${count ? `, ${count === 1 ? "1 file" : `${count} files`} changed` : ""}`}
+			onClick={() =>
+				setState((s) => ({
+					changesHidden: { ...s.changesHidden, [view.path]: showing },
+					panelTab: { ...s.panelTab, [view.path]: "git" },
+				}))
+			}
+		>
+			<BranchIcon size={14} />
+			<span className="mono ellipsis">{branchLabel(git)}</span>
+			{git.ahead > 0 && <span>↑{git.ahead}</span>}
+			{git.behind > 0 && <span>↓{git.behind}</span>}
+			{count > 0 && <span className="branch-count">{count}</span>}
+		</button>
+	);
+}
+
 export function SessionPane({ view }: { view: SessionView }) {
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
+	const git = useGitStatus(view, app);
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
@@ -271,6 +315,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
+				{git && <BranchButton view={view} git={git} open={open} />}
 				<button
 					type="button"
 					className="changes-toggle"

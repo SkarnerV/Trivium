@@ -49,7 +49,7 @@ function SelectCard({ request }: { request: Extract<DialogRequest, { kind: "sele
 						onClick={() => pick(index)}
 					>
 						<span className="num">{index < 9 ? index + 1 : "·"}</span>
-						{option}
+						<span className="option-label">{option}</span>
 					</button>
 				))}
 			</div>

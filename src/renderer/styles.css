@@ -2266,7 +2266,9 @@ body.resizing * {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
+	min-width: 0;
 	padding: 18px;
+	overflow-wrap: anywhere;
 	border-radius: 16px;
 	background: #fff;
 	box-shadow:
@@ -2310,17 +2312,25 @@ body.resizing * {
 	gap: 4px;
 }
 
+/* A long answer wraps under its own first line, with its number staying beside that line. */
 .option {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 10px;
 	min-height: 40px;
-	padding: 0 10px;
+	padding: 10px;
 	border: 0;
 	border-radius: 10px;
 	background: transparent;
 	color: var(--ink);
 	text-align: left;
+}
+
+.option-label {
+	flex: 1;
+	min-width: 0;
+	line-height: 20px;
+	white-space: pre-wrap;
 }
 
 .option:hover,

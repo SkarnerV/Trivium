@@ -457,6 +457,48 @@ export interface CustomProvider {
 	models: CustomModel[];
 }
 
+/** How an MCP server's tools reach the agent, as pi names it in mcp.json. */
+export type McpExposure = "codemode" | "deferred" | "direct" | "hidden";
+
+/** What the Connectors page edits of an MCP server in pi's mcp.json. */
+export interface ConnectorInput {
+	name: string;
+	/** "stdio" runs a program; "http" reaches a URL over streamable HTTP. */
+	transport: "stdio" | "http";
+	command: string;
+	args: string[];
+	/** Values may be ${NAME} for an environment variable or !command for a command's output. */
+	env: Record<string, string>;
+	url: string;
+	headers: Record<string, string>;
+	/** What the server offers, in a sentence. The agent sees it. */
+	description: string;
+}
+
+/** An MCP server in pi's global mcp.json, with what Trivium learned the last time it connected. */
+export interface ConnectorInfo extends ConnectorInput {
+	enabled: boolean;
+	exposure: McpExposure;
+	/** Signs in through the browser: an HTTP server without an Authorization header or a pi login. */
+	oauth: boolean;
+	/** The last check's outcome; unset until Trivium has connected since it started. */
+	state?: "connected" | "needs-auth" | "failed" | "disabled";
+	/** The tools found at the last check, each with how it reaches the agent now. */
+	tools: { name: string; exposure: McpExposure }[];
+	resources: boolean;
+	error?: string;
+}
+
+export interface ConnectorsView {
+	/** pi's global mcp.json, which the pi CLI shares. */
+	path: string;
+	servers: ConnectorInfo[];
+	/** Entries pi skips, and why. */
+	errors: string[];
+	/** When the last check finished. */
+	checked?: number;
+}
+
 /** A model from a built-in provider's catalog, as pi offers it now. */
 export interface PresetModel extends CustomModel {
 	/** models.json changes some of what Trivium shows of it. */
@@ -740,6 +782,21 @@ export interface TriviumApi {
 	fetchPresetModels(id: string, baseUrl: string): Promise<CustomModel[]>;
 	savePresetProvider(id: string, changes: PresetProviderChanges): Promise<void>;
 	setDefaultModel(modelKey: string, thinkingLevel: string): Promise<void>;
+	/** MCP servers in pi's global mcp.json, with the last check's results. Connects to nothing. */
+	connectors(): Promise<ConnectorsView>;
+	/** Connects to every enabled server, as `pi mcp list` does, and lists their tools. */
+	checkConnectors(): Promise<ConnectorsView>;
+	/** Adds a server, or replaces `previousName`; settings the page doesn't edit are kept. */
+	saveConnector(input: ConnectorInput, previousName?: string): Promise<ConnectorsView>;
+	/** Adds the servers in pasted mcpServers JSON. `name` names a single entry pasted on its own. Resolves with the names added. */
+	importConnectors(json: string, name?: string): Promise<{ view: ConnectorsView; added: string[] }>;
+	removeConnector(name: string): Promise<ConnectorsView>;
+	setConnector(name: string, patch: { enabled?: boolean; exposure?: McpExposure }): Promise<ConnectorsView>;
+	/** Sets how one tool reaches the agent, apart from its server. */
+	setToolExposure(name: string, tool: string, exposure: McpExposure): Promise<ConnectorsView>;
+	/** Opens the server's sign-in page in the browser and waits until it is done, then checks again. */
+	signInConnector(name: string): Promise<ConnectorsView>;
+	signOutConnector(name: string): Promise<ConnectorsView>;
 	appInfo(): Promise<AppInfo>;
 	openPath(path: string): Promise<void>;
 	memoryOverview(): Promise<MemoryOverview>;

@@ -306,15 +306,17 @@ export function listRequest(api: CustomApi, baseUrl: string, key: string): { url
 
 /**
  * Reads a model listing. Endpoints describe models in their own words: OpenRouter's context_length and
- * architecture, Anthropic's display_name and max_input_tokens, Gemini's inputTokenLimit, vLLM's max_model_len.
+ * architecture, Anthropic's display_name and max_input_tokens, Gemini's inputTokenLimit, vLLM's max_model_len,
+ * and OpenAI, for a ChatGPT plan login, a `models` list keyed by slug.
  * Whatever a listing leaves out stays unset, for pi's defaults or the user to fill in.
  */
 export function parseListing(api: CustomApi, body: unknown): CustomModel[] {
 	const root = obj(body);
 	const entries = [root.data, root.models, body].find(Array.isArray) ?? [];
 	const models = entries.map(obj).flatMap((entry): CustomModel[] => {
-		const id = (str(entry.id) ?? str(entry.name))?.replace(/^models\//, "");
-		if (!id) return [];
+		const id = (str(entry.id) ?? str(entry.name) ?? str(entry.slug))?.replace(/^models\//, "");
+		// A ChatGPT plan lists models it keeps out of its own model picker too.
+		if (!id || entry.visibility === "hide") return [];
 		// Gemini lists embedding and other models too; only those that chat are any use here.
 		const methods = strings(entry.supportedGenerationMethods);
 		if (methods && !methods.includes("generatecontent")) return [];
@@ -349,7 +351,10 @@ export function parseListing(api: CustomApi, body: unknown): CustomModel[] {
 						api === "google-generative-ai"),
 				reasoning:
 					parameters?.some((parameter) => parameter === "reasoning" || parameter === "include_reasoning") ??
-					(entry.thinking === true || capabilities.reasoning === true || obj(capabilities.thinking).supported === true),
+					(entry.thinking === true ||
+						capabilities.reasoning === true ||
+						obj(capabilities.thinking).supported === true ||
+						(Array.isArray(entry.supported_reasoning_levels) && entry.supported_reasoning_levels.length > 0)),
 			},
 		];
 	});

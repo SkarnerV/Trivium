@@ -54,6 +54,25 @@ test("listings: OpenRouter, Anthropic and Gemini describe limits and abilities i
 	assert.deepEqual(gemini, [{ id: "gemini-x", name: "Gemini X", contextWindow: 1048576, maxTokens: 65536, images: true, reasoning: true }]);
 });
 
+test("listings: a ChatGPT plan login names models by slug and hides some from its picker", () => {
+	assert.deepEqual(
+		parseListing("openai-responses", {
+			models: [
+				{
+					slug: "gpt-x",
+					display_name: "GPT-X",
+					context_window: 272000,
+					input_modalities: ["text", "image"],
+					supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
+					visibility: "list",
+				},
+				{ slug: "internal-review", display_name: "Internal Review", visibility: "hide" },
+			],
+		}),
+		[{ id: "gpt-x", name: "GPT-X", contextWindow: 272000, maxTokens: undefined, images: true, reasoning: true }],
+	);
+});
+
 test("model lists are requested where each API keeps them, with its own auth header", () => {
 	assert.deepEqual(listRequest("openai-completions", "http://localhost:11434/v1/", "k"), {
 		url: "http://localhost:11434/v1/models",

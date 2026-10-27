@@ -175,7 +175,11 @@ export function CommandMenu({
 						onClick={() => onChoose(item)}
 					>
 						<span className="cmd-name mono">{item.label}</span>
-						{item.hint && <span className="cmd-hint mono">{item.hint}</span>}
+						{item.hint && (
+							<span className="cmd-hint mono" title={item.hint}>
+								{item.hint}
+							</span>
+						)}
 						<span className="cmd-desc">{item.description}</span>
 						{item.tag && <span className="cmd-tag">{item.tag}</span>}
 					</div>

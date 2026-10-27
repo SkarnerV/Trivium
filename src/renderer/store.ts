@@ -79,7 +79,7 @@ export interface ConfirmRequest {
 	resolve: (ok: boolean) => void;
 }
 
-export type SettingsSection = "general" | "models" | "usage" | "shortcuts" | AppId | "about";
+export type SettingsSection = "general" | "models" | "connectors" | "usage" | "shortcuts" | AppId | "about";
 
 const PREFS_KEY = "trivium.prefs";
 

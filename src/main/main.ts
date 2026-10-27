@@ -8,6 +8,7 @@ import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type {
 	AppId,
+	ConnectorInput,
 	CustomProvider,
 	DialogAnswer,
 	GitFile,
@@ -15,6 +16,7 @@ import type {
 	MemoryCategory,
 	MemoryEntry,
 	MemoryTarget,
+	McpExposure,
 	NewSessionInput,
 	PresetProviderChanges,
 	TriviumSettings,
@@ -23,6 +25,7 @@ import type {
 import { APP_IDS } from "../shared/protocol.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
+import { ConnectorStore } from "./connectors.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
 import { writePermissionLevel } from "./builtin-packages.ts";
 import {
@@ -112,6 +115,7 @@ function thumbnail(data: string, mimeType: string): string | undefined {
 const attachments = new AttachmentStore();
 const reader = new ReaderStore((id) => send({ type: "reader_changed", id }));
 const usage = new UsageCounter(join(triviumDir, "usage-cache.json"));
+const connectors = new ConnectorStore(getAgentDir(), (url) => void shell.openExternal(url));
 // The Memory page decides what loads, what is recalled and what counts as a secret with @pify/memory's own code.
 const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
 	...new Set((await host.listSessions()).flatMap((session) => (session.cwd ? [session.cwd] : []))),
@@ -274,6 +278,15 @@ function registerIpc(): void {
 		await host.runtime.refresh({ allowNetwork: false });
 		return readCustomProviders(getAgentDir());
 	});
+	handle("trivium:connectors", () => connectors.view());
+	handle("trivium:checkConnectors", () => connectors.check());
+	handle("trivium:saveConnector", (input: ConnectorInput, previousName?: string) => connectors.save(input, previousName));
+	handle("trivium:importConnectors", (json: string, name?: string) => connectors.import(json, name));
+	handle("trivium:removeConnector", (name: string) => connectors.remove(name));
+	handle("trivium:setConnector", (name: string, patch: { enabled?: boolean; exposure?: McpExposure }) => connectors.set(name, patch));
+	handle("trivium:setToolExposure", (name: string, tool: string, exposure: McpExposure) => connectors.setToolExposure(name, tool, exposure));
+	handle("trivium:signInConnector", (name: string) => connectors.signIn(name));
+	handle("trivium:signOutConnector", (name: string) => connectors.signOut(name));
 	handle("trivium:presetProvider", (id: string) => {
 		const { mainApi: _mainApi, ...preset } = readPresetProvider(getAgentDir(), host.runtime, id);
 		return preset;

@@ -75,6 +75,14 @@ export const PanelRightIcon = (p: IconProps) => (
 		<path d="M15 4v16" />
 	</Svg>
 );
+export const PlugIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M12 22v-5" />
+		<path d="M9 8V2" />
+		<path d="M15 8V2" />
+		<path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
+	</Svg>
+);
 export const GearIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<circle cx="12" cy="12" r="3" />

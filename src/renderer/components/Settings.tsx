@@ -4,15 +4,19 @@ import type {
 	AppDetails,
 	AppId,
 	AppInfo,
+	ConnectorInfo,
+	ConnectorsView,
 	CustomProvider,
 	ExtensionInfo,
 	ExtensionSource,
+	McpExposure,
 	PermissionSettings,
 	ProviderInfo,
 	SessionUsage,
 	UsageReport,
 } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
+import { EXPOSURES, joinCommand } from "../../shared/connectors.ts";
 import {
 	type CalendarDay,
 	cacheShare,
@@ -29,10 +33,11 @@ import { duration, shortPath, tokens } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
-import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
+	notify,
 	openSession,
 	openSettings,
 	refreshModels,
@@ -44,6 +49,7 @@ import {
 } from "../store.ts";
 import { SECTION_COLORS, THEMES } from "../theme.ts";
 import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
+import { ConnectorDialog } from "./ConnectorDialog.tsx";
 import { CustomProviderDialog } from "./CustomProviderDialog.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
@@ -450,6 +456,338 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 						loadCustom();
 						reload();
 						void refreshModels();
+					}}
+				/>
+			)}
+		</>
+	);
+}
+
+/* Connectors */
+
+const CONNECTOR_STATES: Record<NonNullable<ConnectorInfo["state"]>, { label: string; tone: string }> = {
+	connected: { label: "Connected", tone: "ok" },
+	"needs-auth": { label: "Needs sign-in", tone: "warn" },
+	failed: { label: "Can't connect", tone: "error" },
+	disabled: { label: "Off", tone: "" },
+};
+
+const EXPOSURE_OPTIONS: DropdownOption[] = EXPOSURES.map(({ value, label }) => ({ value, label }));
+
+/** The command a local server runs, or the address of a remote one. */
+function serverAddress(server: ConnectorInfo): string {
+	if (server.transport === "stdio") return joinCommand([server.command, ...server.args]);
+	try {
+		const url = new URL(server.url);
+		return `${url.host}${url.pathname.replace(/\/$/, "")}`;
+	} catch {
+		return server.url;
+	}
+}
+
+function ConnectorRow({
+	server,
+	checking,
+	signingIn,
+	onToggle,
+	onExposure,
+	onToolExposure,
+	onEdit,
+	onSignIn,
+	onSignOut,
+}: {
+	server: ConnectorInfo;
+	checking: boolean;
+	signingIn: boolean;
+	onToggle: () => void;
+	onExposure: (exposure: McpExposure) => void;
+	onToolExposure: (tool: string, exposure: McpExposure) => void;
+	onEdit: () => void;
+	onSignIn: () => void;
+	onSignOut: () => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const state = server.state && CONNECTOR_STATES[server.state];
+	const off = server.tools.filter((tool) => tool.exposure === "hidden").length;
+	const counts = server.tools.length
+		? `${server.tools.length} ${server.tools.length === 1 ? "tool" : "tools"}${off ? ` · ${off} off` : ""}`
+		: "Details";
+	const address = serverAddress(server);
+	return (
+		<div className={`s-row s-ext${server.enabled ? "" : " off"}`}>
+			<div className="s-row-text">
+				<div className="s-ext-title">
+					<span className="s-label">{server.name}</span>
+					<span className="s-tag" title={server.transport === "stdio" ? "Runs on this computer" : "Reached over HTTP"}>
+						{server.transport === "stdio" ? "Local" : "Remote"}
+					</span>
+					{server.enabled && checking && !state ? (
+						<span className="s-tag">Checking…</span>
+					) : (
+						state && server.enabled && <span className={`s-tag ${state.tone}`}>{state.label}</span>
+					)}
+				</div>
+				<span className="s-ext-desc">
+					{server.description || (
+						<span className="mono" title={address}>
+							{address}
+						</span>
+					)}
+				</span>
+				<button type="button" className="s-ext-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+					{counts}
+					<Chevron open={open} size={10} />
+				</button>
+				{open && (
+					<div className="cn-details">
+						<div className="cn-reach">
+							<div className="cn-reach-text">
+								<span className="cn-head">Tools reach the agent</span>
+								<span>{EXPOSURES.find((entry) => entry.value === server.exposure)?.hint}</span>
+							</div>
+							<Dropdown
+								label={`How ${server.name}'s tools reach the agent`}
+								value={server.exposure}
+								options={EXPOSURE_OPTIONS}
+								align="right"
+								onChange={(value) => onExposure(value as McpExposure)}
+							/>
+						</div>
+						{server.tools.length > 0 ? (
+							<div className="cn-tools">
+								{server.tools.map((tool) => (
+									<div key={tool.name} className={`cn-tool${tool.exposure === "hidden" ? " off" : ""}`}>
+										<span className="mono">{tool.name}</span>
+										<Dropdown
+											label={`How ${tool.name} reaches the agent`}
+											value={tool.exposure}
+											options={EXPOSURE_OPTIONS}
+											align="right"
+											variant="ghost"
+											onChange={(value) => onToolExposure(tool.name, value as McpExposure)}
+										/>
+									</div>
+								))}
+							</div>
+						) : (
+							<p className="cn-none">
+								{!server.enabled
+									? "Turn it on to see its tools."
+									: server.state === "connected"
+										? "This server offers no tools."
+										: server.state
+											? "Its tools show once it connects."
+											: "Check connections to see its tools."}
+							</p>
+						)}
+						<dl className="s-ext-details cn-facts">
+							<div>
+								<dt>{server.transport === "stdio" ? "Runs" : "URL"}</dt>
+								<dd className="mono s-path" title={server.transport === "stdio" ? address : server.url}>
+									{server.transport === "stdio" ? address : server.url}
+								</dd>
+							</div>
+							{server.resources && (
+								<div>
+									<dt>Resources</dt>
+									<dd>Readable through pi's resource tools</dd>
+								</div>
+							)}
+						</dl>
+						{server.oauth && server.state === "connected" && (
+							<button type="button" className="s-link cn-signout" onClick={onSignOut}>
+								Sign out
+							</button>
+						)}
+					</div>
+				)}
+				{server.error && <pre className="s-error mono cn-error">{server.error}</pre>}
+			</div>
+			<div className="s-row-control">
+				{server.enabled && server.state === "needs-auth" && (
+					<button type="button" className="s-btn accent" disabled={signingIn} onClick={onSignIn}>
+						{signingIn ? "Waiting for browser…" : "Sign in"}
+					</button>
+				)}
+				<button type="button" className="s-btn s-ext-remove" onClick={onEdit}>
+					Edit
+				</button>
+				<Switch on={server.enabled} label={`Connect to ${server.name}`} onChange={onToggle} />
+			</div>
+		</div>
+	);
+}
+
+function Connectors({ onCount }: { onCount: (count: number) => void }) {
+	const [view, setView] = useState<ConnectorsView>();
+	const [checking, setChecking] = useState(false);
+	const [touched, setTouched] = useState(false);
+	/** The server being edited: a server, or null for a new one. */
+	const [editing, setEditing] = useState<ConnectorInfo | null>();
+	const [signingIn, setSigningIn] = useState<string>();
+	const show = useCallback(
+		(next: ConnectorsView) => {
+			setView(next);
+			onCount(next.servers.length);
+		},
+		[onCount],
+	);
+	const check = useCallback(async () => {
+		setChecking(true);
+		const next = await attempt(() => trivium.checkConnectors());
+		setChecking(false);
+		if (next) show(next);
+	}, [show]);
+	useEffect(() => {
+		void attempt(() => trivium.connectors()).then((next) => {
+			if (!next) return;
+			show(next);
+			// Connecting starts every local server, so it happens once a run unless asked for again.
+			if (!next.checked && next.servers.some((server) => server.enabled)) void check();
+		});
+	}, [show, check]);
+
+	const change = async (fn: () => Promise<ConnectorsView>) => {
+		const next = await attempt(fn);
+		if (!next) return undefined;
+		show(next);
+		setTouched(true);
+		return next;
+	};
+	const toggle = async (server: ConnectorInfo) => {
+		const next = await change(() => trivium.setConnector(server.name, { enabled: !server.enabled }));
+		if (next && !server.enabled) void check();
+	};
+	const signIn = async (name: string) => {
+		setSigningIn(name);
+		await change(() => trivium.signInConnector(name));
+		setSigningIn(undefined);
+	};
+	const reload = async () => {
+		const reloaded = await Promise.all(APP_IDS.map((id) => attempt(() => trivium.reloadApp(id))));
+		const count = reloaded.reduce((total, paths) => total + (paths?.length ?? 0), 0);
+		notify(count ? `Reloaded ${count} idle ${count === 1 ? "session" : "sessions"}` : "No idle sessions to reload", "info");
+		setTouched(false);
+	};
+
+	const servers = view?.servers ?? [];
+	const on = servers.filter((server) => server.enabled);
+	const connected = on.filter((server) => server.state === "connected");
+	const waiting = on.filter((server) => server.state === "needs-auth").length;
+	const failing = on.filter((server) => server.state === "failed").length;
+	const tools = connected.reduce((total, server) => total + server.tools.filter((tool) => tool.exposure !== "hidden").length, 0);
+	return (
+		<>
+			<PageHeader
+				icon={<PlugIcon size={18} />}
+				tone="accent"
+				title="Connectors"
+				subtitle={
+					<>
+						MCP servers that give the agent tools. Shared with the pi CLI through{" "}
+						<span className="mono">{view ? shortPath(view.path) : "~/.pi/agent/mcp.json"}</span>
+					</>
+				}
+				actions={
+					servers.length > 0 && (
+						<button type="button" className="s-btn soft" disabled={checking} onClick={() => void check()}>
+							{checking ? "Checking…" : "Check connections"}
+						</button>
+					)
+				}
+			/>
+
+			{view && servers.length > 0 && (
+				<div className="s-stats">
+					<span>
+						<strong>{on.length}</strong> of {servers.length} servers on
+					</span>
+					{view.checked && (
+						<span>
+							<strong>{connected.length}</strong> connected
+						</span>
+					)}
+					{view.checked && (
+						<span>
+							<strong>{tools}</strong> {tools === 1 ? "tool" : "tools"} available
+						</span>
+					)}
+					{waiting > 0 && (
+						<span>
+							<strong>{waiting}</strong> {waiting === 1 ? "needs" : "need"} sign-in
+						</span>
+					)}
+					{failing > 0 && (
+						<span>
+							<strong>{failing}</strong> can't connect
+						</span>
+					)}
+				</div>
+			)}
+
+			{touched && (
+				<div className="s-notice">
+					<span>Open sessions keep the servers and tools they started with. Changes apply the next time a session loads.</span>
+					<button type="button" className="s-btn" onClick={() => void reload()} title="Running sessions keep their setup until they finish">
+						Reload idle sessions
+					</button>
+				</div>
+			)}
+
+			<Group
+				title="MCP servers"
+				description="Each server's tools are named mcp__server__tool. Expand a server to choose how its tools reach the agent."
+				aside={
+					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
+						<PlusIcon size={12} width={2.6} />
+						Add
+					</button>
+				}
+				footer={
+					<>
+						A project's own servers in <span className="mono">.pi/mcp.json</span> load in its sessions once you trust the project, and
+						replace a server here with the same name.
+					</>
+				}
+			>
+				{!view && <div className="s-empty">Loading…</div>}
+				{view && !servers.length && (
+					<div className="s-empty">
+						No MCP servers yet. Add one, or paste the <span className="mono">mcpServers</span> block from Claude, Cursor or VS Code.
+					</div>
+				)}
+				{servers.map((server) => (
+					<ConnectorRow
+						key={server.name}
+						server={server}
+						checking={checking}
+						signingIn={signingIn === server.name}
+						onToggle={() => void toggle(server)}
+						onExposure={(exposure) => void change(() => trivium.setConnector(server.name, { exposure }))}
+						onToolExposure={(tool, exposure) => void change(() => trivium.setToolExposure(server.name, tool, exposure))}
+						onEdit={() => setEditing(server)}
+						onSignIn={() => void signIn(server.name)}
+						onSignOut={() => void change(() => trivium.signOutConnector(server.name))}
+					/>
+				))}
+			</Group>
+
+			{view && view.errors.length > 0 && (
+				<Group title="Skipped entries" description="pi leaves these out until they're fixed.">
+					<div className="s-row">
+						<pre className="s-error mono cn-error">{view.errors.join("\n")}</pre>
+					</div>
+				</Group>
+			)}
+
+			{editing !== undefined && (
+				<ConnectorDialog
+					server={editing ?? undefined}
+					onClose={() => setEditing(undefined)}
+					onSaved={(next, names) => {
+						show(next);
+						setTouched(true);
+						if (names.length) void check();
 					}}
 				/>
 			)}
@@ -1318,11 +1656,13 @@ export function SettingsPage() {
 	const app = useStore((s) => s.app);
 	const [providers, setProviders] = useState<ProviderInfo[]>([]);
 	const [errors, setErrors] = useState<Partial<Record<AppId, number>>>({});
+	const [servers, setServers] = useState<number>();
 	const loadProviders = useCallback(() => {
 		void attempt(() => trivium.providers()).then((list) => list && setProviders(list));
 	}, []);
 	useEffect(() => {
 		loadProviders();
+		void attempt(() => trivium.connectors()).then((view) => view && setServers(view.servers.length));
 		for (const id of APP_IDS) {
 			void attempt(() => trivium.appDetails(id)).then(
 				(details) =>
@@ -1370,6 +1710,13 @@ export function SettingsPage() {
 					SECTION_COLORS.models.accent,
 					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
 				)}
+				{item(
+					"connectors",
+					"Connectors",
+					<PlugIcon />,
+					SECTION_COLORS.connectors.accent,
+					servers ? <span className="s-nav-meta">{servers}</span> : undefined,
+				)}
 				{item("usage", "Usage", <ChartIcon />, SECTION_COLORS.usage.accent)}
 				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />, SECTION_COLORS.shortcuts.accent)}
 				<div className="set-nav-head">Modes</div>
@@ -1394,6 +1741,7 @@ export function SettingsPage() {
 					<div className="set-content">
 						{section === "general" && <General />}
 						{section === "models" && <Models providers={providers} reload={loadProviders} />}
+						{section === "connectors" && <Connectors onCount={setServers} />}
 						{section === "usage" && <Usage />}
 						{section === "shortcuts" && <Shortcuts />}
 						{(section === "code" || section === "research" || section === "write") && <AppPage app={section} />}

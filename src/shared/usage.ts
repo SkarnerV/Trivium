@@ -82,6 +82,62 @@ export interface UsageSummary {
 
 const byTokens = (a: { tally: Tally }, b: { tally: Tally }) => tokensOf(b.tally) - tokensOf(a.tally);
 
+export interface CalendarDay {
+	day: string;
+	tally: Tally;
+	/** 0 for no replies, then 1 to 4 from the quietest busy day to the busiest. */
+	level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface UsageCalendar {
+	/** Columns of seven days, Sunday first, ending with this week; days after today are left out. */
+	weeks: (CalendarDay | undefined)[][];
+	/** Days with at least one reply. */
+	active: number;
+	/** Days in a row with replies, up to today, or up to yesterday when today has none yet. */
+	streak: number;
+}
+
+/** A year of days for a contribution-style calendar. */
+export function calendar(report: UsageReport, weeks = 53): UsageCalendar {
+	const { today } = report;
+	const [y, m, d] = parts(today);
+	const start = addDays(today, -new Date(y, m - 1, d).getDay() - (weeks - 1) * 7);
+	const totals = new Map<string, Tally>();
+	for (const session of report.sessions) {
+		for (const bucket of session.buckets) {
+			if (bucket.day < start || bucket.day > today) continue;
+			const tally = totals.get(bucket.day) ?? empty();
+			add(tally, bucket);
+			totals.set(bucket.day, tally);
+		}
+	}
+	const busy = [...totals.values()].map(tokensOf).filter(Boolean).sort((a, b) => a - b);
+	// By rank among the busy days, so the busiest is always darkest and one huge day doesn't wash out the rest.
+	const levelOf = (tokens: number): CalendarDay["level"] => {
+		if (!tokens) return 0;
+		if (busy.length === 1) return 4;
+		return (1 + Math.floor((3 * busy.indexOf(tokens)) / (busy.length - 1))) as CalendarDay["level"];
+	};
+	const columns: UsageCalendar["weeks"] = [];
+	for (let week = 0; week < weeks; week++) {
+		const column: (CalendarDay | undefined)[] = [];
+		for (let weekday = 0; weekday < 7; weekday++) {
+			const day = addDays(start, week * 7 + weekday);
+			const tally = totals.get(day) ?? empty();
+			column.push(day > today ? undefined : { day, tally, level: levelOf(tokensOf(tally)) });
+		}
+		columns.push(column);
+	}
+	let streak = 0;
+	let day = totals.has(today) ? today : addDays(today, -1);
+	while (totals.has(day)) {
+		streak++;
+		day = addDays(day, -1);
+	}
+	return { weeks: columns, active: busy.length, streak };
+}
+
 export function summarize(report: UsageReport, range: UsageRange): UsageSummary {
 	const { today } = report;
 	const days = report.sessions.flatMap((session) => session.buckets.map((bucket) => bucket.day));

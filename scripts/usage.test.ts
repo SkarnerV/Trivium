@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { SessionSummary, UsageBucket, UsageReport } from "../src/shared/protocol.ts";
 import { countReplies, UsageCounter } from "../src/main/usage.ts";
-import { addDays, dayOf, summarize, tokensOf } from "../src/shared/usage.ts";
+import { addDays, calendar, dayOf, summarize, tokensOf } from "../src/shared/usage.ts";
 
 const NOON = new Date(2026, 9, 20, 12).getTime();
 
@@ -169,4 +169,41 @@ test("a summary counts its range, compares with the stretch before, and ranks ap
 		all.bars.reduce((sum, bar) => sum + bar.tally.input, 0),
 		1440,
 	);
+});
+
+test("the calendar is a year of Sunday-first weeks, shaded by rank, with active days and the current streak", () => {
+	// 2026-10-27 is a Tuesday.
+	const today = "2026-10-27";
+	const report: UsageReport = {
+		today,
+		plans: [],
+		sessions: [
+			{
+				path: "a",
+				title: "A",
+				app: "code",
+				cwd: "/p",
+				chat: false,
+				buckets: [bucket(today, 10), bucket(addDays(today, -1), 50), bucket(addDays(today, -2), 30), bucket(addDays(today, -5), 5), bucket(addDays(today, -400), 999)],
+			},
+		],
+	};
+	const { weeks, active, streak } = calendar(report);
+	assert.equal(weeks.length, 53);
+	assert.ok(weeks.every((week) => week.length === 7));
+	assert.equal(weeks[0][0]!.day, addDays("2026-10-25", -52 * 7));
+	const last = weeks.at(-1)!;
+	assert.deepEqual(
+		last.map((day) => day?.day),
+		["2026-10-25", "2026-10-26", "2026-10-27", undefined, undefined, undefined, undefined],
+	);
+	assert.deepEqual(
+		last.slice(0, 3).map((day) => day!.level),
+		[3, 4, 2],
+	);
+	assert.equal(weeks.at(-2)![4]!.level, 1);
+	assert.equal(active, 4);
+	assert.equal(streak, 3);
+	assert.equal(calendar({ ...report, today: "2026-10-28" }).streak, 3);
+	assert.equal(calendar({ ...report, today: "2026-10-29" }).streak, 0);
 });

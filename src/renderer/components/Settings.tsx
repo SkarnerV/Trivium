@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
 import type {
 	AppDetails,
@@ -13,7 +13,7 @@ import type {
 	UsageReport,
 } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { cacheShare, summarize, type Tally, tokensOf, type UsageBar, type UsageRange } from "../../shared/usage.ts";
+import { type CalendarDay, cacheShare, calendar, summarize, type Tally, tokensOf, type UsageBar, type UsageRange } from "../../shared/usage.ts";
 import { shortPath, tokens } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
@@ -1040,6 +1040,82 @@ function UsageChart({ bars, metric }: { bars: UsageBar[]; metric: "tokens" | "co
 	);
 }
 
+/** Short weekday names, Sunday first, in the user's language. */
+const WEEKDAYS = Array.from({ length: 7 }, (_, index) => new Date(2026, 0, 4 + index).toLocaleDateString(undefined, { weekday: "short" }));
+
+function UsageCalendar({ report }: { report: UsageReport }) {
+	const { weeks, active, streak } = useMemo(() => calendar(report), [report]);
+	const [hover, setHover] = useState<CalendarDay>();
+	// A month's name goes over the first week that starts in it, unless the one before is too close.
+	let named = -3;
+	const months = weeks.map((week, index) => {
+		const first = week[0]?.day;
+		const previous = weeks[index - 1]?.[0]?.day;
+		if (!first || (previous && previous.slice(0, 7) === first.slice(0, 7)) || index - named < 3) return "";
+		named = index;
+		const [year, month] = first.split("-").map(Number);
+		return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short" });
+	});
+	return (
+		<section className="s-group">
+			<div className="s-group-head">
+				<h3>Last 12 months</h3>
+				<span className="u-columns">
+					{active} active {active === 1 ? "day" : "days"}
+					{streak > 1 && ` · ${streak}-day streak`}
+				</span>
+			</div>
+			<div className="s-card u-cal-card">
+				<div className="u-readout">
+					{hover ? (
+						<>
+							<span className="u-readout-when">{dayLabel(hover.day)}</span>
+							{hover.tally.responses
+								? `${tokens(tokensOf(hover.tally))} tokens · ${money(hover.tally.cost)} · ${hover.tally.responses} ${hover.tally.responses === 1 ? "response" : "responses"}`
+								: "No replies"}
+						</>
+					) : (
+						<span className="u-quiet">Point at a day for its numbers</span>
+					)}
+				</div>
+				<div className="u-cal" style={{ gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))` }} onMouseLeave={() => setHover(undefined)}>
+					<span />
+					{months.map((month, index) => (
+						<span key={`m${index}`} className="u-cal-month">
+							{month}
+						</span>
+					))}
+					{WEEKDAYS.map((weekday, row) => (
+						<Fragment key={weekday}>
+							<span className="u-cal-weekday">{row % 2 ? weekday : ""}</span>
+							{weeks.map((week, column) => {
+								const day = week[row];
+								return day ? (
+									<span
+										key={day.day}
+										className={`u-cal-day l${day.level}${hover?.day === day.day ? " on" : ""}`}
+										onMouseEnter={() => setHover(day)}
+										aria-label={`${dayLabel(day.day)}: ${tokens(tokensOf(day.tally))} tokens`}
+									/>
+								) : (
+									<span key={`e${column}`} />
+								);
+							})}
+						</Fragment>
+					))}
+				</div>
+				<div className="u-cal-legend">
+					Less
+					{([0, 1, 2, 3, 4] as const).map((level) => (
+						<i key={level} className={`u-cal-day l${level}`} />
+					))}
+					More
+				</div>
+			</div>
+		</section>
+	);
+}
+
 function Usage() {
 	const [report, setReport] = useState<UsageReport>();
 	const [range, setRange] = useState<UsageRange>("30");
@@ -1097,6 +1173,7 @@ function Usage() {
 					note={`in ${summary.sessions} ${summary.sessions === 1 ? "session" : "sessions"}`}
 				/>
 			</div>
+			{report.sessions.length > 0 && <UsageCalendar report={report} />}
 			{all === 0 ? (
 				<div className="s-card s-empty">No replies in this time. Usage shows once a session gets an answer.</div>
 			) : (

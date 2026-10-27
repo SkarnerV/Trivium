@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
-import { attempt, editMessage, forkFrom, refreshGit, setState, trivium, useStore } from "../store.ts";
+import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, trivium, useStore } from "../store.ts";
+import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { AskCard } from "./AskCard.tsx";
 import { codeTab, panelFor, panelKind, panelOpen } from "../panels.ts";
@@ -304,6 +305,8 @@ export function SessionPane({ view }: { view: SessionView }) {
 	const git = useGitStatus(view, app);
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
+	// Only the Code panel has a Preview view so far.
+	const preview = useMemo(() => (app === "code" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
 	return (
 		<main className="pane">
@@ -337,9 +340,11 @@ export function SessionPane({ view }: { view: SessionView }) {
 			<div className="thread-frame">
 				<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
 					<div className="thread">
-						{view.runs.map((run, index) => (
-							<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
-						))}
+						<PreviewOpener.Provider value={preview}>
+							{view.runs.map((run, index) => (
+								<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+							))}
+						</PreviewOpener.Provider>
 						{dialogs.map((request) => (
 							<AskCard key={request.id} request={request} />
 						))}

@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CheckIcon } from "../icons.tsx";
 
 export interface MenuItem {
 	label: string;
@@ -8,6 +9,8 @@ export interface MenuItem {
 	hint?: string;
 	danger?: boolean;
 	disabled?: boolean;
+	/** The current choice among the items, marked with a tick. */
+	checked?: boolean;
 	/** Says why the item is disabled. */
 	title?: string;
 	onSelect: () => void;
@@ -19,9 +22,24 @@ const EDGE = 8;
 
 /**
  * A right-click menu at a point on screen. It stays inside the window, closes on a click elsewhere, Escape,
- * scrolling or leaving the window, and works with the keyboard (arrows, Home, End, Enter).
+ * scrolling or leaving the window, and works with the keyboard (arrows, Home, End, Enter). A menu opened from
+ * a button at the right of the window can hang from the point leftwards (`align: "right"`).
  */
-export function ContextMenu({ x, y, entries, label, onClose }: { x: number; y: number; entries: MenuEntry[]; label: string; onClose: () => void }) {
+export function ContextMenu({
+	x,
+	y,
+	entries,
+	label,
+	align = "left",
+	onClose,
+}: {
+	x: number;
+	y: number;
+	entries: MenuEntry[];
+	label: string;
+	align?: "left" | "right";
+	onClose: () => void;
+}) {
 	const root = useRef<HTMLDivElement>(null);
 	const [position, setPosition] = useState({ left: x, top: y });
 	const items = entries.filter((entry): entry is MenuItem => entry !== "separator");
@@ -31,12 +49,13 @@ export function ContextMenu({ x, y, entries, label, onClose }: { x: number; y: n
 	useLayoutEffect(() => {
 		const rect = root.current?.getBoundingClientRect();
 		if (!rect) return;
+		const left = align === "right" ? x - rect.width : x;
 		setPosition({
-			left: Math.max(EDGE, Math.min(x, window.innerWidth - rect.width - EDGE)),
+			left: Math.max(EDGE, Math.min(left, window.innerWidth - rect.width - EDGE)),
 			top: Math.max(EDGE, y + rect.height > window.innerHeight - EDGE ? y - rect.height : y),
 		});
 		root.current?.focus();
-	}, [x, y]);
+	}, [x, y, align]);
 
 	useEffect(() => {
 		const outside = (event: Event) => {
@@ -96,7 +115,8 @@ export function ContextMenu({ x, y, entries, label, onClose }: { x: number; y: n
 					<button
 						key={entry.label}
 						type="button"
-						role="menuitem"
+						role={entry.checked === undefined ? "menuitem" : "menuitemradio"}
+						aria-checked={entry.checked}
 						className={`cm-item${entry.danger ? " danger" : ""}${enabled[active] === entry ? " active" : ""}`}
 						disabled={entry.disabled}
 						title={entry.title}
@@ -106,6 +126,7 @@ export function ContextMenu({ x, y, entries, label, onClose }: { x: number; y: n
 						<span className="cm-icon">{entry.icon}</span>
 						<span className="cm-label">{entry.label}</span>
 						{entry.hint && <span className="cm-hint">{entry.hint}</span>}
+						{entry.checked && <span className="cm-check"><CheckIcon size={13} width={2.4} /></span>}
 					</button>
 				),
 			)}

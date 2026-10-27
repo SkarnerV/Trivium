@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { CloseIcon, ExternalIcon } from "../icons.tsx";
-import { codeTab } from "../panels.ts";
-import { attempt, trivium, setState, useStore } from "../store.ts";
+import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ViewsIcon } from "../icons.tsx";
+import { type CodeView, codeTab } from "../panels.ts";
+import { attempt, openPreview, trivium, setState, useStore } from "../store.ts";
+import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { EmptyBody } from "./EmptyPanel.tsx";
 import { GitChanges, gitFileCount } from "./GitPanel.tsx";
+import { hasSource, PreviewBody, PreviewTabs, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { transition } from "../transition.ts";
 
@@ -98,6 +100,11 @@ function SessionChanges({ view }: { view: SessionView }) {
 					{confirmRevert ? `Revert ${files}?` : "Revert"}
 				</button>
 				{current && current.status !== "deleted" && (
+					<button type="button" className="btn square" aria-label="Preview" title="Preview" onClick={() => void openPreview(view.path, current.path)}>
+						<EyeIcon size={15} />
+					</button>
+				)}
+				{current && current.status !== "deleted" && (
 					<button
 						type="button"
 						className="btn square"
@@ -114,49 +121,121 @@ function SessionChanges({ view }: { view: SessionView }) {
 }
 
 /**
- * The Code app's side panel. In a git repository it has two tabs: the files this session edited, and every
- * change in the working tree on the current branch, whoever made it.
+ * The Code app's side panel. It shows one view at a time, picked from a menu: the files this session edited,
+ * every change in the working tree when the project is a git repository, or files open to read.
  */
 export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
+	const previews = useStore((s) => s.previews[view.path]);
 	const tab = codeTab(view, git, picked);
-	const pick = (next: "session" | "git") => transition("tab", () => setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } })));
+	const files = previews?.files ?? [];
+	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
+	// Rendered or source, by file path, for as long as the panel is open.
+	const [sources, setSources] = useState<Record<string, boolean>>({});
+	const source = Boolean(file && hasSource(file) && sources[file.path]);
+	const [menu, setMenu] = useState<{ kind: "views" | "more"; x: number; y: number }>();
+	// A click on a menu's own button closes it on mousedown; the click that follows must not open it again.
+	const closed = useRef<{ kind: string; at: number }>(undefined);
+	const pick = (next: CodeView) => transition("tab", () => setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } })));
+	const toggleMenu = (kind: "views" | "more") => (event: MouseEvent<HTMLButtonElement>) => {
+		if (closed.current?.kind === kind && Date.now() - closed.current.at < 300) return;
+		const rect = event.currentTarget.getBoundingClientRect();
+		setMenu({ kind, x: rect.right, y: rect.bottom + 6 });
+	};
+	const title = { session: "Changes", git: "Git", preview: "Preview" }[tab];
+	const views: MenuEntry[] = [
+		{
+			label: "Changes",
+			icon: <FileIcon size={14} />,
+			hint: view.changes.length ? count(view.changes.length, "file") : undefined,
+			checked: tab === "session",
+			onSelect: () => pick("session"),
+		},
+		...(git
+			? [{ label: "Git", icon: <BranchIcon size={14} />, hint: gitFileCount(git) ? count(gitFileCount(git), "file") : undefined, checked: tab === "git", onSelect: () => pick("git") }]
+			: []),
+		{ label: "Preview", icon: <EyeIcon size={14} />, hint: files.length ? `${files.length} open` : undefined, checked: tab === "preview", onSelect: () => pick("preview") },
+	];
 	return (
-		<aside className="changes" aria-label="Changes">
+		<aside className="changes" aria-label={title}>
 			<Resizer target="panel" />
-			<div className="changes-head">
-				{git ? (
-					<div className="seg" role="tablist" aria-label="Changes">
-						<button type="button" role="tab" aria-selected={tab === "session"} onClick={() => pick("session")}>
-							This session {view.changes.length > 0 && <span className="seg-count">{view.changes.length}</span>}
-						</button>
-						<button type="button" role="tab" aria-selected={tab === "git"} onClick={() => pick("git")}>
-							Git {gitFileCount(git) > 0 && <span className="seg-count">{gitFileCount(git)}</span>}
-						</button>
-					</div>
+			<div className="panel-head">
+				{tab === "preview" && files.length ? (
+					<PreviewTabs path={view.path} files={files} active={file?.id} />
 				) : (
-					<h2>Changes</h2>
+					<h2 className="panel-title">
+						{title}
+						{tab === "session" && view.changes.length > 0 && <ChangeCount changes={view.changes} />}
+					</h2>
 				)}
-				{tab === "session" && view.changes.length > 0 && <ChangeCount changes={view.changes} />}
-				<button
-					type="button"
-					className="icon-btn"
-					style={{ marginLeft: "auto" }}
-					aria-label="Hide changes"
-					title="Hide changes"
-					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
-				>
-					<CloseIcon size={13} />
-				</button>
+				<div className="panel-tools">
+					{tab === "preview" && file && hasSource(file) && (
+						<button
+							type="button"
+							className="icon-btn"
+							aria-pressed={source}
+							aria-label="Show source"
+							title={source ? "Show it rendered" : "Show source"}
+							onClick={() => setSources({ ...sources, [file.path]: !source })}
+						>
+							<CodeIcon size={15} />
+						</button>
+					)}
+					{tab === "preview" && (
+						<button type="button" className="icon-btn" aria-label="More" title="More" aria-expanded={menu?.kind === "more"} onClick={toggleMenu("more")}>
+							<MoreIcon size={16} />
+						</button>
+					)}
+					<button
+						type="button"
+						className="icon-btn"
+						aria-label="Choose what the panel shows"
+						title="Panel views"
+						aria-haspopup="menu"
+						aria-expanded={menu?.kind === "views"}
+						onClick={toggleMenu("views")}
+					>
+						<ViewsIcon size={16} />
+					</button>
+					<span className="panel-sep" aria-hidden="true" />
+					<button
+						type="button"
+						className="icon-btn"
+						aria-label="Hide panel"
+						title="Hide panel"
+						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
+					>
+						<CloseIcon size={13} />
+					</button>
+				</div>
 			</div>
-			{tab === "git" && git ? (
+			{tab === "preview" ? (
+				<PreviewBody path={view.path} file={file} source={source} />
+			) : tab === "git" && git ? (
 				<GitChanges view={view} git={git} />
 			) : view.changes.length ? (
 				<SessionChanges view={view} />
 			) : (
 				<EmptyBody kind="changes" />
 			)}
+			{menu && (
+				<ContextMenu
+					x={menu.x}
+					y={menu.y}
+					align="right"
+					label={menu.kind === "views" ? "Show in panel" : "More"}
+					entries={menu.kind === "views" ? views : previewMenu(view.path, file)}
+					onClose={() => {
+						closed.current = { kind: menu.kind, at: Date.now() };
+						setMenu(undefined);
+					}}
+				/>
+			)}
 		</aside>
 	);
+}
+
+function count(n: number, noun: string): string {
+	return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

@@ -214,6 +214,25 @@ export const FileIcon = (p: IconProps) => (
 		<path d="M14 3v5h5" />
 	</Svg>
 );
+export const EyeIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+		<circle cx="12" cy="12" r="3" />
+	</Svg>
+);
+export const MoreIcon = (p: IconProps) => (
+	<Svg width={2.6} {...p}>
+		<path d="M5 12h.01M12 12h.01M19 12h.01" />
+	</Svg>
+);
+/** The panel's views: two rows, each a dot and a line. */
+export const ViewsIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<circle cx="5.5" cy="7" r="2" />
+		<circle cx="5.5" cy="17" r="2" />
+		<path d="M11 7h9M11 17h9" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />

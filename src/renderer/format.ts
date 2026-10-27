@@ -38,3 +38,9 @@ export function shortPath(path: string): string {
 	const home = /^(\/Users\/[^/]+|\/home\/[^/]+)/.exec(path)?.[1];
 	return home ? `~${path.slice(home.length)}` : path;
 }
+
+export function fileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
+}

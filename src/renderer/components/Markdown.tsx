@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { filePath, usePreviewOpener } from "../preview.ts";
 
 // A small Markdown subset rendered straight to React elements, so model output
 // never reaches the DOM as HTML. Covers what agents write most: paragraphs,
@@ -6,7 +7,10 @@ import { Fragment, type ReactNode } from "react";
 
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*|_[^_\n]+_)|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
 
-function inline(text: string, keyPrefix: string): ReactNode[] {
+/** Opens a file path in the Preview panel, where the conversation has one. */
+type Opener = ((file: string) => void) | undefined;
+
+function inline(text: string, keyPrefix: string, open?: Opener): ReactNode[] {
 	const out: ReactNode[] = [];
 	let last = 0;
 	let index = 0;
@@ -14,8 +18,8 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
 		const start = match.index ?? 0;
 		if (start > last) out.push(text.slice(last, start));
 		const key = `${keyPrefix}-${index++}`;
-		if (match[1]) out.push(<code key={key}>{match[1].slice(1, -1)}</code>);
-		else if (match[2]) out.push(<strong key={key}>{inline(match[2].slice(2, -2), key)}</strong>);
+		if (match[1]) out.push(code(match[1].slice(1, -1), key, open));
+		else if (match[2]) out.push(<strong key={key}>{inline(match[2].slice(2, -2), key, open)}</strong>);
 		else if (match[3]) out.push(<em key={key}>{match[3].slice(1, -1)}</em>);
 		else if (match[4] && match[5])
 			out.push(
@@ -29,14 +33,26 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
 	return out;
 }
 
-function withBreaks(lines: string[], key: string): ReactNode[] {
+/** Inline code, as a link to the file when it names one and the conversation can preview it. */
+function code(text: string, key: string, open: Opener): ReactNode {
+	const file = open && filePath(text);
+	if (!file) return <code key={key}>{text}</code>;
+	return (
+		<button key={key} type="button" className="path-link" title={`Preview ${file}`} onClick={() => open(file)}>
+			<code>{text}</code>
+		</button>
+	);
+}
+
+function withBreaks(lines: string[], key: string, open?: Opener): ReactNode[] {
 	return lines.flatMap((line, index) => {
-		const parts = inline(line, `${key}-${index}`);
+		const parts = inline(line, `${key}-${index}`, open);
 		return index === 0 ? parts : [<br key={`${key}-br-${index}`} />, ...parts];
 	});
 }
 
 export function Markdown({ text }: { text: string }) {
+	const open = usePreviewOpener();
 	const lines = text.replace(/\r\n/g, "\n").split("\n");
 	const blocks: ReactNode[] = [];
 	let i = 0;
@@ -79,7 +95,7 @@ export function Markdown({ text }: { text: string }) {
 						<thead>
 							<tr>
 								{head.map((cell, index) => (
-									<th key={index}>{inline(cell, `${key}-h${index}`)}</th>
+									<th key={index}>{inline(cell, `${key}-h${index}`, open)}</th>
 								))}
 							</tr>
 						</thead>
@@ -87,7 +103,7 @@ export function Markdown({ text }: { text: string }) {
 							{body.map((row, r) => (
 								<tr key={r}>
 									{row.map((cell, c) => (
-										<td key={c}>{inline(cell, `${key}-${r}-${c}`)}</td>
+										<td key={c}>{inline(cell, `${key}-${r}-${c}`, open)}</td>
 									))}
 								</tr>
 							))}
@@ -100,14 +116,14 @@ export function Markdown({ text }: { text: string }) {
 		const heading = /^(#{1,4})\s+(.*)$/.exec(line);
 		if (heading) {
 			const Tag = `h${heading[1]!.length}` as "h1" | "h2" | "h3" | "h4";
-			blocks.push(<Tag key={key}>{inline(heading[2]!, key)}</Tag>);
+			blocks.push(<Tag key={key}>{inline(heading[2]!, key, open)}</Tag>);
 			i++;
 			continue;
 		}
 		if (/^\s*>/.test(line)) {
 			const body: string[] = [];
 			while (i < lines.length && /^\s*>/.test(lines[i]!)) body.push(lines[i++]!.replace(/^\s*>\s?/, ""));
-			blocks.push(<blockquote key={key}>{withBreaks(body, key)}</blockquote>);
+			blocks.push(<blockquote key={key}>{withBreaks(body, key, open)}</blockquote>);
 			continue;
 		}
 		const listMatch = /^\s*([-*+]|\d+[.)])\s+/.exec(line);
@@ -122,7 +138,7 @@ export function Markdown({ text }: { text: string }) {
 				else break;
 				i++;
 			}
-			const children = items.map((item, index) => <li key={`${key}-${index}`}>{withBreaks(item, `${key}-${index}`)}</li>);
+			const children = items.map((item, index) => <li key={`${key}-${index}`}>{withBreaks(item, `${key}-${index}`, open)}</li>);
 			// Keep the list's own first number, such as a citation list that continues at 4.
 			const start = ordered ? Number.parseInt(listMatch[1]!, 10) : 1;
 			blocks.push(
@@ -145,7 +161,7 @@ export function Markdown({ text }: { text: string }) {
 			body.push(lines[i++]!);
 		}
 		if (!body.length) body.push(lines[i++]!);
-		blocks.push(<p key={key}>{withBreaks(body, key)}</p>);
+		blocks.push(<p key={key}>{withBreaks(body, key, open)}</p>);
 	}
 	return <Fragment>{blocks}</Fragment>;
 }

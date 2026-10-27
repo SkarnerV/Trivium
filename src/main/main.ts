@@ -4,7 +4,7 @@ import { copyFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
-import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, protocol, shell } from "electron";
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type {
 	AppId,
@@ -43,6 +43,7 @@ import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
+import { READER_SCHEME, ReaderStore } from "./reader.ts";
 import { SettingsStore } from "./settings.ts";
 import { UsageCounter } from "./usage.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
@@ -59,6 +60,9 @@ if (process.env.TRIVIUM_HOME) app.setPath("userData", join(triviumDir, "electron
 // Before any session loads its extensions.
 installNodeHost();
 if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+// The Preview panel's pages load from this scheme. Standard, so a page's relative links resolve; it must be
+// declared before the app is ready.
+protocol.registerSchemesAsPrivileged([{ scheme: READER_SCHEME, privileges: { standard: true, secure: true, stream: true } }]);
 
 mkdirSync(triviumDir, { recursive: true });
 const settings = new SettingsStore(join(triviumDir, "settings.json"));
@@ -106,6 +110,7 @@ function thumbnail(data: string, mimeType: string): string | undefined {
 	return mimeType === "image/jpeg" ? `data:image/jpeg;base64,${small.toJPEG(82).toString("base64")}` : small.toDataURL();
 }
 const attachments = new AttachmentStore();
+const reader = new ReaderStore((id) => send({ type: "reader_changed", id }));
 const usage = new UsageCounter(join(triviumDir, "usage-cache.json"));
 // The Memory page decides what loads, what is recalled and what counts as a secret with @pify/memory's own code.
 const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
@@ -325,6 +330,21 @@ function registerIpc(): void {
 		if (error) throw new Error(error);
 	});
 	handle("trivium:readChangedFile", (path: string, file: string) => host.readChangedFile(path, file));
+	handle("trivium:openReader", async (path: string, file: string) => {
+		const target = await host.previewTarget(path, file);
+		return reader.open(target.file, target.root, target.rel);
+	});
+	handle("trivium:pickReaderFile", async (path: string) => {
+		const result = await dialog.showOpenDialog(window!, { title: "Preview a file", defaultPath: host.cwdOf(path), properties: ["openFile"] });
+		const file = result.filePaths[0];
+		if (result.canceled || !file) return undefined;
+		// A file the user picked may come from anywhere; its page loads only from its own folder.
+		const target = await host.previewTarget(path, file).catch(() => ({ file, root: dirname(file), rel: file }));
+		return reader.open(target.file, target.root, target.rel);
+	});
+	handle("trivium:reloadReader", (id: string) => reader.reload(id));
+	handle("trivium:setReaderScripts", (id: string, on: boolean) => reader.setScripts(id, Boolean(on)));
+	handle("trivium:closeReader", (id: string) => reader.close(id));
 	handle("trivium:imageData", (path: string, id: string) => {
 		const image = host.image(path, id);
 		return `data:${image.mimeType};base64,${image.data}`;
@@ -412,6 +432,12 @@ function createWindow(): void {
 	window.webContents.on("will-navigate", (event, url) => {
 		if (url !== page) event.preventDefault();
 	});
+	// A previewed page stays on Trivium's files, whose random tokens it cannot guess; web links open in the browser.
+	window.webContents.on("will-frame-navigate", (event) => {
+		if (event.isMainFrame || event.url.startsWith(`${READER_SCHEME}://`)) return;
+		event.preventDefault();
+		if (/^https?:/.test(event.url)) void shell.openExternal(event.url);
+	});
 	window.once("ready-to-show", () => window?.show());
 	// The custom title bar's maximize button reflects the window state.
 	window.on("maximize", () => window?.webContents.send("trivium:maximize-changed", true));
@@ -467,6 +493,7 @@ app.whenReady().then(async () => {
 		]),
 	);
 	await host.init();
+	protocol.handle(READER_SCHEME, (request) => reader.respond(request));
 	registerIpc();
 	createWindow();
 	app.on("activate", () => {
@@ -479,4 +506,7 @@ app.on("window-all-closed", () => {
 });
 
 // Cleanup is synchronous, so it runs here without holding up the quit.
-app.on("will-quit", () => host.dispose());
+app.on("will-quit", () => {
+	host.dispose();
+	reader.dispose();
+});

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getSupportedThinkingLevels, type ImageContent } from "@earendil-works/pi-ai";
@@ -52,6 +52,7 @@ import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermiss
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitDiff, readGitStatus } from "./git.ts";
+import { isInside } from "./reader.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -539,6 +540,27 @@ export class SessionHost {
 		// Only files this session changed, so the renderer cannot read arbitrary paths.
 		if (!live.changes.has(file)) throw new Error("This session did not change that file.");
 		return existsSync(file) ? readFile(file, "utf8") : "";
+	}
+
+	/** The project folder a session works in. */
+	cwdOf(path: string): string {
+		return this.require(path).cwd;
+	}
+
+	/**
+	 * A file the Preview panel may show: one in the session's project, or one this session changed. Resolves
+	 * it past any links, with the folder its page may load from and the name the panel gives it.
+	 */
+	async previewTarget(path: string, file: string): Promise<{ file: string; root: string; rel: string }> {
+		const live = this.require(path);
+		const absolute = isAbsolute(file) ? file : resolve(live.cwd, file);
+		const real = await realpath(absolute).catch(() => {
+			throw new Error(`There's no file at ${file}.`);
+		});
+		const project = isChat(live.cwd) ? undefined : await realpath(live.cwd).catch(() => undefined);
+		if (project && isInside(project, real)) return { file: real, root: project, rel: relative(project, real).split(sep).join("/") };
+		if (live.changes.has(absolute) || live.changes.has(real)) return { file: real, root: dirname(real), rel: real };
+		throw new Error("Only files in this session's project can be previewed.");
 	}
 
 	reviewFile(path: string, file: string): Promise<FileReview> {

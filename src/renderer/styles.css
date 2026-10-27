@@ -1155,6 +1155,13 @@ body.resizing * {
 	text-align: right;
 }
 
+.step .meta {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
 .step.running .meta {
 	color: var(--accent);
 }
@@ -1481,22 +1488,63 @@ body.resizing * {
 	min-width: 340px;
 	display: flex;
 	flex-direction: column;
-	background: var(--tray);
+	background: #fff;
 	border-left: 1px solid var(--line);
 }
 
-.changes-head {
+/* The panel's head: the view's title or the open files on the left, quiet buttons on the right. */
+.panel-head {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	min-height: 58px;
-	padding: 14px 12px 10px 16px;
+	gap: 8px;
+	flex: none;
+	height: 52px;
+	padding: 0 10px 0 16px;
+	margin-bottom: 12px;
+	border-bottom: 1px solid var(--line);
 }
 
-.changes-head h2 {
+.panel-title {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	min-width: 0;
 	margin: 0;
 	font-size: 14px;
 	font-weight: 600;
+}
+
+.panel-tools {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-left: auto;
+}
+
+.panel-tools .icon-btn {
+	width: 30px;
+	height: 30px;
+	border-radius: 8px;
+	color: var(--ink-3);
+}
+
+.panel-tools .icon-btn[aria-pressed="true"],
+.panel-tools .icon-btn[aria-expanded="true"] {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.panel-sep {
+	width: 1px;
+	height: 18px;
+	margin: 0 4px;
+	background: var(--line);
+}
+
+.cm-check {
+	display: grid;
+	margin-left: 6px;
+	color: var(--accent);
 }
 
 .change-count {
@@ -1568,10 +1616,6 @@ body.resizing * {
 .branch-toggle[aria-pressed="true"] .branch-count {
 	background: #fff;
 	color: var(--accent-text);
-}
-
-.changes-head .seg {
-	margin-left: 0;
 }
 
 .seg-count {
@@ -5817,4 +5861,295 @@ body.resizing * {
 
 .mem-undo button:hover {
 	background: rgba(255, 255, 255, 0.2);
+}
+
+/* The Preview view: open files as tabs, and the file itself edge to edge. */
+
+.panel-head:has(.preview-tabs) {
+	margin-bottom: 0;
+	padding-left: 6px;
+}
+
+.preview-tabs {
+	flex: 1;
+	min-width: 0;
+	align-self: stretch;
+	display: flex;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.preview-tab {
+	position: relative;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	max-width: 200px;
+	padding: 0 4px 0 10px;
+	color: var(--ink-3);
+}
+
+.preview-tab[aria-current="true"] {
+	color: var(--ink);
+}
+
+.preview-tab[aria-current="true"]::after {
+	content: "";
+	position: absolute;
+	inset: auto 8px -1px 8px;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--accent);
+}
+
+.preview-tab-name {
+	min-width: 0;
+	padding: 6px 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-size: 12.5px;
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.preview-tab-close {
+	width: 18px;
+	height: 18px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 5px;
+	background: none;
+	color: var(--ink-4);
+	opacity: 0;
+}
+
+.preview-tab:hover .preview-tab-close,
+.preview-tab[aria-current="true"] .preview-tab-close,
+.preview-tab-close:focus-visible {
+	opacity: 1;
+}
+
+.preview-tab-close:hover {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.preview-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.preview-strip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+	padding: 6px 10px 6px 16px;
+	background: #fff7e6;
+	color: #6e4100;
+	font-size: 12.5px;
+}
+
+.preview-strip .btn {
+	min-height: 26px;
+	margin-left: auto;
+	padding: 0 10px;
+	border-color: #ebd3a6;
+	color: #6e4100;
+	font-size: 12px;
+}
+
+.preview-frame {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	border: 0;
+	background: #fff;
+}
+
+.preview-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.preview-scroll > .doc {
+	padding: 24px 28px;
+}
+
+.preview-text {
+	display: flex;
+	min-width: max-content;
+	padding: 10px 0;
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.65;
+}
+
+.preview-text pre {
+	margin: 0;
+	font: inherit;
+	tab-size: 4;
+}
+
+.preview-gutter {
+	position: sticky;
+	left: 0;
+	flex: none;
+	min-width: 34px;
+	padding: 0 12px 0 10px;
+	background: #fff;
+	color: var(--ink-4);
+	text-align: right;
+	user-select: none;
+}
+
+.preview-code {
+	padding-right: 16px;
+	color: var(--ink-2);
+}
+
+.preview-image {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	overflow: auto;
+	background-color: #fff;
+	background-image:
+		linear-gradient(45deg, #f3f3f7 25%, transparent 25%, transparent 75%, #f3f3f7 75%),
+		linear-gradient(45deg, #f3f3f7 25%, transparent 25%, transparent 75%, #f3f3f7 75%);
+	background-size: 16px 16px;
+	background-position:
+		0 0,
+		8px 8px;
+}
+
+.preview-image img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.preview-table {
+	min-width: 100%;
+	border-collapse: collapse;
+	font-family: var(--mono);
+	font-size: 12px;
+}
+
+.preview-table th,
+.preview-table td {
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+	white-space: nowrap;
+}
+
+.preview-table th {
+	position: sticky;
+	top: 0;
+	background: #fff;
+	color: var(--ink-3);
+	font-weight: 500;
+}
+
+.preview-note {
+	flex: none;
+	margin: 0;
+	padding: 8px 16px;
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+/* The Code panel is one white surface, so its empty state sits on it rather than in a card. */
+.changes .side-body.panel-empty {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+}
+
+.preview-empty {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 24px;
+	text-align: center;
+}
+
+.preview-empty h3 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.preview-empty p {
+	max-width: 280px;
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--ink-3);
+}
+
+.preview-empty .btn {
+	min-height: 32px;
+	margin-top: 4px;
+	font-size: 12.5px;
+}
+
+/* A file path in a reply, which opens in the Preview panel. */
+.path-link {
+	display: inline;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	cursor: pointer;
+}
+
+.path-link code {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+	text-underline-offset: 2px;
+}
+
+.path-link:hover code {
+	text-decoration-color: var(--accent);
+}
+
+.step-preview {
+	width: 22px;
+	height: 22px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-4);
+	opacity: 0;
+}
+
+.step-summary:hover .step-preview,
+.step-preview:focus-visible {
+	opacity: 1;
+}
+
+.step-preview:hover {
+	background: var(--tab);
+	color: var(--accent-text);
 }

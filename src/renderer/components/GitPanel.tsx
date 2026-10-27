@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { GitArea, GitDiff, GitFile, GitStatus, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { BranchIcon, Chevron, ExternalIcon } from "../icons.tsx";
-import { attempt, errorText, trivium } from "../store.ts";
+import { BranchIcon, Chevron, ExternalIcon, EyeIcon } from "../icons.tsx";
+import { attempt, errorText, openPreview, trivium } from "../store.ts";
 import { transition } from "../transition.ts";
 import { DiffView } from "./DiffView.tsx";
 
@@ -132,6 +132,11 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 								<span className="change-count">
 									<span className="plus">+{diff.diff.adds}</span> <span className="minus">−{diff.diff.dels}</span>
 								</span>
+							)}
+							{current.status !== "deleted" && (
+								<button type="button" className="icon-btn" aria-label="Preview" title="Preview" onClick={() => void openPreview(view.path, current.path)}>
+									<EyeIcon size={14} />
+								</button>
 							)}
 							{current.status !== "deleted" && (
 								<button

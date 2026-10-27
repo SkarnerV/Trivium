@@ -20,8 +20,15 @@ export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undef
 	return hidden === undefined ? panelFor(app, view) !== undefined : !hidden;
 }
 
-/** The Code panel's tab: the user's pick, else this session's edits when it has any, else the repository's changes. */
-export function codeTab(view: SessionView, git: GitStatus | null | undefined, picked: "session" | "git" | undefined): "session" | "git" {
-	if (!git) return "session";
-	return picked ?? (view.changes.length ? "session" : "git");
+/** What the Code panel can show: this session's edits, the repository's changes, or files open to read. */
+export type CodeView = "session" | "git" | "preview";
+
+/**
+ * The Code panel's view: the user's pick (Git only in a repository), else this session's edits when it has
+ * any, else the repository's changes.
+ */
+export function codeTab(view: SessionView, git: GitStatus | null | undefined, picked: CodeView | undefined): CodeView {
+	if (picked === "preview" || (picked === "git" && git)) return picked;
+	if (picked === "session" || !git) return "session";
+	return view.changes.length ? "session" : "git";
 }

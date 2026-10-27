@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { Run, Step } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
-import { Chevron } from "../icons.tsx";
+import { Chevron, EyeIcon } from "../icons.tsx";
+import { usePreviewOpener } from "../preview.ts";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
@@ -53,8 +54,12 @@ function lastLine(text: string | undefined): string {
 	return text?.split("\n").findLast((line) => line.trim())?.trim() ?? "";
 }
 
+/** Steps whose target is a file the agent read or wrote. */
+const FILE_TOOLS = new Set(["read", "edit", "write"]);
+
 export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const [open, setOpen] = useState(false);
+	const preview = usePreviewOpener();
 	const now = useNow(live ? 1000 : 0);
 	if (!run.steps.length && !live) return null;
 	const end = live ? now : run.endedAt;
@@ -100,7 +105,24 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 												{step.target}
 											</span>
 										)}
-										<span className="meta">{step.meta}</span>
+										<span className="meta">
+											{preview && FILE_TOOLS.has(step.tool) && step.target && step.status !== "error" && (
+												<button
+													type="button"
+													className="step-preview"
+													aria-label={`Preview ${step.target}`}
+													title="Preview"
+													onClick={(event) => {
+														// Inside the step's summary: open the file, not the step.
+														event.preventDefault();
+														preview(step.target);
+													}}
+												>
+													<EyeIcon size={13} />
+												</button>
+											)}
+											{step.meta}
+										</span>
 										<span className="time">{time}</span>
 										<span className="step-chevron"><Chevron open={false} /></span>
 									</summary>

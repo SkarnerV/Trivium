@@ -218,6 +218,31 @@ export interface GitDiff {
 	binary: boolean;
 }
 
+/** How the Preview panel shows a file. */
+export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary";
+
+/** A file open in the Preview panel. */
+export interface ReaderFile {
+	/** Its token, which its trivium-file URLs carry. A new one is issued when scripts are turned on or off. */
+	id: string;
+	/** Absolute path, past any links. */
+	path: string;
+	/** Path relative to the session's project, or absolute when outside it. */
+	rel: string;
+	name: string;
+	kind: ReaderKind;
+	size: number;
+	mtime: number;
+	/** Where the panel loads HTML, images and PDFs from. */
+	url?: string;
+	/** The text of Markdown, tables and other text files. */
+	text?: string;
+	/** The text stops short of the end of the file. */
+	truncated?: boolean;
+	/** The page may run its scripts. */
+	scripts: boolean;
+}
+
 /** A file as text with the agent's changes marked, for reviewing one change at a time. */
 export type ReviewSegment =
 	| { kind: "same"; text: string }
@@ -276,7 +301,8 @@ export type HostEvent =
 	| { type: "focus_session"; path: string }
 	| { type: "unloaded"; paths: string[] }
 	| { type: "trust"; request: TrustRequest }
-	| { type: "trust_closed"; id: string };
+	| { type: "trust_closed"; id: string }
+	| { type: "reader_changed"; id: string };
 
 /** What goes into a session's message box, unsent: such as an earlier message taken back to edit. */
 export interface Draft {
@@ -635,6 +661,14 @@ export interface TriviumApi {
 	openFile(file: string): Promise<void>;
 	/** Current text of a file this session changed. */
 	readChangedFile(path: string, file: string): Promise<string>;
+	/** Opens a file in the Preview panel: one in the session's project, or one it changed. Relative paths are from the project. */
+	openReader(path: string, file: string): Promise<ReaderFile>;
+	/** Shows the file picker and opens what was chosen in the Preview panel; undefined when cancelled. */
+	pickReaderFile(path: string): Promise<ReaderFile | undefined>;
+	reloadReader(id: string): Promise<ReaderFile>;
+	/** Lets a page run its scripts, or stops it. The file comes back under a new id. */
+	setReaderScripts(id: string, on: boolean): Promise<ReaderFile>;
+	closeReader(id: string): Promise<void>;
 	/** A transcript image at full size, as a data URL. */
 	imageData(path: string, id: string): Promise<string>;
 	/** Asks where to save a transcript image and writes it; false when cancelled. */

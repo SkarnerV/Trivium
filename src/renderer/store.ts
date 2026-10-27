@@ -10,12 +10,14 @@ import type {
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
+	ReaderFile,
 	TrustRequest,
 	Notice,
 	SessionSummary,
 	SessionView,
 	TranscriptImage,
 } from "../shared/protocol.ts";
+import type { CodeView } from "./panels.ts";
 import { transition } from "./transition.ts";
 
 declare global {
@@ -48,8 +50,10 @@ export interface State {
 	panelWidth?: number;
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
-	/** The Code panel's tab the user picked for each session; unset shows this session's edits when it has any. */
-	panelTab: Record<string, "session" | "git">;
+	/** The Code panel's view the user picked for each session; unset shows this session's edits when it has any. */
+	panelTab: Record<string, CodeView>;
+	/** The files open in each session's Preview panel, oldest first, and the one showing. */
+	previews: Record<string, { files: ReaderFile[]; active?: string }>;
 	/** The repository each Code session works in, by session path; null when it is in none. */
 	git: Record<string, GitStatus | null>;
 	overlay: "new" | "search" | null;
@@ -109,6 +113,7 @@ let state: State = {
 	peek: false,
 	changesHidden: {},
 	panelTab: {},
+	previews: {},
 	git: {},
 	drafts: {},
 	trust: [],
@@ -246,6 +251,9 @@ function handleEvent(event: HostEvent): void {
 		case "trust_closed":
 			setState((s) => ({ trust: s.trust.filter((request) => request.id !== event.id) }));
 			break;
+		case "reader_changed":
+			void reloadPreview(event.id);
+			break;
 		case "focus_session":
 			setState({ page: "main" });
 			void openSession(event.path);
@@ -272,6 +280,82 @@ export async function refreshGit(path: string): Promise<void> {
 		git = null;
 	}
 	if (JSON.stringify(git) !== JSON.stringify(state.git[path])) setState((s) => ({ git: { ...s.git, [path]: git } }));
+}
+
+/** More than this, and opening another file closes the one opened longest ago. */
+const MAX_PREVIEWS = 6;
+
+/** Opens a file in a session's Preview panel and shows it there. Relative paths are from the session's project. */
+export async function openPreview(path: string, file: string): Promise<void> {
+	const opened = await attempt(() => trivium.openReader(path, file));
+	if (opened) showPreview(path, opened);
+}
+
+/** Lets the user pick any file to preview. */
+export async function pickPreview(path: string): Promise<void> {
+	const opened = await attempt(() => trivium.pickReaderFile(path));
+	if (opened) showPreview(path, opened);
+}
+
+function showPreview(path: string, opened: ReaderFile): void {
+	const files = getState().previews[path]?.files ?? [];
+	// The same file opened again takes the old one's place, so it is never open twice.
+	const same = files.find((file) => file.path === opened.path);
+	let next = same ? files.map((file) => (file === same ? opened : file)) : [...files, opened];
+	const closing = same ? [same] : [];
+	while (next.length > MAX_PREVIEWS) {
+		closing.push(next[0]!);
+		next = next.slice(1);
+	}
+	for (const file of closing) void trivium.closeReader(file.id).catch(() => {});
+	transition("tab", () =>
+		setState((s) => ({
+			previews: { ...s.previews, [path]: { files: next, active: opened.id } },
+			panelTab: { ...s.panelTab, [path]: "preview" },
+			changesHidden: { ...s.changesHidden, [path]: false },
+		})),
+	);
+}
+
+export function selectPreview(path: string, id: string): void {
+	transition("tab", () => setState((s) => ({ previews: { ...s.previews, [path]: { files: s.previews[path]?.files ?? [], active: id } } })));
+}
+
+/** Closes a file; the one beside it shows next. */
+export function closePreview(path: string, id: string): void {
+	void trivium.closeReader(id).catch(() => {});
+	setState((s) => {
+		const files = s.previews[path]?.files ?? [];
+		const index = files.findIndex((file) => file.id === id);
+		const next = files.filter((file) => file.id !== id);
+		const active = s.previews[path]?.active === id ? next[Math.min(index, next.length - 1)]?.id : s.previews[path]?.active;
+		return { previews: { ...s.previews, [path]: { files: next, active } } };
+	});
+}
+
+/** Puts a file's new state in place of its old one, wherever it is open; `id` is the one it had. */
+function replacePreview(id: string, file: ReaderFile): void {
+	setState((s) => ({
+		previews: Object.fromEntries(
+			Object.entries(s.previews).map(([path, open]) => [
+				path,
+				open.files.some((f) => f.id === id)
+					? { files: open.files.map((f) => (f.id === id ? file : f)), active: open.active === id ? file.id : open.active }
+					: open,
+			]),
+		),
+	}));
+}
+
+/** Reads a file again after it changed on disk. One that is gone stays as it was last seen. */
+export async function reloadPreview(id: string): Promise<void> {
+	const file = await trivium.reloadReader(id).catch(() => undefined);
+	if (file) replacePreview(id, file);
+}
+
+export async function setPreviewScripts(id: string, on: boolean): Promise<void> {
+	const file = await attempt(() => trivium.setReaderScripts(id, on));
+	if (file) replacePreview(id, file);
 }
 
 export async function refreshSessions(): Promise<SessionSummary[] | undefined> {
@@ -452,4 +536,4 @@ export async function init(): Promise<void> {
 }
 
 // Lets development scripts (TRIVIUM_EVAL) drive the UI the same way the components do.
-Object.assign(window, { triviumDebug: { getState, setState, openSession, startSession, switchApp, openSettings } });
+Object.assign(window, { triviumDebug: { getState, setState, openSession, startSession, switchApp, openSettings, openPreview } });

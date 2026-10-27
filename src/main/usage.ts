@@ -9,7 +9,7 @@ import { dayOf } from "../shared/usage.ts";
  * up to is kept in a cache file and counted again only when one of its files changes.
  */
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 /** Session files read at once. */
 const CONCURRENT = 8;
 
@@ -61,13 +61,39 @@ export function countReplies(text: string, into: Map<string, UsageBucket>): void
 		const provider = str(message.provider);
 		const model = str(message.model);
 		const key = `${day}\n${provider}\n${model}`;
-		const bucket = into.get(key) ?? { day, provider, model, responses: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+		const bucket = into.get(key) ?? {
+			day,
+			provider,
+			model,
+			responses: 0,
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cost: 0,
+			firstTokenMs: 0,
+			firstTokens: 0,
+			streamMs: 0,
+			streamed: 0,
+		};
 		bucket.responses += 1;
 		bucket.input += input;
 		bucket.output += output;
 		bucket.cacheRead += cacheRead;
 		bucket.cacheWrite += cacheWrite;
 		bucket.cost += num((usage.cost as Record<string, unknown> | undefined)?.total);
+		// Trivium notes the first token's time on replies it streams; pi times the whole reply.
+		const duration = num(message.durationMs);
+		const firstToken = typeof message.firstTokenMs === "number" && message.firstTokenMs <= duration ? message.firstTokenMs : undefined;
+		if (firstToken !== undefined) {
+			bucket.firstTokenMs += firstToken;
+			bucket.firstTokens += 1;
+		}
+		const streaming = duration - (firstToken ?? 0);
+		if (output && streaming > 0) {
+			bucket.streamMs += streaming;
+			bucket.streamed += output;
+		}
 		into.set(key, bucket);
 	}
 }

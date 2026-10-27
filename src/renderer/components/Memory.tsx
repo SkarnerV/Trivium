@@ -13,7 +13,7 @@ import {
 import { relativeTime } from "../format.ts";
 import { BackIcon, CalendarIcon, ExternalIcon, FolderIcon, GlobeIcon, InfoIcon, PenIcon, PlusIcon, SearchIcon, ShieldIcon, ToTopIcon, TrashIcon, UndoIcon } from "../icons.tsx";
 import { attempt, closeSettings, errorText, trivium, useStore } from "../store.ts";
-import { THEMES } from "../theme.ts";
+import { MEMORY_COLORS, NEUTRAL, THEMES, themeVars } from "../theme.ts";
 import { transition } from "../transition.ts";
 import { Dropdown } from "./Dropdown.tsx";
 
@@ -101,7 +101,9 @@ export function MemoryPage() {
 
 	const item = (target: Section, label: string, icon: ReactNode, meta?: ReactNode) => (
 		<button type="button" key={target.kind === "project" ? target.cwd : target.kind} className="set-nav-item" aria-current={sameSection(section, target) ? "page" : undefined} onClick={() => go(target)}>
-			<span className="s-nav-icon">{icon}</span>
+			<span className="s-nav-icon" style={navIconStyle(MEMORY_COLORS[target.kind].accent)}>
+				{icon}
+			</span>
 			<span className="s-nav-label ellipsis">{label}</span>
 			{meta}
 		</button>
@@ -109,7 +111,7 @@ export function MemoryPage() {
 	const workspace = section.kind === "project" ? overview?.workspaces.find((entry) => entry.cwd === section.cwd) : undefined;
 
 	return (
-		<>
+		<div className="mem-page" style={themeVars({ ...NEUTRAL, ...MEMORY_COLORS[section.kind] })}>
 			<nav className="set-nav drag" aria-label="Memory">
 				<button type="button" className="back" onClick={closeSettings}>
 					<BackIcon />
@@ -153,14 +155,16 @@ export function MemoryPage() {
 					</button>
 				</div>
 			)}
-		</>
+		</div>
 	);
 }
+
+const navIconStyle = (color: string) => ({ color, background: `color-mix(in srgb, ${color} 14%, #fff)` });
 
 function Header({ icon, title, subtitle, children }: { icon: ReactNode; title: string; subtitle: string; children?: ReactNode }) {
 	return (
 		<header className="s-head">
-			<span className="s-head-icon">{icon}</span>
+			<span className="s-head-icon accent">{icon}</span>
 			<div className="s-head-text">
 				<h2>{title}</h2>
 				<p>{subtitle}</p>

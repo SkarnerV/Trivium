@@ -74,6 +74,8 @@ interface Live {
 	/** The git status last sent to the renderer, as JSON, so an unchanged one is not sent again. */
 	git?: string;
 	gitTimer?: ReturnType<typeof setTimeout>;
+	/** When the reply being written sent its first token. */
+	firstTokenAt?: number;
 }
 
 /** A session forked before a message, and that message taken back out to edit and send. */
@@ -341,11 +343,12 @@ export class SessionHost {
 		// Attached files go in front of the message as <file> tags, like pi's CLI sends them.
 		const message = (attachments?.prefix ?? "") + text;
 		const images = attachments?.images.length ? attachments.images : undefined;
-		if (mode === "steer" || (mode === "prompt" && live.running)) {
+		if (mode === "steer") {
 			await session.steer(message, images);
 			return;
 		}
-		if (mode === "followUp") {
+		// A message sent while a run is going waits for the run to finish.
+		if (mode === "followUp" || live.running) {
 			await session.followUp(message, images);
 			return;
 		}
@@ -446,7 +449,7 @@ export class SessionHost {
 			session.setSessionName(args.trim());
 			return;
 		}
-		const options = live.running ? { streamingBehavior: mode === "followUp" ? ("followUp" as const) : ("steer" as const) } : undefined;
+		const options = live.running ? { streamingBehavior: mode === "steer" ? ("steer" as const) : ("followUp" as const) } : undefined;
 		void session.prompt(text, options).catch(fail);
 	}
 
@@ -967,6 +970,8 @@ export class SessionHost {
 
 	private onEvent(live: Live, event: AgentSessionEvent): void {
 		live.lastActive = Date.now();
+		// Before the tracker, so the finished reply it shows carries its first token's time.
+		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
 		switch (event.type) {
 			case "agent_start":
@@ -1000,6 +1005,24 @@ export class SessionHost {
 				this.emitStatus(live);
 				this.scheduleList();
 				break;
+		}
+	}
+
+	/**
+	 * pi saves how long each reply took but not when its first token came, so it is noted here on the reply before pi
+	 * saves it: listeners hear message_end before the session file is written. The usage page reads it back.
+	 */
+	private timeFirstToken(live: Live, event: AgentSessionEvent): void {
+		if (event.type === "message_start" && event.message.role === "assistant") {
+			live.firstTokenAt = undefined;
+		} else if (event.type === "message_update" && event.message.role === "assistant") {
+			if (event.assistantMessageEvent.type.endsWith("_delta")) live.firstTokenAt ??= Date.now();
+		} else if (event.type === "message_end" && event.message.role === "assistant") {
+			const message = event.message as typeof event.message & { firstTokenMs?: number };
+			if (live.firstTokenAt !== undefined && message.firstTokenMs === undefined) {
+				message.firstTokenMs = Math.max(0, live.firstTokenAt - message.timestamp);
+			}
+			live.firstTokenAt = undefined;
 		}
 	}
 

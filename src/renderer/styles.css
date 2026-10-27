@@ -987,6 +987,14 @@ body.resizing * {
 	opacity: 1;
 }
 
+.reply-stats {
+	align-self: center;
+	margin-left: 6px;
+	color: var(--ink-4);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
 /* Steps */
 
 .steps-toggle {
@@ -3502,7 +3510,66 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
+/* Lined up over a row's .u-num columns: the row's right padding less the head's, and the row's gap. */
 .u-columns {
+	display: flex;
+	gap: 12px;
+	padding-right: 12px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.u-columns > span {
+	width: 64px;
+	text-align: right;
+}
+
+.u-speed {
+	position: relative;
+	text-decoration: underline dotted var(--ink-4);
+	text-underline-offset: 3px;
+	cursor: default;
+	outline: none;
+}
+
+.u-speed-card {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	z-index: 20;
+	display: none;
+	grid-template-columns: auto auto;
+	gap: 6px 20px;
+	width: max-content;
+	max-width: 280px;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 12px 32px rgba(19, 20, 43, 0.16);
+	color: var(--ink-3);
+	font-size: 12px;
+	white-space: normal;
+	animation: dd-in 0.12s ease-out;
+}
+
+.u-speed:hover > .u-speed-card,
+.u-speed:focus-visible > .u-speed-card {
+	display: grid;
+}
+
+.u-speed-card b {
+	color: var(--ink);
+	font-weight: 500;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.u-speed-card small {
+	grid-column: 1 / -1;
+	padding-top: 6px;
+	border-top: 1px solid var(--line);
 	color: var(--ink-4);
 	font-size: 11.5px;
 }
@@ -5490,6 +5557,11 @@ body.resizing * {
 }
 
 /* Memory */
+
+/* Carries the page's colors to the nav and card without adding a box to the shell's layout. */
+.mem-page {
+	display: contents;
+}
 
 .mem-nav-empty {
 	margin: 0;

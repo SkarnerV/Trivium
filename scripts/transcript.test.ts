@@ -48,6 +48,15 @@ test("thinking and commentary keep their complete multiline text", () => {
 	assert.equal(run.answer, "Done.");
 });
 
+test("a run keeps the timing of its last finished reply", () => {
+	const tracker = new RunTracker([
+		{ role: "user", content: "hi", timestamp: 1000 },
+		{ role: "assistant", content: [{ type: "text", text: "Hi!" }], usage: { output: 13 }, timestamp: 1200, durationMs: 4700, firstTokenMs: 1500 },
+	] as unknown as Messages);
+	assert.deepEqual(tracker.all()[0]!.reply, { at: 1200, durationMs: 4700, firstTokenMs: 1500, output: 13 });
+	assert.equal(history([{ type: "text", text: "Done." }]).all()[0]!.reply, undefined);
+});
+
 test("edit arguments preserve every replacement in expanded details", () => {
 	const args = {
 		path: "src/example.ts",

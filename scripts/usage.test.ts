@@ -5,12 +5,18 @@ import { join } from "node:path";
 import test from "node:test";
 import type { SessionSummary, UsageBucket, UsageReport } from "../src/shared/protocol.ts";
 import { countReplies, UsageCounter } from "../src/main/usage.ts";
-import { addDays, calendar, dayOf, summarize, tokensOf } from "../src/shared/usage.ts";
+import { addDays, calendar, dayOf, firstTokenOf, speedOf, summarize, tokensOf } from "../src/shared/usage.ts";
 
 const NOON = new Date(2026, 9, 20, 12).getTime();
 
 /** One saved assistant reply, as pi writes it. */
-function reply(time: number, usage: Partial<Record<"input" | "output" | "cacheRead" | "cacheWrite" | "cost", number>>, model = "opus", provider = "anthropic") {
+function reply(
+	time: number,
+	usage: Partial<Record<"input" | "output" | "cacheRead" | "cacheWrite" | "cost", number>>,
+	model = "opus",
+	provider = "anthropic",
+	timing: { durationMs?: number; firstTokenMs?: number } = {},
+) {
 	const { cost = 0, ...tokens } = usage;
 	return JSON.stringify({
 		type: "message",
@@ -21,6 +27,7 @@ function reply(time: number, usage: Partial<Record<"input" | "output" | "cacheRe
 			model,
 			timestamp: time,
 			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ...tokens, cost: { total: cost } },
+			...timing,
 		},
 	});
 }
@@ -46,10 +53,25 @@ test("replies add up by day and model, and empty or broken ones are skipped", ()
 		reply(NOON, { input: 7, output: 3 }, "gpt", "openai"),
 	].join("\n");
 	assert.deepEqual(buckets(text), [
-		{ day: dayOf(NOON), provider: "anthropic", model: "opus", responses: 2, input: 110, output: 25, cacheRead: 300, cacheWrite: 40, cost: 0.75 },
-		{ day: dayOf(NOON + 86_400_000), provider: "anthropic", model: "opus", responses: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0 },
-		{ day: dayOf(NOON), provider: "openai", model: "gpt", responses: 1, input: 7, output: 3, cacheRead: 0, cacheWrite: 0, cost: 0 },
+		{ day: dayOf(NOON), provider: "anthropic", model: "opus", responses: 2, input: 110, output: 25, cacheRead: 300, cacheWrite: 40, cost: 0.75, firstTokenMs: 0, firstTokens: 0, streamMs: 0, streamed: 0 },
+		{ day: dayOf(NOON + 86_400_000), provider: "anthropic", model: "opus", responses: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, firstTokenMs: 0, firstTokens: 0, streamMs: 0, streamed: 0 },
+		{ day: dayOf(NOON), provider: "openai", model: "gpt", responses: 1, input: 7, output: 3, cacheRead: 0, cacheWrite: 0, cost: 0, firstTokenMs: 0, firstTokens: 0, streamMs: 0, streamed: 0 },
 	]);
+});
+
+test("timed replies add up time to first token and output speed", () => {
+	const text = [
+		reply(NOON, { input: 10, output: 300 }, "opus", "anthropic", { durationMs: 7000, firstTokenMs: 1000 }),
+		reply(NOON, { input: 10, output: 100 }, "opus", "anthropic", { durationMs: 2000 }),
+		reply(NOON, { input: 10, output: 50 }, "opus", "anthropic", { durationMs: 500, firstTokenMs: 900 }),
+		reply(NOON, { input: 10, output: 50 }),
+	].join("\n");
+	const [counted] = buckets(text);
+	// A first token later than the reply ended is not believed; the reply counts as untimed to the first token.
+	assert.deepEqual([counted.firstTokenMs, counted.firstTokens, counted.streamMs, counted.streamed], [1000, 1, 8500, 450]);
+	assert.equal(firstTokenOf(counted), 1000);
+	assert.equal(Math.round(speedOf(counted)!), 53);
+	assert.equal(speedOf(buckets(reply(NOON, { input: 1, output: 1 }))[0]), undefined);
 });
 
 test("a fork skips the replies it copied from the session it came from", () => {
@@ -113,7 +135,7 @@ test("subagents count toward their session, and counts are cached until a file c
 });
 
 function bucket(day: string, input: number, model = "opus", cost = 0): UsageBucket {
-	return { day, provider: "anthropic", model, responses: 1, input, output: 0, cacheRead: 0, cacheWrite: 0, cost };
+	return { day, provider: "anthropic", model, responses: 1, input, output: 0, cacheRead: 0, cacheWrite: 0, cost, firstTokenMs: 0, firstTokens: 0, streamMs: 0, streamed: 0 };
 }
 
 test("a summary counts its range, compares with the stretch before, and ranks apps, models and sessions", () => {

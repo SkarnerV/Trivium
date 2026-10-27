@@ -146,6 +146,16 @@ export interface Run {
 	error?: string;
 	/** Set when `error` is a usage limit or an empty balance Trivium recognizes. */
 	limit?: LimitNotice;
+	/** The run's last finished reply: when its request was sent, how long it took, and the output tokens it wrote. */
+	reply?: ReplyTiming;
+}
+
+export interface ReplyTiming {
+	at: number;
+	durationMs?: number;
+	/** Absent for replies Trivium didn't stream, such as those written before it timed first tokens. */
+	firstTokenMs?: number;
+	output: number;
 }
 
 export interface ContextInfo {
@@ -602,6 +612,15 @@ export interface UsageBucket {
 	cacheWrite: number;
 	/** Dollars, from pi's price list when the reply came. */
 	cost: number;
+	/** Milliseconds to the first token, added up over the `firstTokens` replies Trivium timed. */
+	firstTokenMs: number;
+	firstTokens: number;
+	/**
+	 * Milliseconds spent writing `streamed` output tokens, over the replies pi timed: from the first token when it was
+	 * timed, else from when the request was sent.
+	 */
+	streamMs: number;
+	streamed: number;
 }
 
 export interface SessionUsage {

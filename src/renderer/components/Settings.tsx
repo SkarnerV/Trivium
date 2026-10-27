@@ -13,8 +13,19 @@ import type {
 	UsageReport,
 } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { type CalendarDay, cacheShare, calendar, summarize, type Tally, tokensOf, type UsageBar, type UsageRange } from "../../shared/usage.ts";
-import { shortPath, tokens } from "../format.ts";
+import {
+	type CalendarDay,
+	cacheShare,
+	calendar,
+	firstTokenOf,
+	speedOf,
+	summarize,
+	type Tally,
+	tokensOf,
+	type UsageBar,
+	type UsageRange,
+} from "../../shared/usage.ts";
+import { duration, shortPath, tokens } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
@@ -807,9 +818,9 @@ const SHORTCUTS: [title: string, description: string | undefined, rows: Shortcut
 		"Message box",
 		undefined,
 		[
-			["Send", [["↵"]], "While a run is going, this steers it"],
+			["Send", [["↵"]], "While a run is going, this queues it for after the run"],
 			["New line", [["⇧", "↵"]]],
-			["Queue a follow-up for after the run", [["⌥", "↵"]]],
+			["Steer the run that's going", [["⌥", "↵"]], "Reaches the agent after its current tool"],
 			["Stop the run", [["esc"]]],
 			["Commands", [["/"]], "Prompt templates, skills and extension commands"],
 		],
@@ -974,6 +985,30 @@ function Cost({ dollars, providers, plans }: { dollars: number; providers: strin
 	return (
 		<span className="u-num u-quiet" title="pi has no price for this model">
 			—
+		</span>
+	);
+}
+
+/** A model's response count; pointing at it shows how fast the model answered. */
+function Speed({ tally }: { tally: Tally }) {
+	const firstToken = firstTokenOf(tally);
+	const speed = speedOf(tally);
+	return (
+		<span className="u-speed" tabIndex={0}>
+			{tally.responses.toLocaleString()} {tally.responses === 1 ? "response" : "responses"}
+			<span className="u-speed-card" role="tooltip">
+				<span>Time to first token</span>
+				<b>{firstToken === undefined ? "—" : duration(firstToken)}</b>
+				<span>Output speed</span>
+				<b>{speed === undefined ? "—" : `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} tk/s`}</b>
+				<small>
+					{firstToken === undefined
+						? "First tokens are timed on new replies."
+						: tally.firstTokens === tally.responses
+							? "Averaged over every response."
+							: `First token timed on ${tally.firstTokens.toLocaleString()} of ${tally.responses.toLocaleString()} responses.`}
+				</small>
+			</span>
 		</span>
 	);
 }
@@ -1218,13 +1253,22 @@ function Usage() {
 							</div>
 						))}
 					</Group>
-					<Group title="By model" aside={<span className="u-columns">Input · Output · Cost</span>}>
+					<Group
+						title="By model"
+						aside={
+							<span className="u-columns">
+								<span>Input</span>
+								<span>Output</span>
+								<span>Cost</span>
+							</span>
+						}
+					>
 						{summary.models.map(({ provider, model, tally }) => (
 							<div key={`${provider}/${model}`} className="s-row u-row">
 								<div className="s-row-text">
 									<span className="s-label">{model}</span>
 									<span className="s-hint">
-										{provider} · {tally.responses.toLocaleString()} {tally.responses === 1 ? "response" : "responses"}
+										{provider} · <Speed tally={tally} />
 									</span>
 								</div>
 								<span className="u-num">{tokens(tally.input + tally.cacheRead + tally.cacheWrite)}</span>

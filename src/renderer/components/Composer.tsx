@@ -175,7 +175,7 @@ export function Composer({ view }: { view: SessionView }) {
 		if (menu.onKeyDown(event)) return;
 		if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
 			event.preventDefault();
-			void send(running ? (event.altKey ? "followUp" : "steer") : "prompt");
+			void send(running ? (event.altKey ? "steer" : "followUp") : "prompt");
 		} else if (event.key === "Escape" && running) {
 			event.preventDefault();
 			stop();
@@ -221,7 +221,7 @@ export function Composer({ view }: { view: SessionView }) {
 							ref={ref}
 							rows={1}
 							value={text}
-							placeholder={running ? "Message to steer the current run" : "Ask for the next change, or type / for commands"}
+							placeholder={running ? "Queue a message for after this run, or ⌥↵ to steer it" : "Ask for the next change, or type / for commands"}
 							onChange={(event) => setText(event.target.value)}
 							onPaste={(event) => {
 								const pasted = [...event.clipboardData.files];

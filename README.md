@@ -50,7 +50,7 @@ you which mode is still busy.
 
 - **Steps, folded or detailed.** "Worked for 6.4s · 8 steps" stays out of the way; open it to see each read, search, edit and command with its result and duration.
 - **Live command output** while a bash step runs.
-- **Steer mid-run.** Type while the agent works: `↵` steers the current run, `⌥↵` queues a follow-up, `esc` stops.
+- **Queue or steer mid-run.** Type while the agent works: `↵` queues a follow-up for after the run, `⌥↵` steers the current run, `esc` stops.
 - **Context at a glance.** A small ring shows how full the context window is; hover it for the breakdown and when compaction kicks in.
 
 <p align="center">
@@ -151,7 +151,7 @@ windows before restarting so the old taskbar group can exit.
 | `⌘K` | Search sessions in every mode |
 | `⌘\` | Fold or unfold the sidebar |
 | `⌘,` | Settings |
-| `↵` / `⌥↵` | Send (steers while a run is going) / queue a follow-up |
+| `↵` / `⌥↵` | Send (queues while a run is going) / steer the run |
 | `/` | Commands, with suggestions; `tab` completes |
 | `esc` | Stop the run, dismiss a question, close a dialog |
 

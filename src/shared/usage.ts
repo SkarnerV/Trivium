@@ -35,9 +35,24 @@ export interface Tally {
 	cacheRead: number;
 	cacheWrite: number;
 	cost: number;
+	firstTokenMs: number;
+	firstTokens: number;
+	streamMs: number;
+	streamed: number;
 }
 
-const empty = (): Tally => ({ responses: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+const empty = (): Tally => ({
+	responses: 0,
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	cost: 0,
+	firstTokenMs: 0,
+	firstTokens: 0,
+	streamMs: 0,
+	streamed: 0,
+});
 
 function add(tally: Tally, bucket: UsageBucket | Tally): void {
 	tally.responses += bucket.responses;
@@ -46,6 +61,10 @@ function add(tally: Tally, bucket: UsageBucket | Tally): void {
 	tally.cacheRead += bucket.cacheRead;
 	tally.cacheWrite += bucket.cacheWrite;
 	tally.cost += bucket.cost;
+	tally.firstTokenMs += bucket.firstTokenMs;
+	tally.firstTokens += bucket.firstTokens;
+	tally.streamMs += bucket.streamMs;
+	tally.streamed += bucket.streamed;
 }
 
 /** Every token a tally counts, as pi's totalTokens does. */
@@ -56,6 +75,12 @@ export function cacheShare(tally: Tally): number | undefined {
 	const sent = tally.input + tally.cacheRead + tally.cacheWrite;
 	return sent ? tally.cacheRead / sent : undefined;
 }
+
+/** The average milliseconds to the first token, or undefined when no reply was timed. */
+export const firstTokenOf = (tally: Tally): number | undefined => (tally.firstTokens ? tally.firstTokenMs / tally.firstTokens : undefined);
+
+/** Output tokens a second while writing, or undefined when no reply was timed. */
+export const speedOf = (tally: Tally): number | undefined => (tally.streamMs ? (tally.streamed * 1000) / tally.streamMs : undefined);
 
 export interface UsageBar {
 	from: string;

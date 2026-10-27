@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { Run, Step, TranscriptImage } from "../shared/protocol.ts";
+import type { ReplyTiming, Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
 import { describeSubagent, launchesSubagents, noticeOf, subagentOf } from "./subagents.ts";
 
@@ -46,6 +46,7 @@ interface RunState {
 	error?: string;
 	/** The provider that reported the error, which tells apart errors that read alike. */
 	errorProvider?: string;
+	reply?: ReplyTiming;
 }
 
 type ContentPart = { type: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
@@ -123,6 +124,23 @@ export function splitAttachments(content: unknown, keep?: KeepImage): { prompt: 
 function timestampOf(message: AgentMessage): number | undefined {
 	const value = (message as { timestamp?: unknown }).timestamp;
 	return typeof value === "number" ? value : undefined;
+}
+
+/** A finished reply's timing; Trivium adds `firstTokenMs` to the replies it streams. */
+function timingOf(message: AgentMessage): ReplyTiming | undefined {
+	const { timestamp, durationMs, firstTokenMs, usage } = message as {
+		timestamp?: unknown;
+		durationMs?: unknown;
+		firstTokenMs?: unknown;
+		usage?: { output?: unknown };
+	};
+	if (typeof timestamp !== "number" || typeof usage?.output !== "number") return undefined;
+	return {
+		at: timestamp,
+		durationMs: typeof durationMs === "number" ? durationMs : undefined,
+		firstTokenMs: typeof firstTokenMs === "number" ? firstTokenMs : undefined,
+		output: usage.output,
+	};
 }
 
 function firstLine(text: string, max = 140): string {
@@ -411,6 +429,7 @@ export class RunTracker {
 			run = { id: "r0", fromUser: false, prompt: "", segments: [], status: live ? "running" : "done" };
 			this.runs.push(run);
 		}
+		if (!live || eventType === "done") run.reply = timingOf(message) ?? run.reply;
 		const previous = new Map(run.segments.filter((s) => s.key.startsWith(`${key}:`)).map((s) => [s.key, s]));
 		run.segments = run.segments.filter((s) => !s.key.startsWith(`${key}:`));
 		const now = Date.now();
@@ -491,6 +510,7 @@ export class RunTracker {
 			endedAt: run.endedAt,
 			error: run.error,
 			limit: run.error ? explainLimit(run.error, run.errorProvider) : undefined,
+			reply: run.reply,
 		};
 	}
 }

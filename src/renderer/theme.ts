@@ -102,6 +102,14 @@ export const SECTION_COLORS: Record<string, { accent: string; accentText: string
 	about: { accent: "#475569", accentText: "#334155" },
 };
 
+/** Each Memory page has its own color too. */
+export const MEMORY_COLORS: Record<"global" | "project" | "daily" | "deleted", { accent: string; accentText: string }> = {
+	global: { accent: "#DB2777", accentText: "#BE185D" },
+	project: { accent: "#16A34A", accentText: "#15803D" },
+	daily: { accent: "#D97706", accentText: "#B45309" },
+	deleted: { accent: "#DC2626", accentText: "#B91C1C" },
+};
+
 export function sectionTheme(section: string): AppTheme {
 	return { ...NEUTRAL, ...SECTION_COLORS[section] };
 }

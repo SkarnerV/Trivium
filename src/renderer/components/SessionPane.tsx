@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
-import { baseName } from "../format.ts";
+import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
 import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
@@ -199,6 +199,30 @@ function UserMessage({ run, view, index }: { run: Run; view: SessionView; index:
 	);
 }
 
+/** When the answer came, how long the run took, and how fast the answering reply was written. */
+function ReplyStats({ run }: { run: Run }) {
+	const reply = run.reply;
+	if (!reply) return null;
+	const end = reply.durationMs === undefined ? run.endedAt : reply.at + reply.durationMs;
+	const took = end !== undefined && run.startedAt !== undefined ? Math.max(end - run.startedAt, reply.durationMs ?? 0) : reply.durationMs;
+	const writing = reply.durationMs === undefined ? 0 : reply.durationMs - (reply.firstTokenMs ?? 0);
+	const speed = reply.output && writing > 0 ? (reply.output * 1000) / writing : undefined;
+	const when = new Date(end ?? reply.at);
+	const today = when.toDateString() === new Date().toDateString();
+	const clock = when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+	const parts = [
+		today ? clock : `${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${clock}`,
+		took !== undefined && `${duration(took)}`,
+		reply.firstTokenMs !== undefined && `first token ${duration(reply.firstTokenMs)}`,
+		speed !== undefined && `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} tk/s`,
+	].filter(Boolean);
+	return (
+		<span className="reply-stats" title={`Answered ${when.toLocaleString()}${took !== undefined ? `, ${duration(took)} after it was asked` : ""}`}>
+			{parts.join(" · ")}
+		</span>
+	);
+}
+
 function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: SessionView; index: number }) {
 	return (
 		<div className="run">
@@ -215,6 +239,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 						{!live && (
 							<div className="reply-actions">
 								<CopyButton text={run.answer.trim()} label="Copy response" />
+								<ReplyStats run={run} />
 							</div>
 						)}
 					</div>

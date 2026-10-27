@@ -1,7 +1,7 @@
 {
 	"name": "@coresmos/trivium",
 	"productName": "Trivium",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"private": true,
 	"description": "Desktop workspace for coding, research and writing, built on the pi SDK",
 	"license": "MIT",

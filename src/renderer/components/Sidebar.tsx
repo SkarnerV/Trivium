@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
 import {
 	askConfirm,
@@ -16,6 +16,7 @@ import {
 	setState,
 	startSession,
 	switchApp,
+	togglePin,
 	trivium,
 	useStore,
 } from "../store.ts";
@@ -31,12 +32,21 @@ interface ProjectGroup {
 	name: string;
 	/** Conversations started without a project. */
 	chat: boolean;
+	pinned: boolean;
 	sessions: SessionSummary[];
 }
 
 const PER_PROJECT = 8;
 
-function groupByProject(sessions: SessionSummary[], app: AppId): ProjectGroup[] {
+const pinnedFirst = <T,>(items: T[], pinned: (item: T) => boolean): T[] => [...items.filter(pinned), ...items.filter((item) => !pinned(item))];
+
+/** Pinned projects come first, and pinned sessions first within each project; otherwise the order is kept. */
+function groupByProject(
+	sessions: SessionSummary[],
+	app: AppId,
+	pinnedProjects: Record<string, boolean>,
+	pinnedSessions: Record<string, boolean>,
+): ProjectGroup[] {
 	const groups = new Map<string, ProjectGroup>();
 	for (const session of sessions) {
 		if (session.app !== app) continue;
@@ -46,13 +56,25 @@ function groupByProject(sessions: SessionSummary[], app: AppId): ProjectGroup[] 
 				cwd: session.cwd,
 				name: session.chat ? "Chats" : baseName(session.cwd) || "No project",
 				chat: session.chat,
+				pinned: !!pinnedProjects[`${app}:${session.cwd}`],
 				sessions: [],
 			};
 			groups.set(session.cwd, group);
 		}
 		group.sessions.push(session);
 	}
-	return [...groups.values()];
+	return pinnedFirst([...groups.values()], (group) => group.pinned).map((group) => ({
+		...group,
+		sessions: pinnedFirst(group.sessions, (session) => !!pinnedSessions[session.path]),
+	}));
+}
+
+/** Where a right-click menu opens: at the pointer, or under the element when the keyboard's menu key opened it. */
+function menuPoint(event: MouseEvent<HTMLElement>): { x: number; y: number } {
+	event.preventDefault();
+	const rect = event.currentTarget.getBoundingClientRect();
+	const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+	return fromKeyboard ? { x: rect.left + 12, y: rect.bottom } : { x: event.clientX, y: event.clientY };
 }
 
 function confirmDelete(sessions: SessionSummary[], what: string, title?: string): void {
@@ -89,8 +111,14 @@ async function copySessionId(session: SessionSummary): Promise<void> {
 	if (copied) notify("Session ID copied", "info");
 }
 
-function sessionMenu(session: SessionSummary): MenuEntry[] {
+function sessionMenu(session: SessionSummary, pinned: boolean): MenuEntry[] {
 	return [
+		{
+			label: pinned ? "Unpin session" : "Pin session",
+			icon: pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
+			onSelect: () => togglePin("pinnedSessions", session.path),
+		},
+		"separator",
 		{ label: "Export messages…", icon: <DownloadIcon size={14} />, onSelect: () => void exportSession(session) },
 		{ label: "Copy session ID", icon: <CopyIcon size={14} />, hint: session.id.slice(0, 8), onSelect: () => void copySessionId(session) },
 		"separator",
@@ -105,7 +133,7 @@ function sessionMenu(session: SessionSummary): MenuEntry[] {
 	];
 }
 
-function SessionRow({ session, active, startedAt }: { session: SessionSummary; active: boolean; startedAt?: number }) {
+function SessionRow({ session, active, pinned, startedAt }: { session: SessionSummary; active: boolean; pinned: boolean; startedAt?: number }) {
 	const now = useNow(session.running ? 1000 : 60_000);
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
 	const closeMenu = useCallback(() => setMenu(undefined), []);
@@ -117,16 +145,15 @@ function SessionRow({ session, active, startedAt }: { session: SessionSummary; a
 				aria-current={active ? "page" : undefined}
 				aria-haspopup="menu"
 				onClick={() => void openSession(session.path)}
-				onContextMenu={(event) => {
-					event.preventDefault();
-					// The keyboard's menu key reports no pointer position; open under the row instead.
-					const rect = event.currentTarget.getBoundingClientRect();
-					const fromKeyboard = event.clientX === 0 && event.clientY === 0;
-					setMenu(fromKeyboard ? { x: rect.left + 12, y: rect.bottom } : { x: event.clientX, y: event.clientY });
-				}}
+				onContextMenu={(event) => setMenu(menuPoint(event))}
 				title={session.title}
 			>
 				<span className="title ellipsis">{session.title}</span>
+				{pinned && (
+					<span className="pin-mark" aria-label="Pinned">
+						<PinIcon size={11} />
+					</span>
+				)}
 				{session.running ? (
 					<span className="running-meta">
 						<span className="live-dot" />
@@ -150,8 +177,91 @@ function SessionRow({ session, active, startedAt }: { session: SessionSummary; a
 					<TrashIcon />
 				</button>
 			)}
-			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session)} onClose={closeMenu} />}
+			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session, pinned)} onClose={closeMenu} />}
 		</div>
+	);
+}
+
+function deleteProject(app: AppId, group: ProjectGroup): void {
+	confirmDelete(
+		group.sessions,
+		group.sessions.length === 1
+			? `The ${THEMES[app].name} session in ${group.name}`
+			: `Every ${THEMES[app].name} session in ${group.name} (${group.sessions.length})`,
+		`Delete ${group.name} from ${THEMES[app].name}?`,
+	);
+}
+
+function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
+	return [
+		{
+			label: group.pinned ? "Unpin project" : "Pin project",
+			icon: group.pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
+			onSelect: () => togglePin("pinnedProjects", `${app}:${group.cwd}`),
+		},
+		{ label: "New session", icon: <PlusIcon size={14} />, onSelect: () => void startSession({ app, cwd: group.cwd }) },
+		"separator",
+		{ label: "Delete all sessions", icon: <TrashIcon size={14} />, danger: true, onSelect: () => deleteProject(app, group) },
+	];
+}
+
+function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGroup; selected?: string }) {
+	const views = useStore((s) => s.views);
+	const pinnedSessions = useStore((s) => s.pinnedSessions);
+	const key = `${app}:${group.cwd}`;
+	const folded = useStore((s) => !!s.collapsed[key]);
+	const [menu, setMenu] = useState<{ x: number; y: number }>();
+	const closeMenu = useCallback(() => setMenu(undefined), []);
+	return (
+		<section className="project" aria-label={group.name}>
+			<div className={`project-head${menu ? " menu-open" : ""}`} title={group.cwd} onContextMenu={(event) => setMenu(menuPoint(event))}>
+				<button
+					type="button"
+					className="project-toggle"
+					aria-expanded={!folded}
+					aria-haspopup="menu"
+					onClick={() => setState((s) => ({ collapsed: { ...s.collapsed, [key]: !s.collapsed[key] } }))}
+				>
+					{group.chat ? <ChatIcon size={15} /> : folded ? <FolderIcon size={15} /> : <FolderOpenIcon size={15} />}
+					<span className="ellipsis">{group.name}</span>
+					{group.pinned && (
+						<span className="pin-mark" aria-label="Pinned">
+							<PinIcon size={11} />
+						</span>
+					)}
+				</button>
+				<span className="count">{group.sessions.length}</span>
+				<button
+					type="button"
+					className="project-action"
+					aria-label={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
+					title={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
+					onClick={() => deleteProject(app, group)}
+				>
+					<TrashIcon size={12} />
+				</button>
+				<button
+					type="button"
+					className="project-action"
+					aria-label={`New session in ${group.name}`}
+					title={`New session in ${group.name}`}
+					onClick={() => void startSession({ app, cwd: group.cwd })}
+				>
+					<PlusIcon size={13} />
+				</button>
+			</div>
+			{!folded &&
+				group.sessions.slice(0, PER_PROJECT).map((session) => (
+					<SessionRow
+						key={session.path}
+						session={session}
+						active={session.path === selected}
+						pinned={!!pinnedSessions[session.path]}
+						startedAt={views[session.path]?.runs.at(-1)?.startedAt}
+					/>
+				))}
+			{menu && <ContextMenu x={menu.x} y={menu.y} label={group.name} entries={projectMenu(app, group)} onClose={closeMenu} />}
+		</section>
 	);
 }
 
@@ -159,73 +269,16 @@ export function SessionGroups() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	const selected = useStore((s) => s.selected[s.app]);
-	const views = useStore((s) => s.views);
-	const collapsed = useStore((s) => s.collapsed);
-	const groups = groupByProject(sessions, app);
+	const pinnedProjects = useStore((s) => s.pinnedProjects);
+	const pinnedSessions = useStore((s) => s.pinnedSessions);
+	const groups = groupByProject(sessions, app, pinnedProjects, pinnedSessions);
 	if (!groups.length) {
 		return <p className="sb-empty">No {THEMES[app].name} sessions yet.</p>;
 	}
 	return (
 		<>
 			{groups.map((group) => (
-				<section key={group.cwd} className="project" aria-label={group.name}>
-					<div className="project-head" title={group.cwd}>
-						<button
-							type="button"
-							className="project-toggle"
-							aria-expanded={!collapsed[`${app}:${group.cwd}`]}
-							onClick={() =>
-								setState((s) => ({
-									collapsed: { ...s.collapsed, [`${app}:${group.cwd}`]: !s.collapsed[`${app}:${group.cwd}`] },
-								}))
-							}
-						>
-							{group.chat ? (
-								<ChatIcon size={15} />
-							) : collapsed[`${app}:${group.cwd}`] ? (
-								<FolderIcon size={15} />
-							) : (
-								<FolderOpenIcon size={15} />
-							)}
-							<span className="ellipsis">{group.name}</span>
-						</button>
-						<span className="count">{group.sessions.length}</span>
-						<button
-							type="button"
-							className="project-action"
-							aria-label={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
-							title={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
-							onClick={() =>
-								confirmDelete(
-									group.sessions,
-									group.sessions.length === 1
-										? `The ${THEMES[app].name} session in ${group.name}`
-										: `Every ${THEMES[app].name} session in ${group.name} (${group.sessions.length})`,
-									`Delete ${group.name} from ${THEMES[app].name}?`,
-								)
-							}
-						>
-							<TrashIcon size={12} />
-						</button>
-						<button
-							type="button"
-							className="project-action"
-							aria-label={`New session in ${group.name}`}
-							title={`New session in ${group.name}`}
-							onClick={() => void startSession({ app, cwd: group.cwd })}
-						>
-							<PlusIcon size={13} />
-						</button>
-					</div>
-					{!collapsed[`${app}:${group.cwd}`] && group.sessions.slice(0, PER_PROJECT).map((session) => (
-						<SessionRow
-							key={session.path}
-							session={session}
-							active={session.path === selected}
-							startedAt={views[session.path]?.runs.at(-1)?.startedAt}
-						/>
-					))}
-				</section>
+				<ProjectSection key={group.cwd} app={app} group={group} selected={selected} />
 			))}
 		</>
 	);

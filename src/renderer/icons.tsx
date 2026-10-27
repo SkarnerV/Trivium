@@ -249,6 +249,20 @@ export const FolderOpenIcon = (p: IconProps) => (
 		<path d="M3 18l2.4-6.6A2 2 0 0 1 7.3 10H21a1 1 0 0 1 .95 1.3l-2 6.3A2 2 0 0 1 18 19H4a1 1 0 0 1-1-1z" />
 	</Svg>
 );
+export const PinIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M12 17v5" />
+		<path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h14v-1.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+	</Svg>
+);
+export const PinOffIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M12 17v5" />
+		<path d="M15 9.3V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.9" />
+		<path d="M2 2l20 20" />
+		<path d="M9 9v1.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V17h12" />
+	</Svg>
+);
 export const WarnIcon = (p: IconProps) => (
 	<Svg width={2.4} size={12} {...p}>
 		<path d="M12 3 2 21h20z" />

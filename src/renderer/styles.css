@@ -5396,8 +5396,25 @@ body.resizing * {
 }
 
 /* The row a menu belongs to stays marked while the menu is open. */
-.session-item.menu-open .session-row:not([aria-current="page"]) {
+.session-item.menu-open .session-row:not([aria-current="page"]),
+.project-head.menu-open {
 	background: var(--tab);
+}
+
+.peek .project-head.menu-open {
+	background: var(--soft);
+}
+
+.pin-mark {
+	flex: none;
+	display: grid;
+	place-items: center;
+	color: var(--muted);
+}
+
+.project-toggle .pin-mark svg,
+.project-head:hover .project-toggle .pin-mark svg {
+	color: var(--muted);
 }
 
 /* Memory */

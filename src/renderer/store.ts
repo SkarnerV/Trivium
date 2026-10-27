@@ -39,6 +39,10 @@ export interface State {
 	peek: boolean;
 	/** Project groups folded in the sidebar, keyed "app:cwd". */
 	collapsed: Record<string, boolean>;
+	/** Project groups kept at the top of the sidebar, keyed "app:cwd". */
+	pinnedProjects: Record<string, boolean>;
+	/** Sessions kept at the top of their project, by session path. */
+	pinnedSessions: Record<string, boolean>;
 	/** Widths the user dragged the sidebar and the right panel to; unset means the default. */
 	sidebarWidth?: number;
 	panelWidth?: number;
@@ -75,7 +79,7 @@ export type SettingsSection = "general" | "models" | "usage" | "shortcuts" | App
 
 const PREFS_KEY = "trivium.prefs";
 
-const PREF_KEYS = ["app", "folded", "selected", "collapsed", "sidebarWidth", "panelWidth"] as const;
+const PREF_KEYS = ["app", "folded", "selected", "collapsed", "pinnedProjects", "pinnedSessions", "sidebarWidth", "panelWidth"] as const;
 
 function loadPrefs(): Pick<State, (typeof PREF_KEYS)[number]> {
 	try {
@@ -85,11 +89,13 @@ function loadPrefs(): Pick<State, (typeof PREF_KEYS)[number]> {
 			folded: parsed.folded ?? false,
 			selected: parsed.selected ?? {},
 			collapsed: parsed.collapsed ?? {},
+			pinnedProjects: parsed.pinnedProjects ?? {},
+			pinnedSessions: parsed.pinnedSessions ?? {},
 			sidebarWidth: parsed.sidebarWidth,
 			panelWidth: parsed.panelWidth,
 		};
 	} catch {
-		return { app: "code", folded: false, selected: {}, collapsed: {} };
+		return { app: "code", folded: false, selected: {}, collapsed: {}, pinnedProjects: {}, pinnedSessions: {} };
 	}
 }
 
@@ -388,8 +394,17 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),
 		dialogs: s.dialogs.filter((dialog) => !gone.has(dialog.sessionPath)),
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
+		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));
 	notify(deleted.length === 1 ? "Session moved to the Trash" : `${deleted.length} sessions moved to the Trash`, "info");
+}
+
+/** Pins or unpins a project group ("app:cwd") or a session (its path) in the sidebar. */
+export function togglePin(kind: "pinnedProjects" | "pinnedSessions", key: string): void {
+	setState((s) => {
+		const { [key]: was, ...rest } = s[kind];
+		return { [kind]: was ? rest : { ...rest, [key]: true } };
+	});
 }
 
 export function openSettings(section?: SettingsSection): void {

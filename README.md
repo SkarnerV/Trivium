@@ -39,7 +39,7 @@ skill and provider works here.
 
 | | Mode | Built for | Default setup |
 |---|---|---|---|
-| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a Changes panel |
+| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a panel with Changes, Git and Preview |
 | <img src="https://img.shields.io/badge/-%20-0B7A6E?style=flat-square" alt=""> | **Research** | Reading sources and writing notes | No shell; `read` `write` `grep` `find` `ls` and any `web_*` tools; told to cite every claim |
 | <img src="https://img.shields.io/badge/-%20-A65A08?style=flat-square" alt=""> | **Write** | Documents in your project | Edit tools; told to keep your voice and make small, reviewable edits |
 
@@ -48,10 +48,20 @@ you which mode is still busy.
 
 ### See the work, not just the answer
 
-- **Steps, folded or detailed.** "Worked for 6.4s · 8 steps" stays out of the way; open it to see each read, search, edit and command with its result and duration.
-- **Live command output** while a bash step runs.
+- **Steps, folded or detailed.** "Worked for 6.4s · 8 steps · 1 failed" stays out of the way; open it to see each read, search, edit and command with its result and duration.
+- **What it's doing now.** One quiet line under "Working" names the current step, with a command's latest line of output.
+- **Subagents as agents at work.** A `pi-subagents` call shows who it delegated to and what each child is doing, a row per child in parallel, with its task, result, model and tokens when you open it. Background results arrive as a run of their own.
 - **Queue or steer mid-run.** Type while the agent works: `↵` queues a follow-up for after the run, `⌥↵` steers the current run, `esc` stops.
 - **Context at a glance.** A small ring shows how full the context window is; hover it for the breakdown and when compaction kicks in.
+- **Reply timing.** Point at a reply to see when it was answered, how long it took, its time to first token and tokens a second.
+- **Limits in plain words.** When a provider's usage limit or balance runs out, Trivium says what happened, when it resets and where to top up, with the provider's own message a click away.
+
+### Conversations
+
+- **Edit, fork or copy any message.** Edit opens a message in place and starts over from it when you send; pi keeps the old replies on their own branch. Fork copies the conversation up to a message into a new session. Copy takes a message or a reply's Markdown as written.
+- **Chats without a project.** Pick **No project** in New session for a conversation that needs no folder. Chats sit under "Chats" in the sidebar.
+- **Pin and organize.** Right-click a project or session to pin it to the top, start a new session, export the messages as Markdown, copy the session ID or delete it.
+- **One button for model and effort.** The composer's model button opens a menu with the thinking effort as a slider and a searchable model list.
 
 <p align="center">
   <img src="docs/screenshots/ask.png" alt="A run paused on the agent's question, with numbered answers" width="85%">
@@ -69,6 +79,7 @@ A project with its own `.pi` folder (settings, extensions, skills, prompts, MCP 
 
 - **Type `/` for commands.** The list shows extension commands, prompt templates and skills, plus Trivium's `/compact [instructions]` and `/name <title>`. Commands that offer suggestions, such as `/mcp login <server>`, complete their arguments too.
 - **MCP servers work like in the CLI.** Trivium loads pi's built-in MCP, codemode and tool search extensions, so servers from `~/.pi/agent/mcp.json` and a trusted project's `.pi/mcp.json` connect when a session starts. `/mcp` shows their status.
+- **A Connectors page to manage them.** **Settings → Connectors** adds servers from a command, a URL or `mcpServers` JSON pasted from Claude, Cursor or VS Code, and edits, removes or switches them off. Each shows whether it is connected, needs sign-in (with a **Sign in** button) or is failing, and lists its tools. Choose how tools reach the agent, for the whole server or per tool: code mode, on search, always or off. Changes go to pi's global `mcp.json`, so the pi CLI sees them too.
 
 ### Questions and approvals inline
 
@@ -78,15 +89,39 @@ needs you, you get a notification.
 
 ### Review every change
 
-Code mode records each file before the agent first touches it, so the **Changes** panel shows
-the net diff of the whole session, per file. **Keep changes** accepts them. **Revert** puts every
-file back and removes files and folders the agent created. Open any file in VS Code at the first
-changed line.
+Code mode's side panel shows one view at a time, picked from its **Show in panel** menu.
+
+- **Changes.** Code mode records each file before the agent first touches it, so this view shows the net diff of the whole session, per file. **Keep changes** accepts them. **Revert** puts every file back and removes files and folders the agent created. Open any file in VS Code at the first changed line.
+- **Git.** In a git repository, staged, unstaged, untracked and conflicted files, each with its diff. It refreshes after a run, after an edit or command, and when the window regains focus, without polling.
+- **Preview.** Open project files as tabs: HTML pages in a sandboxed frame with their own styles and images (scripts off until you ask, network blocked), Markdown, CSV tables, text with line numbers, and images. Files reload when they change on disk. Open one from a step's eye icon, a file path in a reply, or the Changes and Git views.
+
+The header shows the session's branch, how many files changed, and a dot when there are commits to
+push or pull. Click it for a summary in words: the upstream and when it was last fetched, commits
+not pushed and on the remote, what is staged or changed, and a button to ask the agent to push.
 
 ### Notes and tracked changes
 
 - **Research shows the note it writes.** A panel renders the Markdown note as a document, tables included, and a Sources tab lists every link it cites. **Open in Write** starts a Write session in the same project, ready to revise the note.
 - **Write shows its edits as tracked changes.** The document appears with each change in place: deleted text struck through, new text underlined. Accept or reject each change, or all at once. Rejecting puts your original text back in the file.
+
+### Memory
+
+Every mode remembers across sessions through the built-in [`@pify/memory`](https://www.npmjs.com/package/@pify/memory):
+a global `MEMORY.md`, one per project in `.pi/memory/MEMORY.md`, and a daily log. It refuses to save
+credentials. The **Memory** page, opened from the sidebar, shows what the agent remembers
+everywhere, in each workspace and in the daily log. Add, edit, move to the top or delete entries, with
+Undo and a Recently deleted list. A meter shows how much of each file loads into new sessions. Each
+workspace has a switch for whether its sessions load the file, and can keep it out of git on this
+computer.
+
+### Usage
+
+**Settings → Usage** adds up tokens and estimated cost from every session over the last 7 days,
+30 days or all time: totals with the change from the period before, the share of input read from
+cache, a bar for each day, and breakdowns by mode, by model and for the biggest sessions. A
+calendar of the last 12 months shows your active days and streak. Point at a model's response
+count for its average time to first token and output speed. Models used through a subscription
+login show "Plan" instead of a cost.
 
 ### Make each mode yours
 
@@ -94,10 +129,12 @@ changed line.
   <img src="docs/screenshots/settings.png" alt="Research mode settings: extensions with on/off switches, the tool list and the mode's system prompt addition" width="85%">
 </p>
 
-- **Per-mode extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that mode.
+- **Per-mode extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that mode. The Add extension dialog recommends pi packages for each mode.
+- **Packages built in.** Each mode ships with pi packages you can remove: memory and subagents everywhere, plus `/plan` and a permission system in Code, document parsing in Research, and PDF export in Write.
+- **Permission levels in Code.** Choose what asks first: risky commands (the default: `rm -rf`, `sudo`, `git push` and folders outside the project), every command, every command and edit, or nothing. `.env` files stay blocked.
 - **Per-mode model.** Research on a fast model, Code on your strongest one.
-- **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes.
-- **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. They go to pi's `models.json`, so the pi CLI offers them too.
+- **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes. Each provider shows its logo.
+- **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. Built-in providers get the same model list, for a proxy base URL, per-model overrides or models added by ID. It all goes to pi's `models.json`, so the pi CLI offers them too.
 - **Sessions that manage themselves.** Idle sessions unload after a while and reload from disk when you open them.
 
 ## Quick start
@@ -160,12 +197,13 @@ windows before restarting so the old taskbar group can exit.
 ```mermaid
 flowchart LR
   subgraph Window["Renderer (React)"]
-    UI["Sidebar · Transcript · Composer<br/>Changes · Settings"]
+    UI["Sidebar · Transcript · Composer<br/>Changes · Git · Preview<br/>Memory · Settings"]
   end
   subgraph Main["Main process (Node)"]
     Host["Session host<br/>one AgentSession per open session"]
     Tracker["Run tracker<br/>events → steps"]
     Changes["Change tracker<br/>baselines → diffs"]
+    Git["Git reader<br/>status → branch, files"]
     Dialogs["Dialog bridge"]
   end
   subgraph Pi["pi SDK"]
@@ -177,6 +215,7 @@ flowchart LR
   Host --> Session
   Session -- events --> Tracker --> UI
   Ext -- "tool_call (edit, write)" --> Changes --> UI
+  Tracker -- "run ended" --> Git --> UI
   Ext -- "ui.select / confirm / input" --> Dialogs --> UI
   Session --> Models
 ```
@@ -192,6 +231,9 @@ flowchart LR
 | `~/.trivium/settings.json` | Text size, idle unloading, notifications, per-mode models and extension switches |
 | `~/.trivium/session-apps.json` | Which mode each session belongs to; sessions from elsewhere show under Code |
 | `~/.trivium/changes/` | File contents from before the agent's changes, until you keep or revert |
+| `~/.trivium/chats/` | The working folder for sessions started with No project |
+| `~/.trivium/usage-cache.json` | Each session's usage totals, counted again only when its file changes |
+| `~/.pi/agent/memory/`, `.pi/memory/MEMORY.md` | Global and per-project memory, kept by `@pify/memory` |
 
 ## Extensions
 
@@ -266,6 +308,11 @@ dev/          The scripted development model
 - [x] Settings: logins, custom endpoints, default and per-mode models, per-mode extensions
 - [x] Research: note preview panel with sources
 - [x] Write: document panel with tracked changes to accept or reject
+- [x] Memory in every mode, with a Memory page to review it
+- [x] Usage page with tokens, cost and reply speed
+- [x] Connectors page for MCP servers
+- [x] Code: Git view, branch summary and file Preview
+- [x] Edit, fork and copy messages; chats without a project; pinned projects and sessions
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`
 - [ ] Dark theme
 - [ ] Signed builds for macOS, Windows and Linux

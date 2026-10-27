@@ -376,7 +376,7 @@ export function EmptyPane() {
 					<AppIcon app={app} size={20} />
 				</span>
 				<h2>Start a {name} session</h2>
-				<p>Start a chat, or pick a project folder to work in. Sessions keep running when you switch apps.</p>
+				<p>Start a chat, or pick a project folder to work in. Sessions keep running when you switch modes.</p>
 				<button type="button" className="btn primary" onClick={() => setState({ overlay: "new" })}>
 					<PlusIcon size={14} /> New session
 				</button>

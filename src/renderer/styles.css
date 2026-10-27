@@ -3287,12 +3287,12 @@ body.resizing * {
 
 .u-part.input,
 .u-swatch.input {
-	background: color-mix(in srgb, var(--accent) 45%, #fff);
+	background: color-mix(in srgb, var(--accent) 60%, #fff);
 }
 
 .u-part.cached,
 .u-swatch.cached {
-	background: color-mix(in srgb, var(--accent) 20%, #fff);
+	background: color-mix(in srgb, var(--accent) 30%, #fff);
 }
 
 .u-part.output,

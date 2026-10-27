@@ -128,7 +128,7 @@ export function SearchOverlay() {
 				<input
 					className="search-input"
 					autoFocus
-					placeholder="Search sessions in all apps"
+					placeholder="Search sessions in all modes"
 					value={query}
 					onChange={(event) => {
 						setQuery(event.target.value);

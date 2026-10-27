@@ -373,7 +373,7 @@ function FilePage({
 			<Header
 				icon={global ? <GlobeIcon size={20} /> : <FolderIcon size={20} />}
 				title={global ? "Everywhere" : (workspace?.name ?? "Workspace")}
-				subtitle={global ? "Preferences and facts that follow you into every project and app." : "What the agent knows about this project, loaded into every session here."}
+				subtitle={global ? "Preferences and facts that follow you into every project and mode." : "What the agent knows about this project, loaded into every session here."}
 			>
 				<Search value={query} onChange={setQuery} placeholder={global ? "Search everywhere" : "Search this workspace"} />
 				{file.exists && (

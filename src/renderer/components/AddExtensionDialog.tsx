@@ -96,7 +96,7 @@ export function AddExtensionDialog({
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
-				<p className="add-ext-intro">A pi package loads in every app and the pi CLI. Each app can turn it off.</p>
+				<p className="add-ext-intro">A pi package loads in every mode and the pi CLI. Each mode can turn it off.</p>
 				<label className="add-ext-input">
 					<span className="ask-field">
 						<input

@@ -4,7 +4,7 @@ import type { AppId, Notice } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
 import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
-import { NEUTRAL, themeVars } from "../theme.ts";
+import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
@@ -169,7 +169,7 @@ export function App() {
 	const iconApp = page === "settings" ? sectionApp ?? "code" : app;
 	const sidebarWidth = useStore((s) => s.sidebarWidth);
 	const panelWidth = useStore((s) => s.panelWidth);
-	const vars = page === "settings" ? themeVars(sectionApp ?? NEUTRAL) : themeVars(app);
+	const vars = page === "settings" ? themeVars(sectionApp ?? sectionTheme(section)) : themeVars(app);
 	const widths: Record<string, string> = {};
 	if (sidebarWidth) widths["--sidebar-width"] = `${sidebarWidth}px`;
 	if (panelWidth) widths["--panel-width"] = `${panelWidth}px`;

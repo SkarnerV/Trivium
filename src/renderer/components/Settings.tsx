@@ -31,7 +31,7 @@ import {
 	updateSettings,
 	useStore,
 } from "../store.ts";
-import { THEMES } from "../theme.ts";
+import { SECTION_COLORS, THEMES } from "../theme.ts";
 import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
 import { CustomProviderDialog } from "./CustomProviderDialog.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
@@ -144,7 +144,7 @@ function General() {
 		);
 	return (
 		<>
-			<PageHeader icon={<SlidersIcon size={18} />} title="General" subtitle="How Trivium looks, keeps sessions and gets your attention." />
+			<PageHeader icon={<SlidersIcon size={18} />} tone="accent" title="General" subtitle="How Trivium looks, keeps sessions and gets your attention." />
 			<Group title="Appearance">
 				<Item label="Text size" hint="Scales the whole window">
 					<Dropdown
@@ -355,6 +355,7 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 		<>
 			<PageHeader
 				icon={<KeyIcon size={18} />}
+				tone="accent"
 				title="Models and logins"
 				subtitle={
 					<>
@@ -363,7 +364,7 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 				}
 			/>
 			<Group title="Default model">
-				<Item label="New sessions" hint="Used when an app has no model of its own">
+				<Item label="New sessions" hint="Used when a mode has no model of its own">
 					<ModelSelect
 						value={info?.defaultModel}
 						level={info?.defaultThinkingLevel}
@@ -454,9 +455,9 @@ const APP_SUMMARY: Record<AppId, string> = {
 };
 
 const SOURCE_HINT: Record<ExtensionSource, string> = {
-	App: "In this app's folder",
-	Added: "Added to this app from elsewhere",
-	Trivium: "Comes with Trivium. Remove it if this app shouldn't have it; Add can bring it back.",
+	App: "In this mode's folder",
+	Added: "Added to this mode from elsewhere",
+	Trivium: "Comes with Trivium. Remove it if this mode shouldn't have it; Add can bring it back.",
 	Global: "From ~/.pi/agent, loaded by pi everywhere",
 	Project: "From the project's .pi folder",
 	Package: "From a pi package",
@@ -495,7 +496,7 @@ function ExtensionRow({
 				<div className="s-ext-title">
 					<span className="s-label">{extension.name}</span>
 					<span className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={SOURCE_HINT[extension.source]}>
-						{extension.source}
+						{extension.source === "App" ? "Mode" : extension.source}
 					</span>
 					{failed && <span className="s-tag error">Failed to load</span>}
 				</div>
@@ -535,7 +536,7 @@ function ExtensionRow({
 			</div>
 			<div className="s-row-control">
 				{onRemove && (
-					<button type="button" className="s-btn s-ext-remove" title={`Remove ${extension.builtIn} from this app`} onClick={onRemove}>
+					<button type="button" className="s-btn s-ext-remove" title={`Remove ${extension.builtIn} from this mode`} onClick={onRemove}>
 						Remove
 					</button>
 				)}
@@ -705,7 +706,7 @@ function AppPage({ app }: { app: AppId }) {
 
 			<Group
 				title="Extensions"
-				description="pi's own extensions load first, then this app's folder. Turn off anything this app should skip."
+				description="pi's own extensions load first, then this mode's folder. Turn off anything this mode should skip."
 				aside={
 					<button type="button" className="s-btn accent" onClick={() => setAdding(true)}>
 						<PlusIcon size={12} width={2.6} />
@@ -715,7 +716,7 @@ function AppPage({ app }: { app: AppId }) {
 				footer={
 					details && (
 						<>
-							Project extensions come from <span className="mono">{shortPath(details.projectDir)}</span>, this app's most
+							Project extensions come from <span className="mono">{shortPath(details.projectDir)}</span>, this mode's most
 							recent project. Changes apply when a session loads.
 						</>
 					)
@@ -724,7 +725,7 @@ function AppPage({ app }: { app: AppId }) {
 				{!details && <div className="s-empty">Loading…</div>}
 				{details && !extensions.length && (
 					<div className="s-empty">
-						No extensions yet. Install a pi package, or put <span className="mono">.ts</span> files in this app's folder.
+						No extensions yet. Install a pi package, or put <span className="mono">.ts</span> files in this mode's folder.
 					</div>
 				)}
 				{extensions.map((extension) => (
@@ -763,7 +764,7 @@ function AppPage({ app }: { app: AppId }) {
 			</Group>
 
 			{details && (
-				<Group title="Tools" description="What the agent can call in this app. Extensions can add more.">
+				<Group title="Tools" description="What the agent can call in this mode. Extensions can add more.">
 					<div className="s-row">
 						<div className="s-chips big">
 							{details.tools.map((tool) => (
@@ -777,7 +778,7 @@ function AppPage({ app }: { app: AppId }) {
 			)}
 
 			{details?.systemPrompt && (
-				<Group title="Instructions" description="Added to pi's system prompt for every session in this app.">
+				<Group title="Instructions" description="Added to pi's system prompt for every session in this mode.">
 					<pre className="s-prompt">{details.systemPrompt}</pre>
 				</Group>
 			)}
@@ -797,7 +798,7 @@ const SHORTCUTS: [title: string, description: string | undefined, rows: Shortcut
 		[
 			["Switch to Code, Research or Write", [["⌘", "1"], ["–"], ["⌘", "3"]]],
 			["New session", [["⌘", "N"]]],
-			["Search sessions in every app", [["⌘", "K"]]],
+			["Search sessions in every mode", [["⌘", "K"]]],
 			["Fold or unfold the sidebar", [["⌘", "\\"]]],
 			["Open or close Settings", [["⌘", ","]]],
 		],
@@ -870,7 +871,7 @@ function Keys({ keys }: { keys: string[][] }) {
 function Shortcuts() {
 	return (
 		<>
-			<PageHeader icon={<KeyboardIcon size={18} />} title="Keyboard shortcuts" subtitle="Everything Trivium does from the keyboard." />
+			<PageHeader icon={<KeyboardIcon size={18} />} tone="accent" title="Keyboard shortcuts" subtitle="Everything Trivium does from the keyboard." />
 			{SHORTCUTS.map(([title, description, rows]) => (
 				<Group key={title} title={title} description={description}>
 					{rows.map(([label, keys, hint]) => (
@@ -895,6 +896,7 @@ function About() {
 		<>
 			<PageHeader
 				icon={<span className="s-logo">π</span>}
+				tone="accent"
 				title="Trivium"
 				subtitle="A desktop workspace for coding, research and writing, built on pi."
 			/>
@@ -1049,6 +1051,7 @@ function Usage() {
 	const header = (
 		<PageHeader
 			icon={<ChartIcon size={18} />}
+			tone="accent"
 			title="Usage"
 			subtitle="Tokens and estimated cost, counted from your sessions on this computer."
 			actions={<Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />}
@@ -1125,7 +1128,7 @@ function Usage() {
 						</div>
 						<UsageChart bars={summary.bars} metric={metric} />
 					</section>
-					<Group title="By app">
+					<Group title="By mode">
 						{summary.apps.map(({ app, tally }) => (
 							<div key={app} className="s-row u-row">
 								<span className="u-dot" style={{ background: THEMES[app].accent }} />
@@ -1238,17 +1241,17 @@ export function SettingsPage() {
 					Back to {THEMES[app].name}
 				</button>
 				<h1>Settings</h1>
-				{item("general", "General", <SlidersIcon />)}
+				{item("general", "General", <SlidersIcon />, SECTION_COLORS.general.accent)}
 				{item(
 					"models",
 					"Models and logins",
 					<KeyIcon />,
-					undefined,
+					SECTION_COLORS.models.accent,
 					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
 				)}
-				{item("usage", "Usage", <ChartIcon />)}
-				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />)}
-				<div className="set-nav-head">Apps</div>
+				{item("usage", "Usage", <ChartIcon />, SECTION_COLORS.usage.accent)}
+				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />, SECTION_COLORS.shortcuts.accent)}
+				<div className="set-nav-head">Modes</div>
 				{APP_IDS.map((id) =>
 					item(
 						id,
@@ -1263,7 +1266,7 @@ export function SettingsPage() {
 					),
 				)}
 				<span style={{ flex: 1 }} />
-				{item("about", "About", <InfoIcon />)}
+				{item("about", "About", <InfoIcon />, SECTION_COLORS.about.accent)}
 			</nav>
 			<div className="workspace">
 				<main className="card set-card">

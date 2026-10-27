@@ -235,7 +235,7 @@ export function AppSwitcher() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
-		<nav className="switcher" aria-label="Apps">
+		<nav className="switcher" aria-label="Modes">
 			{APP_IDS.map((id) => {
 				const busy = id !== app && sessions.some((session) => session.app === id && session.running);
 				return (
@@ -286,7 +286,7 @@ function SidebarToggle({ rail = false }: { rail?: boolean }) {
 export function Sidebar() {
 	const app = useStore((s) => s.app);
 	return (
-		<nav className="sidebar" aria-label="Apps and sessions">
+		<nav className="sidebar" aria-label="Modes and sessions">
 			<Resizer target="sidebar" />
 			{/* On macOS the app switcher shares the title bar row with the window buttons. */}
 			{IS_MAC && (

@@ -4,7 +4,7 @@
 
 **One desktop workspace for coding, research and writing, powered by the pi agent.**
 
-Three focused apps share one window, your pi sessions and your logins. Each has its own tools,
+Three focused modes share one window, your pi sessions and your logins. Each has its own tools,
 extensions and model, so the agent fixing your code is not the one citing your sources.
 
 [![Built on pi](https://img.shields.io/badge/built%20on-pi%20SDK-5457E8?style=flat-square)](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
@@ -18,7 +18,7 @@ extensions and model, so the agent fixing your code is not the one citing your s
 
 [Features](#features) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Extensions](#extensions) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
-<img src="docs/screenshots/hero.png" alt="Trivium's Code app: a finished bug fix with its steps, the agent's answer, and a reviewable diff" width="100%">
+<img src="docs/screenshots/hero.png" alt="Trivium's Code mode: a finished bug fix with its steps, the agent's answer, and a reviewable diff" width="100%">
 
 </div>
 
@@ -27,7 +27,7 @@ extensions and model, so the agent fixing your code is not the one citing your s
 Terminal agents are great until you want to see what happened. Trivium keeps the agent's work in
 view: every step it took and how long it took, the question it is waiting on, the exact diff it
 left behind. And because coding, research and writing need different tools, it gives each its own
-app instead of one prompt that tries to do everything.
+mode instead of one prompt that tries to do everything.
 
 Under the hood it is [pi](https://github.com/earendil-works/pi), embedded through its SDK. Your
 sessions are ordinary pi sessions, so you can open them in the pi CLI too, and every pi extension,
@@ -35,16 +35,16 @@ skill and provider works here.
 
 ## Features
 
-### Three apps, one window
+### Three modes, one window
 
-| | App | Built for | Default setup |
+| | Mode | Built for | Default setup |
 |---|---|---|---|
 | <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a Changes panel |
 | <img src="https://img.shields.io/badge/-%20-0B7A6E?style=flat-square" alt=""> | **Research** | Reading sources and writing notes | No shell; `read` `write` `grep` `find` `ls` and any `web_*` tools; told to cite every claim |
 | <img src="https://img.shields.io/badge/-%20-A65A08?style=flat-square" alt=""> | **Write** | Documents in your project | Edit tools; told to keep your voice and make small, reviewable edits |
 
 Switch with `⌘1` `⌘2` `⌘3`. Sessions keep running in the background; a dot on the switcher tells
-you which app is still busy.
+you which mode is still busy.
 
 ### See the work, not just the answer
 
@@ -78,7 +78,7 @@ needs you, you get a notification.
 
 ### Review every change
 
-The Code app records each file before the agent first touches it, so the **Changes** panel shows
+Code mode records each file before the agent first touches it, so the **Changes** panel shows
 the net diff of the whole session, per file. **Keep changes** accepts them. **Revert** puts every
 file back and removes files and folders the agent created. Open any file in VS Code at the first
 changed line.
@@ -88,14 +88,14 @@ changed line.
 - **Research shows the note it writes.** A panel renders the Markdown note as a document, tables included, and a Sources tab lists every link it cites. **Open in Write** starts a Write session in the same project, ready to revise the note.
 - **Write shows its edits as tracked changes.** The document appears with each change in place: deleted text struck through, new text underlined. Accept or reject each change, or all at once. Rejecting puts your original text back in the file.
 
-### Make each app yours
+### Make each mode yours
 
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Research app settings: extensions with on/off switches, the tool list and the app's system prompt addition" width="85%">
+  <img src="docs/screenshots/settings.png" alt="Research mode settings: extensions with on/off switches, the tool list and the mode's system prompt addition" width="85%">
 </p>
 
-- **Per-app extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that app.
-- **Per-app model.** Research on a fast model, Code on your strongest one.
+- **Per-mode extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that mode.
+- **Per-mode model.** Research on a fast model, Code on your strongest one.
 - **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes.
 - **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. They go to pi's `models.json`, so the pi CLI offers them too.
 - **Sessions that manage themselves.** Idle sessions unload after a while and reload from disk when you open them.
@@ -148,7 +148,7 @@ windows before restarting so the old taskbar group can exit.
 |---|---|
 | `⌘1` `⌘2` `⌘3` | Switch to Code, Research, Write |
 | `⌘N` | New session |
-| `⌘K` | Search sessions in every app |
+| `⌘K` | Search sessions in every mode |
 | `⌘\` | Fold or unfold the sidebar |
 | `⌘,` | Settings |
 | `↵` / `⌥↵` | Send (steers while a run is going) / queue a follow-up |
@@ -182,21 +182,21 @@ flowchart LR
 ```
 
 - **pi runs in-process.** The main process creates `AgentSession`s with the pi SDK, with no CLI subprocess and no RPC framing.
-- **Each app is an agent profile:** a tool allowlist, an addition to the system prompt, and an extension folder, applied when a session loads.
+- **Each mode is an agent profile:** a tool allowlist, an addition to the system prompt, and an extension folder, applied when a session loads.
 - **Your data stays where pi keeps it.** Sessions live in `~/.pi/agent/sessions` and logins in `~/.pi/agent/auth.json`. Trivium adds only its own preferences in `~/.trivium`.
 
 | Path | What it holds |
 |---|---|
 | `~/.pi/agent/` | pi's settings, logins, models and sessions, shared with the pi CLI |
-| `~/.trivium/apps/<app>/extensions/` | Extensions loaded only for that app |
-| `~/.trivium/settings.json` | Text size, idle unloading, notifications, per-app models and extension switches |
-| `~/.trivium/session-apps.json` | Which app each session belongs to; sessions from elsewhere show under Code |
+| `~/.trivium/apps/<app>/extensions/` | Extensions loaded only for that mode |
+| `~/.trivium/settings.json` | Text size, idle unloading, notifications, per-mode models and extension switches |
+| `~/.trivium/session-apps.json` | Which mode each session belongs to; sessions from elsewhere show under Code |
 | `~/.trivium/changes/` | File contents from before the agent's changes, until you keep or revert |
 
 ## Extensions
 
 Any [pi extension](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)
-works in Trivium. To load one in a single app, put it in that app's folder:
+works in Trivium. To load one in a single mode, put it in that mode's folder:
 
 ```ts
 // ~/.trivium/apps/research/extensions/cite-check.ts
@@ -214,8 +214,8 @@ export default function (pi: ExtensionAPI) {
 ```
 
 Dialogs from `ctx.ui` show up as cards in the conversation; `notify` shows a toast. Extensions you
-install for pi itself (in `~/.pi/agent` or as pi packages) load in every app unless you switch
-them off in that app's settings.
+install for pi itself (in `~/.pi/agent` or as pi packages) load in every mode unless you switch
+them off in that mode's settings.
 
 ## Development
 
@@ -260,10 +260,10 @@ dev/          The scripted development model
 
 ## Roadmap
 
-- [x] Code, Research and Write apps with live steps, steering and the context ring
+- [x] Code, Research and Write modes with live steps, steering and the context ring
 - [x] Inline extension dialogs and system notifications
 - [x] Changes panel with keep and revert
-- [x] Settings: logins, custom endpoints, default and per-app models, per-app extensions
+- [x] Settings: logins, custom endpoints, default and per-mode models, per-mode extensions
 - [x] Research: note preview panel with sources
 - [x] Write: document panel with tracked changes to accept or reject
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`

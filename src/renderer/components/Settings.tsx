@@ -9,16 +9,20 @@ import type {
 	ExtensionSource,
 	PermissionSettings,
 	ProviderInfo,
+	SessionUsage,
+	UsageReport,
 } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { shortPath } from "../format.ts";
+import { cacheShare, summarize, type Tally, tokensOf, type UsageBar, type UsageRange } from "../../shared/usage.ts";
+import { shortPath, tokens } from "../format.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
-import { AppIcon, BackIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
+	openSession,
 	openSettings,
 	refreshModels,
 	type SettingsSection,
@@ -924,6 +928,265 @@ function About() {
 	);
 }
 
+/* Usage */
+
+const RANGES: { value: UsageRange; label: string }[] = [
+	{ value: "7", label: "7 days" },
+	{ value: "30", label: "30 days" },
+	{ value: "all", label: "All time" },
+];
+
+function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (value: T) => void }) {
+	return (
+		<div className="seg" role="tablist" aria-label={label}>
+			{options.map((option) => (
+				<button key={option.value} type="button" role="tab" aria-selected={value === option.value} onClick={() => onChange(option.value)}>
+					{option.label}
+				</button>
+			))}
+		</div>
+	);
+}
+
+function money(dollars: number): string {
+	if (dollars >= 1000) return `$${Math.round(dollars).toLocaleString()}`;
+	if (dollars > 0 && dollars < 0.01) return "<$0.01";
+	return `$${dollars.toFixed(2)}`;
+}
+
+function dayLabel(day: string): string {
+	const [year, month, date] = day.split("-").map(Number);
+	return new Date(year, month - 1, date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** A cost, or why there is none: replies through a plan login, or a model pi has no price for. */
+function Cost({ dollars, providers, plans }: { dollars: number; providers: string[]; plans: string[] }) {
+	if (dollars > 0) return <span className="u-num">{money(dollars)}</span>;
+	if (providers.every((provider) => plans.includes(provider))) {
+		return (
+			<span className="u-num u-quiet" title="Logged in through a subscription, so these replies have no price">
+				Plan
+			</span>
+		);
+	}
+	return (
+		<span className="u-num u-quiet" title="pi has no price for this model">
+			—
+		</span>
+	);
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+	return (
+		<div className="u-stat">
+			<span className="u-stat-label">{label}</span>
+			<span className="u-stat-value">{value}</span>
+			<span className="u-stat-note">{note}</span>
+		</div>
+	);
+}
+
+/** One bar's parts, bottom to top; cache writes count as input. */
+const PARTS = [
+	{ key: "input", label: "Input", value: (t: Tally) => t.input + t.cacheWrite },
+	{ key: "cached", label: "Cache read", value: (t: Tally) => t.cacheRead },
+	{ key: "output", label: "Output", value: (t: Tally) => t.output },
+] as const;
+
+function UsageChart({ bars, metric }: { bars: UsageBar[]; metric: "tokens" | "cost" }) {
+	const [hover, setHover] = useState<number>();
+	const height = (tally: Tally) => (metric === "tokens" ? tokensOf(tally) : tally.cost);
+	const max = Math.max(...bars.map((bar) => height(bar.tally)), 0);
+	const shown = hover === undefined ? undefined : bars[hover];
+	const when = (bar: UsageBar) => (bar.from === bar.to ? dayLabel(bar.from) : `${dayLabel(bar.from)} – ${dayLabel(bar.to)}`);
+	return (
+		<div className="s-card u-chart-card">
+			<div className="u-readout">
+				{shown ? (
+					<>
+						<span className="u-readout-when">{when(shown)}</span>
+						{metric === "cost"
+							? money(shown.tally.cost)
+							: PARTS.map((part) => `${tokens(part.value(shown.tally))} ${part.label.toLowerCase()}`).join(" · ")}
+					</>
+				) : (
+					<span className="u-quiet">Point at a bar for its numbers</span>
+				)}
+			</div>
+			<div className="u-chart" onMouseLeave={() => setHover(undefined)}>
+				{bars.map((bar, index) => (
+					<div
+						key={bar.from}
+						className={`u-bar${hover === index ? " on" : ""}`}
+						onMouseEnter={() => setHover(index)}
+						aria-label={`${when(bar)}: ${metric === "cost" ? money(bar.tally.cost) : `${tokens(tokensOf(bar.tally))} tokens`}`}
+					>
+						{max > 0 &&
+							(metric === "cost" ? (
+								<span className="u-part output" style={{ height: `${(bar.tally.cost / max) * 100}%` }} />
+							) : (
+								PARTS.map((part) => <span key={part.key} className={`u-part ${part.key}`} style={{ height: `${(part.value(bar.tally) / max) * 100}%` }} />)
+							))}
+					</div>
+				))}
+			</div>
+			<div className="u-axis">
+				<span>{dayLabel(bars[0].from)}</span>
+				<span>Today</span>
+			</div>
+		</div>
+	);
+}
+
+function Usage() {
+	const [report, setReport] = useState<UsageReport>();
+	const [range, setRange] = useState<UsageRange>("30");
+	const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
+	useEffect(() => {
+		void attempt(() => trivium.usage()).then(setReport);
+	}, []);
+	const summary = useMemo(() => report && summarize(report, range), [report, range]);
+	const header = (
+		<PageHeader
+			icon={<ChartIcon size={18} />}
+			title="Usage"
+			subtitle="Tokens and estimated cost, counted from your sessions on this computer."
+			actions={<Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />}
+		/>
+	);
+	if (!report || !summary) {
+		return (
+			<>
+				{header}
+				<div className="s-card s-empty">Counting…</div>
+			</>
+		);
+	}
+	const { total, previous } = summary;
+	const { plans } = report;
+	const all = tokensOf(total);
+	const before = previous && tokensOf(previous);
+	const change = before ? Math.round(((all - before) / before) * 100) : undefined;
+	const share = cacheShare(total);
+	const unpriced = summary.models.some((model) => model.tally.cost === 0 && plans.includes(model.provider));
+	const top = Math.max(...summary.apps.map((entry) => tokensOf(entry.tally)), 1);
+	const providersOf = (session: SessionUsage) => [...new Set(session.buckets.map((bucket) => bucket.provider))];
+	return (
+		<>
+			{header}
+			<div className="u-stats">
+				<Stat
+					label="Tokens"
+					value={tokens(all)}
+					note={
+						range === "all"
+							? `since ${dayLabel(summary.from)}`
+							: change === undefined
+								? `none the ${range} days before`
+								: `${change > 0 ? "+" : ""}${change}% on the ${range} days before`
+					}
+				/>
+				<Stat label="Estimated cost" value={money(total.cost)} note={unpriced ? "plus replies through a plan" : "from pi's price list"} />
+				<Stat label="From cache" value={share === undefined ? "—" : `${Math.round(share * 100)}%`} note="of input tokens" />
+				<Stat
+					label="Responses"
+					value={total.responses.toLocaleString()}
+					note={`in ${summary.sessions} ${summary.sessions === 1 ? "session" : "sessions"}`}
+				/>
+			</div>
+			{all === 0 ? (
+				<div className="s-card s-empty">No replies in this time. Usage shows once a session gets an answer.</div>
+			) : (
+				<>
+					<section className="s-group">
+						<div className="s-group-head">
+							<h3>{summary.bars[0].from === summary.bars[0].to ? "Each day" : "Each week"}</h3>
+							<div className="u-chart-controls">
+								{metric === "tokens" && (
+									<span className="u-legend">
+										{PARTS.map((part) => (
+											<span key={part.key}>
+												<i className={`u-swatch ${part.key}`} />
+												{part.label}
+											</span>
+										))}
+									</span>
+								)}
+								<Segmented
+									label="Chart shows"
+									value={metric}
+									options={[
+										{ value: "tokens", label: "Tokens" },
+										{ value: "cost", label: "Cost" },
+									]}
+									onChange={setMetric}
+								/>
+							</div>
+						</div>
+						<UsageChart bars={summary.bars} metric={metric} />
+					</section>
+					<Group title="By app">
+						{summary.apps.map(({ app, tally }) => (
+							<div key={app} className="s-row u-row">
+								<span className="u-dot" style={{ background: THEMES[app].accent }} />
+								<span className="u-name">{THEMES[app].name}</span>
+								<span className="u-meter">
+									<span style={{ width: `${(tokensOf(tally) / top) * 100}%`, background: THEMES[app].accent }} />
+								</span>
+								<span className="u-num">{tokens(tokensOf(tally))}</span>
+								<span className="u-num">{money(tally.cost)}</span>
+							</div>
+						))}
+					</Group>
+					<Group title="By model" aside={<span className="u-columns">Input · Output · Cost</span>}>
+						{summary.models.map(({ provider, model, tally }) => (
+							<div key={`${provider}/${model}`} className="s-row u-row">
+								<div className="s-row-text">
+									<span className="s-label">{model}</span>
+									<span className="s-hint">
+										{provider} · {tally.responses.toLocaleString()} {tally.responses === 1 ? "response" : "responses"}
+									</span>
+								</div>
+								<span className="u-num">{tokens(tally.input + tally.cacheRead + tally.cacheWrite)}</span>
+								<span className="u-num">{tokens(tally.output)}</span>
+								<Cost dollars={tally.cost} providers={[provider]} plans={plans} />
+							</div>
+						))}
+					</Group>
+					<Group title="Biggest sessions">
+						{summary.top.map(({ session, last, tally }) => (
+							<button
+								key={session.path}
+								type="button"
+								className="s-row u-row u-session"
+								onClick={() => {
+									closeSettings();
+									void openSession(session.path);
+								}}
+							>
+								<span className="u-dot" style={{ background: THEMES[session.app].accent }} />
+								<div className="s-row-text">
+									<span className="s-label u-title">{session.title}</span>
+									<span className="s-hint">
+										<span className="mono s-path">{session.chat ? "Chat" : shortPath(session.cwd)}</span>· {dayLabel(last)}
+									</span>
+								</div>
+								<span className="u-num">{tokens(tokensOf(tally))}</span>
+								<Cost dollars={tally.cost} providers={providersOf(session)} plans={plans} />
+								<Chevron open={false} />
+							</button>
+						))}
+					</Group>
+				</>
+			)}
+			<p className="s-foot">
+				Costs are estimates from pi's price list. Models used through a plan login, like a ChatGPT or GLM Coding Plan, show tokens only. Subagents count toward
+				the session that started them, and deleted sessions no longer count.
+			</p>
+		</>
+	);
+}
+
 /* Page */
 
 export function SettingsPage() {
@@ -983,6 +1246,7 @@ export function SettingsPage() {
 					undefined,
 					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
 				)}
+				{item("usage", "Usage", <ChartIcon />)}
 				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />)}
 				<div className="set-nav-head">Apps</div>
 				{APP_IDS.map((id) =>
@@ -1006,6 +1270,7 @@ export function SettingsPage() {
 					<div className="set-content">
 						{section === "general" && <General />}
 						{section === "models" && <Models providers={providers} reload={loadProviders} />}
+						{section === "usage" && <Usage />}
 						{section === "shortcuts" && <Shortcuts />}
 						{(section === "code" || section === "research" || section === "write") && <AppPage app={section} />}
 						{section === "about" && <About />}

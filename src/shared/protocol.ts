@@ -551,6 +551,39 @@ export interface CompletionItem {
 	description?: string;
 }
 
+/** What one session's replies with one model on one day used, its subagents' replies included. */
+export interface UsageBucket {
+	/** Local date, as YYYY-MM-DD. */
+	day: string;
+	provider: string;
+	model: string;
+	responses: number;
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	/** Dollars, from pi's price list when the reply came. */
+	cost: number;
+}
+
+export interface SessionUsage {
+	path: string;
+	title: string;
+	app: AppId;
+	cwd: string;
+	chat: boolean;
+	buckets: UsageBucket[];
+}
+
+export interface UsageReport {
+	/** Sessions with at least one counted reply. */
+	sessions: SessionUsage[];
+	/** Providers logged in through a subscription, whose replies pi records at no cost. */
+	plans: string[];
+	/** Today's local date, as YYYY-MM-DD. */
+	today: string;
+}
+
 export interface TriviumApi {
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;
@@ -658,5 +691,7 @@ export interface TriviumApi {
 	setMemoryConsent(cwd: string, allowed: boolean): Promise<void>;
 	/** Keeps a project's memory file out of git on this computer only, through .git/info/exclude. */
 	keepMemoryLocal(cwd: string): Promise<void>;
+	/** Tokens and cost from every session on this computer. */
+	usage(): Promise<UsageReport>;
 	onEvent(listener: (event: HostEvent) => void): () => void;
 }

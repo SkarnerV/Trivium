@@ -26,7 +26,8 @@ export function relativeTime(timestamp: number, now = Date.now()): string {
 export function tokens(count: number): string {
 	if (count < 1000) return String(count);
 	if (count < 100_000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
-	return `${Math.round(count / 1000)}k`;
+	if (count < 999_500) return `${Math.round(count / 1000)}k`;
+	return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
 export function baseName(path: string): string {

@@ -155,6 +155,14 @@ export const InfoIcon = (p: IconProps) => (
 		<path d="M12 8h.01" />
 	</Svg>
 );
+export const ChartIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M4 20h16" />
+		<path d="M7 16v-5" />
+		<path d="M12 16V6" />
+		<path d="M17 16v-8" />
+	</Svg>
+);
 export const AlertIcon = (p: IconProps) => (
 	<Svg size={14} {...p}>
 		<circle cx="12" cy="12" r="9" />

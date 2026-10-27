@@ -87,6 +87,7 @@ const api: TriviumApi = {
 	memoryRestore: call("memoryRestore") as TriviumApi["memoryRestore"],
 	setMemoryConsent: call("setMemoryConsent") as TriviumApi["setMemoryConsent"],
 	keepMemoryLocal: call("keepMemoryLocal") as TriviumApi["keepMemoryLocal"],
+	usage: call("usage") as TriviumApi["usage"],
 	onEvent(listener) {
 		const wrapped = (_event: unknown, payload: HostEvent) => listener(payload);
 		ipcRenderer.on("trivium:event", wrapped);

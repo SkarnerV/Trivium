@@ -44,6 +44,7 @@ import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
 import { SettingsStore } from "./settings.ts";
+import { UsageCounter } from "./usage.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
 
 type MemoryEntryRef = Pick<MemoryEntry, "line" | "raw">;
@@ -105,6 +106,7 @@ function thumbnail(data: string, mimeType: string): string | undefined {
 	return mimeType === "image/jpeg" ? `data:image/jpeg;base64,${small.toJPEG(82).toString("base64")}` : small.toDataURL();
 }
 const attachments = new AttachmentStore();
+const usage = new UsageCounter(join(triviumDir, "usage-cache.json"));
 // The Memory page decides what loads, what is recalled and what counts as a secret with @pify/memory's own code.
 const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
 	...new Set((await host.listSessions()).flatMap((session) => (session.cwd ? [session.cwd] : []))),
@@ -317,6 +319,7 @@ function registerIpc(): void {
 	handle("trivium:memoryRestore", (id: string) => memory.restore(id));
 	handle("trivium:setMemoryConsent", (cwd: string, allowed: boolean) => memory.setConsent(cwd, allowed));
 	handle("trivium:keepMemoryLocal", (cwd: string) => memory.keepLocal(cwd));
+	handle("trivium:usage", async () => usage.report(await host.listSessions(), (provider) => host.runtime.isUsingOAuth(provider)));
 	handle("trivium:openFile", async (file: string) => {
 		const error = await shell.openPath(file);
 		if (error) throw new Error(error);

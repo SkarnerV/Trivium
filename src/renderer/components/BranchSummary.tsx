@@ -3,21 +3,22 @@ import { createPortal } from "react-dom";
 import type { GitArea, GitCommit, GitStatus, SessionView } from "../../shared/protocol.ts";
 import { BranchIcon, CheckIcon, CloudDownIcon, CloudOffIcon, CloudUpIcon, CopyIcon } from "../icons.tsx";
 import { attempt, setState, trivium } from "../store.ts";
+import { t, tx } from "../i18n.tsx";
 
 const EDGE = 8;
 
 /** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago". */
 export function since(time: number, now = Date.now()): string {
 	const minutes = Math.floor((now - time) / 60_000);
-	if (minutes < 1) return "just now";
-	if (minutes < 60) return `${minutes} min ago`;
+	if (minutes < 1) return t("just now");
+	if (minutes < 60) return t("{n} min ago", { n: minutes });
 	const hours = Math.floor(minutes / 60);
-	if (hours < 24) return `${hours} h ago`;
+	if (hours < 24) return t("{n} h ago", { n: hours });
 	const days = Math.floor(hours / 24);
-	return days === 1 ? "yesterday" : `${days} days ago`;
+	return days === 1 ? t("yesterday") : t("{n} days ago", { n: days });
 }
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+const commits = (count: number) => t(count === 1 ? "{n} commit" : "{n} commits", { n: count });
 
 /** Files in each area, each counted once. */
 function areaCounts(git: GitStatus): Record<GitArea, number> {
@@ -35,11 +36,13 @@ const TILES: { area: GitArea; label: string }[] = [
 
 /** What the header's branch says when hovered: the summary in one line. */
 export function branchTitle(git: GitStatus, files: number): string {
-	const parts = [git.branch ? `On ${git.branch}` : git.head ? `Not on a branch, at ${git.head}` : "Not on a branch"];
-	if (files) parts.push(`${plural(files, "file")} changed`);
-	if (git.ahead) parts.push(`${plural(git.ahead, "commit")} to push`);
-	if (git.behind) parts.push(`${plural(git.behind, "commit")} to pull`);
-	return parts.join(", ");
+	const parts = [
+		git.branch ? t("On {branch}", { branch: git.branch }) : git.head ? t("Not on a branch, at {commit}", { commit: git.head }) : t("Not on a branch"),
+	];
+	if (files) parts.push(t(files === 1 ? "1 file changed" : "{n} files changed", { n: files }));
+	if (git.ahead) parts.push(t("{commits} to push", { commits: commits(git.ahead) }));
+	if (git.behind) parts.push(t("{commits} to pull", { commits: commits(git.behind) }));
+	return parts.join(t(", "));
 }
 
 function Commits({ commits, total }: { commits: GitCommit[] | undefined; total: number }) {
@@ -54,7 +57,9 @@ function Commits({ commits, total }: { commits: GitCommit[] | undefined; total: 
 					</span>
 				</li>
 			))}
-			{total > commits.length && <li className="bs-more">and {plural(total - commits.length, "more commit")}</li>}
+			{total > commits.length && (
+				<li className="bs-more">{t(total - commits.length === 1 ? "and 1 more commit" : "and {n} more commits", { n: total - commits.length })}</li>
+			)}
 		</ol>
 	);
 }
@@ -66,9 +71,9 @@ function RemoteState({ git }: { git: GitStatus }) {
 			<>
 				<p className="bs-line">
 					<BranchIcon size={15} />
-					<span>{git.head ? <>Not on a branch. You're at <span className="mono">{git.head}</span>.</> : "Not on a branch."}</span>
+					<span>{git.head ? tx("Not on a branch. You're at {commit}.", { commit: <span className="mono">{git.head}</span> }) : t("Not on a branch.")}</span>
 				</p>
-				<p className="bs-note">New commits here won't belong to a branch until you make one.</p>
+				<p className="bs-note">{t("New commits here won't belong to a branch until you make one.")}</p>
 			</>
 		);
 	}
@@ -76,9 +81,7 @@ function RemoteState({ git }: { git: GitStatus }) {
 		return (
 			<p className="bs-line">
 				<CloudOffIcon size={15} />
-				<span>
-					<span className="mono">{git.branch}</span> isn't on a remote yet. It only exists on your computer.
-				</span>
+				<span>{tx("{branch} isn't on a remote yet. It only exists on your computer.", { branch: <span className="mono">{git.branch}</span> })}</span>
 			</p>
 		);
 	}
@@ -86,9 +89,7 @@ function RemoteState({ git }: { git: GitStatus }) {
 		return (
 			<p className="bs-line is-done">
 				<CheckIcon size={15} width={2.2} />
-				<span>
-					Up to date with <span className="mono">{git.upstream}</span>
-				</span>
+				<span>{tx("Up to date with {upstream}", { upstream: <span className="mono">{git.upstream}</span> })}</span>
 			</p>
 		);
 	}
@@ -98,9 +99,7 @@ function RemoteState({ git }: { git: GitStatus }) {
 				<>
 					<p className="bs-line is-push">
 						<CloudUpIcon size={15} />
-						<span>
-							<strong>{plural(git.ahead, "commit")}</strong> not pushed yet
-						</span>
+						<span>{tx("{commits} not pushed yet", { commits: <strong>{commits(git.ahead)}</strong> })}</span>
 					</p>
 					<Commits commits={git.outgoing} total={git.ahead} />
 				</>
@@ -109,9 +108,7 @@ function RemoteState({ git }: { git: GitStatus }) {
 				<>
 					<p className="bs-line is-pull">
 						<CloudDownIcon size={15} />
-						<span>
-							<strong>{plural(git.behind, "commit")}</strong> on the remote you don't have
-						</span>
+						<span>{tx("{commits} on the remote you don't have", { commits: <strong>{commits(git.behind)}</strong> })}</span>
 					</p>
 					<Commits commits={git.incoming} total={git.behind} />
 				</>
@@ -167,7 +164,7 @@ export function BranchSummary({ view, git, anchor, onClose }: { view: SessionVie
 	// Nothing runs until the user sends it.
 	const askPush = () => {
 		onClose();
-		setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: `Push ${git.branch} to ${git.upstream}.`, attachments: [] } } }));
+		setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: t("Push {branch} to {upstream}.", { branch: git.branch ?? "", upstream: git.upstream ?? "" }), attachments: [] } } }));
 	};
 
 	return createPortal(
@@ -175,7 +172,7 @@ export function BranchSummary({ view, git, anchor, onClose }: { view: SessionVie
 			ref={root}
 			className="branch-summary"
 			role="dialog"
-			aria-label="Branch summary"
+			aria-label={t("Branch summary")}
 			tabIndex={-1}
 			style={position ?? { visibility: "hidden" }}
 			onKeyDown={(event) => {
@@ -188,13 +185,13 @@ export function BranchSummary({ view, git, anchor, onClose }: { view: SessionVie
 			<section className="bs-head">
 				<div className="bs-name">
 					<BranchIcon size={15} />
-					<span className="mono ellipsis">{git.branch ?? "Detached HEAD"}</span>
+					<span className="mono ellipsis">{git.branch ?? t("Detached HEAD")}</span>
 					{git.branch && (
 						<button
 							type="button"
 							className="icon-btn"
-							aria-label="Copy branch name"
-							title="Copy branch name"
+							aria-label={t("Copy branch name")}
+							title={t("Copy branch name")}
 							onClick={() => void attempt(() => trivium.copyText(git.branch!))}
 						>
 							<CopyIcon size={13} />
@@ -203,41 +200,42 @@ export function BranchSummary({ view, git, anchor, onClose }: { view: SessionVie
 				</div>
 				{git.upstream && (
 					<p className="bs-sub">
-						Tracks <span className="mono">{git.upstream}</span>
-						{git.fetchedAt ? ` · fetched ${since(git.fetchedAt)}` : " · never fetched"}
+						{tx("Tracks {upstream}", { upstream: <span className="mono">{git.upstream}</span> })}
+						{" · "}
+						{git.fetchedAt ? t("fetched {when}", { when: since(git.fetchedAt) }) : t("never fetched")}
 					</p>
 				)}
 			</section>
 			<section className="bs-section">
-				<h3>Remote</h3>
+				<h3>{t("Remote")}</h3>
 				<RemoteState git={git} />
 			</section>
 			<section className="bs-section">
-				<h3>Not committed</h3>
+				<h3>{t("Not committed")}</h3>
 				{tiles.length ? (
 					<div className="bs-tiles">
 						{tiles.map((tile) => (
 							<div key={tile.area} className={`bs-tile is-${tile.area}`}>
 								<strong>{counts[tile.area]}</strong>
-								<span>{tile.label}</span>
+								<span>{t(tile.label)}</span>
 							</div>
 						))}
 					</div>
 				) : (
 					<p className="bs-line is-done">
 						<CheckIcon size={15} width={2.2} />
-						<span>Nothing to commit</span>
+						<span>{t("Nothing to commit")}</span>
 					</p>
 				)}
-				{git.truncated && <p className="bs-note">Counting the first {git.files.length} changes.</p>}
+				{git.truncated && <p className="bs-note">{t("Counting the first {n} changes.", { n: git.files.length })}</p>}
 			</section>
 			<div className="bs-actions">
 				<button type="button" className="btn" onClick={showGit}>
-					Show in Git
+					{t("Show in Git")}
 				</button>
 				{git.ahead > 0 && git.upstream && (
-					<button type="button" className="btn ghost" title="Puts a message in the box; nothing runs until you send it" onClick={askPush}>
-						Ask the agent to push
+					<button type="button" className="btn ghost" title={t("Puts a message in the box; nothing runs until you send it")} onClick={askPush}>
+						{t("Ask the agent to push")}
 					</button>
 				)}
 			</div>

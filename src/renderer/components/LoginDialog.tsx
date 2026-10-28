@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CloseIcon } from "../icons.tsx";
 import { attempt, trivium, setState, useStore } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 /** Shows a provider login as pi drives it: links to open, codes to enter, and questions to answer. */
 export function LoginDialog() {
@@ -40,15 +41,15 @@ export function LoginDialog() {
 		<div className="scrim" onKeyDown={(event) => event.key === "Escape" && close()}>
 			<div className="modal" role="dialog" aria-modal="true" aria-labelledby="login-title" style={{ width: 480 }}>
 				<div className="modal-head">
-					<h2 id="login-title">Connect {login.name}</h2>
-					<button type="button" className="icon-btn" aria-label="Close" onClick={close}>
+					<h2 id="login-title">{t("Connect {name}", { name: login.name })}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} onClick={close}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
 				{infos.map((event, index) =>
 					event.type === "device_code" ? (
 						<div key={index} className="login-code">
-							<span className="hint">Enter this code at</span>{" "}
+							<span className="hint">{t("Enter this code at")}</span>{" "}
 							<a href={event.url} target="_blank" rel="noreferrer">
 								{event.url}
 							</a>
@@ -61,7 +62,7 @@ export function LoginDialog() {
 								<>
 									{" "}
 									<a href={event.url} target="_blank" rel="noreferrer">
-										Open the page again
+										{t("Open the page again")}
 									</a>
 								</>
 							)}
@@ -101,23 +102,23 @@ export function LoginDialog() {
 								onKeyDown={(event) => event.key === "Enter" && value && answer(value)}
 							/>
 							<button type="button" className="btn primary" style={{ minHeight: 30 }} disabled={!value} onClick={() => answer(value)}>
-								Continue
+								{t("Continue")}
 							</button>
 						</span>
 					</label>
 				)}
-				{!prompt && !done && !infos.length && <p className="set-sub">Starting…</p>}
+				{!prompt && !done && !infos.length && <p className="set-sub">{t("Starting…")}</p>}
 				{done?.type === "done" &&
 					(done.ok ? (
 						<p className="set-sub" style={{ color: "var(--add)" }}>
-							Connected.
+							{t("Connected.")}
 						</p>
 					) : (
-						<div className="run-error">{done.error ?? "Login cancelled."}</div>
+						<div className="run-error">{done.error ?? t("Login cancelled.")}</div>
 					))}
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={close}>
-						{done ? "Close" : "Cancel"}
+						{t(done ? "Close" : "Cancel")}
 					</button>
 				</div>
 			</div>

@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import type { TranscriptImage } from "../../shared/protocol.ts";
 import { CloseIcon, DownloadIcon, ExpandIcon, ImageIcon } from "../icons.tsx";
 import { attempt, notify, setState, trivium, useStore } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 async function save(path: string, image: TranscriptImage): Promise<void> {
 	const saved = await attempt(() => trivium.saveImage(path, image.id, image.name));
-	if (saved) notify(`Saved ${image.name}`, "info");
+	if (saved) notify(t("Saved {name}", { name: image.name }), "info");
 }
 
 /** A transcript image as a thumbnail; hovering shows Download and Preview. */
@@ -24,10 +25,10 @@ export function ImageTile({ image, size = "small" }: { image: TranscriptImage; s
 				</button>
 			)}
 			<div className="image-tile-actions">
-				<button type="button" aria-label={`Download ${image.name}`} title="Download" onClick={() => void save(path, image)}>
+				<button type="button" aria-label={t("Download {name}", { name: image.name })} title={t("Download")} onClick={() => void save(path, image)}>
 					<DownloadIcon size={13} />
 				</button>
-				<button type="button" aria-label={`Preview ${image.name}`} title="Preview" onClick={preview}>
+				<button type="button" aria-label={t("Preview {file}", { file: image.name })} title={t("Preview")} onClick={preview}>
 					<ExpandIcon size={13} />
 				</button>
 			</div>
@@ -68,9 +69,9 @@ export function ImageLightbox() {
 			<div className="lightbox-bar">
 				<span className="ellipsis">{preview.image.name}</span>
 				<button type="button" className="lightbox-btn" onClick={() => void save(preview.path, preview.image)}>
-					<DownloadIcon size={14} /> Download
+					<DownloadIcon size={14} /> {t("Download")}
 				</button>
-				<button type="button" className="lightbox-btn icon" aria-label="Close preview" onClick={close}>
+				<button type="button" className="lightbox-btn icon" aria-label={t("Close preview")} onClick={close}>
 					<CloseIcon size={14} />
 				</button>
 			</div>

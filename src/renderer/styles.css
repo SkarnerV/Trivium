@@ -5,7 +5,17 @@
 	--ink-4: #6b6e78;
 	--add: #146c3c;
 	--del: #b4232a;
+	--sans: Geist, Inter, system-ui, sans-serif;
 	--mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Geist has no CJK glyphs; each language names its own UI fonts, so kana and hanzi don't fall back to whatever the system picks. */
+:root:lang(zh-CN) {
+	--sans: Geist, Inter, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+}
+
+:root:lang(ja) {
+	--sans: Geist, Inter, "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
 }
 
 * {
@@ -44,7 +54,7 @@ body,
 body {
 	background: var(--chrome, #eeeffa);
 	color: var(--ink);
-	font-family: Geist, Inter, system-ui, sans-serif;
+	font-family: var(--sans);
 	font-size: 13px;
 	line-height: 1.5;
 	letter-spacing: -0.005em;
@@ -2178,7 +2188,7 @@ body.resizing * {
 .diff-note {
 	margin: 0;
 	padding: 12px;
-	font-family: Geist, Inter, system-ui, sans-serif;
+	font-family: var(--sans);
 	color: var(--ink-3);
 }
 
@@ -2431,7 +2441,7 @@ body.resizing * {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	padding: 12px 12px 10px 16px;
+	padding: 12px 12px 8px 16px;
 	border: 1px solid var(--edge);
 	border-radius: 16px;
 	background: #fff;
@@ -2457,6 +2467,7 @@ body.resizing * {
 	align-items: center;
 	gap: 6px;
 	min-height: 32px;
+	margin-top: 10px;
 }
 
 .ctx {
@@ -5317,7 +5328,7 @@ body.resizing * {
 .md-table table {
 	width: 100%;
 	border-collapse: collapse;
-	font-family: Geist, Inter, system-ui, sans-serif;
+	font-family: var(--sans);
 	font-size: 12.5px;
 	line-height: 1.5;
 }
@@ -5403,7 +5414,7 @@ body.resizing * {
 	align-items: center;
 	gap: 6px;
 	margin-top: 10px;
-	font-family: Geist, Inter, system-ui, sans-serif;
+	font-family: var(--sans);
 	font-size: 12px;
 	color: var(--ink-3);
 }

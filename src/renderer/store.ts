@@ -19,6 +19,7 @@ import type {
 	TranscriptImage,
 	UpdateStatus,
 } from "../shared/protocol.ts";
+import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import type { CodeView } from "./panels.ts";
 import { transition } from "./transition.ts";
 
@@ -64,6 +65,8 @@ export interface State {
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
+	/** The language the interface is in, from the settings; the whole app renders again when it changes. */
+	locale: Locale;
 	/** Text to put in a session's message box when it next shows. */
 	drafts: Record<string, Draft>;
 	/** Projects asking to load their .pi resources, oldest first. */
@@ -128,6 +131,7 @@ let state: State = {
 	settingsSection: "general",
 	overlay: null,
 	update: { state: "idle" },
+	locale: "en",
 };
 
 const listeners = new Set<() => void>();
@@ -269,7 +273,7 @@ function handleEvent(event: HostEvent): void {
 			const before = getState().update;
 			setState({ update: event.update });
 			if (event.update.state === "available" && !(before.state === "available" && before.release.version === event.update.release.version)) {
-				notify(`Trivium ${event.update.release.version} is available`, "info");
+				notify(t("Trivium {version} is available", { version: event.update.release.version }), "info");
 			}
 			break;
 		}
@@ -520,7 +524,7 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));
-	notify(deleted.length === 1 ? "Session moved to the Trash" : `${deleted.length} sessions moved to the Trash`, "info");
+	notify(deleted.length === 1 ? t("Session moved to the Trash") : t("{n} sessions moved to the Trash", { n: deleted.length }), "info");
 }
 
 /** Pins or unpins a project group ("app:cwd") or a session (its path) in the sidebar. */
@@ -564,9 +568,14 @@ export async function installUpdate(): Promise<void> {
 	if (
 		running &&
 		!(await askConfirm({
-			title: "Restart to update?",
-			message: `Trivium restarts once ${release.version} is downloaded, which stops ${running === 1 ? "the session that is running" : `the ${running} sessions that are running`}.`,
-			confirmLabel: "Update and restart",
+			title: t("Restart to update?"),
+			message: t(
+				running === 1
+					? "Trivium restarts once {version} is downloaded, which stops the session that is running."
+					: "Trivium restarts once {version} is downloaded, which stops the {n} sessions that are running.",
+				{ version: release.version, n: running },
+			),
+			confirmLabel: t("Update and restart"),
 		}))
 	) {
 		return;
@@ -574,15 +583,23 @@ export async function installUpdate(): Promise<void> {
 	await attempt(() => trivium.installUpdate());
 }
 
+/** Shows new settings, in the language they pick. */
+export function showSettings(settings: TriviumSettings): void {
+	const locale = resolveLocale(settings.language, navigator.languages);
+	setLocale(locale);
+	document.documentElement.lang = locale;
+	setState({ settings, locale });
+}
+
 export async function updateSettings(patch: Partial<TriviumSettings>): Promise<void> {
 	const next = await attempt(() => trivium.updateSettings(patch));
-	if (next) setState({ settings: next });
+	if (next) showSettings(next);
 }
 
 export async function init(): Promise<void> {
 	trivium.onEvent(handleEvent);
 	const settings = await attempt(() => trivium.getSettings());
-	if (settings) setState({ settings });
+	if (settings) showSettings(settings);
 	const services = await attempt(() => trivium.services());
 	if (services) setState({ services });
 	// A failed install from the last restart is reported before this page could hear of it.

@@ -5,6 +5,7 @@ import type { AppDetails, AppId } from "../../shared/protocol.ts";
 import { CheckIcon, Chevron, CloseIcon, ExternalIcon, FolderIcon, InfoIcon } from "../icons.tsx";
 import { attempt, notify, trivium } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { t, tx } from "../i18n.tsx";
 
 function preview(text: string): { source?: string; error?: string } {
 	if (!text.trim()) return {};
@@ -54,7 +55,7 @@ export function AddExtensionDialog({
 			const details = await trivium.installPackage(app, text);
 			onAdded(details);
 			setInstalled(new Set(details.packages.map(packageName)));
-			notify(`Installed ${packageName(resolved)}`, "info");
+			notify(t("Installed {name}", { name: packageName(resolved) }), "info");
 			if (closeAfter) onClose();
 		} catch (thrown) {
 			// Electron prefixes errors from the main process with the channel name; show only pi's message.
@@ -70,7 +71,7 @@ export function AddExtensionDialog({
 		setBusy(`npm:${name}`);
 		try {
 			await onRestore(name);
-			notify(`Added ${name} back`, "info");
+			notify(t("Added {name} back", { name }), "info");
 		} finally {
 			setBusy(undefined);
 		}
@@ -91,12 +92,12 @@ export function AddExtensionDialog({
 		>
 			<div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-extension-title" style={{ width: 600 }}>
 				<div className="modal-head">
-					<h2 id="add-extension-title">Add an extension</h2>
-					<button type="button" className="icon-btn" aria-label="Close" disabled={Boolean(busy)} onClick={onClose}>
+					<h2 id="add-extension-title">{t("Add an extension")}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} disabled={Boolean(busy)} onClick={onClose}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
-				<p className="add-ext-intro">A pi package loads in every mode and the pi CLI. Each mode can turn it off.</p>
+				<p className="add-ext-intro">{t("A pi package loads in every mode and the pi CLI. Each mode can turn it off.")}</p>
 				<label className="add-ext-input">
 					<span className="ask-field">
 						<input
@@ -105,7 +106,7 @@ export function AddExtensionDialog({
 							spellCheck={false}
 							value={value}
 							disabled={Boolean(busy)}
-							placeholder="pi-mcp-adapter, npm:@scope/name or github.com/owner/repo"
+							placeholder={t("pi-mcp-adapter, npm:@scope/name or github.com/owner/repo")}
 							onChange={(event) => {
 								setValue(event.target.value);
 								setFailed(undefined);
@@ -113,25 +114,21 @@ export function AddExtensionDialog({
 							onKeyDown={(event) => event.key === "Enter" && install()}
 						/>
 						<button type="button" className="btn primary" style={{ minHeight: 30 }} disabled={!source || Boolean(busy)} onClick={install}>
-							{busy && busy === source ? "Installing…" : "Install"}
+							{t(busy && busy === source ? "Installing…" : "Install")}
 						</button>
 					</span>
 					<span className={`add-ext-source${error ? " bad" : ""}`}>
-						{source ? (
-							<>
-								Installs <span className="mono">{source}</span>
-							</>
-						) : (
-							error ?? "An npm name, a git repository, an https URL or a gallery link."
-						)}
+						{source
+							? tx("Installs {source}", { source: <span className="mono">{source}</span> })
+							: (error ?? t("An npm name, a git repository, an https URL or a gallery link."))}
 					</span>
 				</label>
 				{failed && <div className="run-error">{failed}</div>}
 				<section className="rec" aria-labelledby="rec-title">
 					<div className="rec-head">
-						<h3 id="rec-title">Recommended for {THEMES[app].name}</h3>
+						<h3 id="rec-title">{t("Recommended for {mode}", { mode: t(THEMES[app].name) })}</h3>
 						<a className="rec-gallery" href={PACKAGE_GALLERY} target="_blank" rel="noreferrer">
-							Browse the gallery
+							{t("Browse the gallery")}
 							<ExternalIcon size={12} />
 						</a>
 					</div>
@@ -149,18 +146,18 @@ export function AddExtensionDialog({
 										type="button"
 										className="rec-text"
 										aria-expanded={isOpen}
-										title={isOpen ? "Hide details" : "Show details"}
+										title={t(isOpen ? "Hide details" : "Show details")}
 										onClick={() => setOpen(isOpen ? undefined : item.name)}
 									>
 										<span className="rec-name">
 											{item.name.split("/").pop()}
 											<Chevron open={isOpen} size={11} />
 										</span>
-										<span className="rec-adds">{item.adds}</span>
+										<span className="rec-adds">{t(item.adds)}</span>
 									</button>
 									{shipped && !isRemoved ? (
-										<button type="button" className="btn ghost rec-btn" disabled title="Comes with Trivium. Remove it from the extension list.">
-											<CheckIcon size={12} /> Built in
+										<button type="button" className="btn ghost rec-btn" disabled title={t("Comes with Trivium. Remove it from the extension list.")}>
+											<CheckIcon size={12} /> {t("Built in")}
 										</button>
 									) : (
 										<button
@@ -171,24 +168,24 @@ export function AddExtensionDialog({
 										>
 											{done ? (
 												<>
-													<CheckIcon size={12} /> Installed
+													<CheckIcon size={12} /> {t("Installed")}
 												</>
 											) : working ? (
-												isRemoved ? "Adding…" : "Installing…"
+												t(isRemoved ? "Adding…" : "Installing…")
 											) : isRemoved ? (
-												"Add back"
+												t("Add back")
 											) : (
-												"Install"
+												t("Install")
 											)}
 										</button>
 									)}
 									{isOpen && (
 										<div className="rec-details">
-											<p>{item.why}</p>
+											<p>{t(item.why)}</p>
 											{item.note && (
 												<p className="rec-note">
 													<InfoIcon size={12} />
-													{item.note}
+													{t(item.note)}
 												</p>
 											)}
 											<a className="rec-link mono" href={`${PACKAGE_GALLERY}/${item.name}`} target="_blank" rel="noreferrer">
@@ -201,14 +198,14 @@ export function AddExtensionDialog({
 							);
 						})}
 					</ul>
-					<p className="rec-warn">Packages run code with your permissions. Review a package's source before installing it.</p>
+					<p className="rec-warn">{t("Packages run code with your permissions. Review a package's source before installing it.")}</p>
 				</section>
 				<div className="modal-foot" style={{ justifyContent: "space-between" }}>
 					<button type="button" className="btn ghost" disabled={Boolean(busy)} onClick={() => void pickLocal()}>
-						<FolderIcon size={14} /> Choose a file or folder…
+						<FolderIcon size={14} /> {t("Choose a file or folder…")}
 					</button>
 					<button type="button" className="btn ghost" disabled={Boolean(busy)} onClick={onClose}>
-						Done
+						{t("Done")}
 					</button>
 				</div>
 			</div>

@@ -4,6 +4,7 @@ import type { ConnectorInfo, ConnectorsView } from "../../shared/protocol.ts";
 import { CloseIcon, TrashIcon } from "../icons.tsx";
 import { commandKey } from "../platform.ts";
 import { askConfirm, errorText, notify, trivium } from "../store.ts";
+import { t, tx } from "../i18n.tsx";
 
 type Mode = "stdio" | "http" | "json";
 
@@ -45,7 +46,7 @@ export function ConnectorDialog({
 		try {
 			if (mode === "json") {
 				const { view, added } = await trivium.importConnectors(json, name.trim() || undefined);
-				notify(`Added ${added.join(", ")}`, "info");
+				notify(t("Added {names}", { names: added.join(", ") }), "info");
 				onSaved(view, added);
 			} else {
 				const [program = "", ...args] = splitCommand(command);
@@ -60,7 +61,7 @@ export function ConnectorDialog({
 					description: description.trim(),
 				};
 				onSaved(await trivium.saveConnector(input, server?.name), [input.name]);
-				notify(`Saved ${input.name}`, "info");
+				notify(t("Saved {name}", { name: input.name }), "info");
 			}
 			onClose();
 		} catch (thrown) {
@@ -73,9 +74,9 @@ export function ConnectorDialog({
 	const remove = async () => {
 		if (!server) return;
 		const ok = await askConfirm({
-			title: `Remove ${server.name}?`,
-			message: "Its tools disappear from new sessions here and in the pi CLI. A sign-in stays saved in case you add it again.",
-			confirmLabel: "Remove",
+			title: t("Remove {name}?", { name: server.name }),
+			message: t("Its tools disappear from new sessions here and in the pi CLI. A sign-in stays saved in case you add it again."),
+			confirmLabel: t("Remove"),
 		});
 		if (!ok) return;
 		try {
@@ -97,20 +98,20 @@ export function ConnectorDialog({
 		>
 			<div className="modal cm" role="dialog" aria-modal="true" aria-labelledby="cn-title" style={{ width: 600 }}>
 				<div className="modal-head">
-					<h2 id="cn-title">{server ? `Edit ${server.name}` : "Add an MCP server"}</h2>
-					<button type="button" className="icon-btn" aria-label="Close" disabled={saving} onClick={onClose}>
+					<h2 id="cn-title">{server ? t("Edit {name}", { name: server.name }) : t("Add an MCP server")}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} disabled={saving} onClick={onClose}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
 				<p className="add-ext-intro">
-					Saved in pi's <span className="mono">mcp.json</span>, so the pi CLI connects to the same servers.
+					{tx("Saved in pi's {file}, so the pi CLI connects to the same servers.", { file: <span className="mono">mcp.json</span> })}
 				</p>
 
 				{!server && (
-					<div className="seg cn-modes" role="tablist" aria-label="How to add it">
+					<div className="seg cn-modes" role="tablist" aria-label={t("How to add it")}>
 						{MODES.map((option) => (
 							<button key={option.value} type="button" role="tab" aria-selected={mode === option.value} onClick={() => setMode(option.value)}>
-								{option.label}
+								{t(option.label)}
 							</button>
 						))}
 					</div>
@@ -118,7 +119,7 @@ export function ConnectorDialog({
 
 				<div className="cm-grid">
 					<label className="cm-field wide">
-						<span>{mode === "json" ? "Name, for a single entry" : "Name"}</span>
+						<span>{t(mode === "json" ? "Name, for a single entry" : "Name")}</span>
 						<input
 							ref={first}
 							className="cm-input mono"
@@ -128,14 +129,14 @@ export function ConnectorDialog({
 							onChange={(event) => setName(event.target.value)}
 						/>
 						<span className="cm-help">
-							Letters, digits, - and _. Its tools are named <span className="mono">mcp__{name.trim() || "name"}__tool</span>.
+							{tx("Letters, digits, - and _. Its tools are named {tool}.", { tool: <span className="mono">mcp__{name.trim() || "name"}__tool</span> })}
 						</span>
 					</label>
 
 					{mode === "stdio" && (
 						<>
 							<label className="cm-field wide">
-								<span>Command</span>
+								<span>{t("Command")}</span>
 								<input
 									className="cm-input mono"
 									value={command}
@@ -144,12 +145,13 @@ export function ConnectorDialog({
 									onChange={(event) => setCommand(event.target.value)}
 								/>
 								<span className="cm-help">
-									A program and its arguments, run without a shell. Quote an argument with spaces; <span className="mono">~/</span> is your
-									home folder.
+									{tx("A program and its arguments, run without a shell. Quote an argument with spaces; {home} is your home folder.", {
+										home: <span className="mono">~/</span>,
+									})}
 								</span>
 							</label>
 							<label className="cm-field wide">
-								<span>Environment</span>
+								<span>{t("Environment")}</span>
 								<textarea
 									className="cm-input cm-textarea"
 									value={env}
@@ -158,8 +160,11 @@ export function ConnectorDialog({
 									onChange={(event) => setEnv(event.target.value)}
 								/>
 								<span className="cm-help">
-									One <span className="mono">NAME=value</span> per line. <span className="mono">{"${NAME}"}</span> reads your environment,{" "}
-									<span className="mono">!command</span> a command's output.
+									{tx("One {pair} per line. {env} reads your environment, {command} a command's output.", {
+										pair: <span className="mono">NAME=value</span>,
+										env: <span className="mono">{"${NAME}"}</span>,
+										command: <span className="mono">!command</span>,
+									})}
 								</span>
 							</label>
 						</>
@@ -176,10 +181,10 @@ export function ConnectorDialog({
 									spellCheck={false}
 									onChange={(event) => setUrl(event.target.value)}
 								/>
-								<span className="cm-help">Streamable HTTP. For a server that lists an /sse address, try /mcp instead.</span>
+								<span className="cm-help">{t("Streamable HTTP. For a server that lists an /sse address, try /mcp instead.")}</span>
 							</label>
 							<label className="cm-field wide">
-								<span>Headers</span>
+								<span>{t("Headers")}</span>
 								<textarea
 									className="cm-input cm-textarea"
 									value={headers}
@@ -188,8 +193,9 @@ export function ConnectorDialog({
 									onChange={(event) => setHeaders(event.target.value)}
 								/>
 								<span className="cm-help">
-									One <span className="mono">Name: value</span> per line. Without an Authorization header, you sign in through the browser
-									when the server asks.
+									{tx("One {pair} per line. Without an Authorization header, you sign in through the browser when the server asks.", {
+										pair: <span className="mono">Name: value</span>,
+									})}
 								</span>
 							</label>
 						</>
@@ -207,19 +213,21 @@ export function ConnectorDialog({
 								onChange={(event) => setJson(event.target.value)}
 							/>
 							<span className="cm-help">
-								From Claude Desktop, Claude Code, Cursor or VS Code: the whole <span className="mono">mcpServers</span> block, or one server's entry.
+								{tx("From Claude Desktop, Claude Code, Cursor or VS Code: the whole {key} block, or one server's entry.", {
+									key: <span className="mono">mcpServers</span>,
+								})}
 							</span>
 						</label>
 					) : (
 						<label className="cm-field wide">
-							<span>Description</span>
+							<span>{t("Description")}</span>
 							<input
 								className="cm-input"
 								value={description}
-								placeholder="Optional"
+								placeholder={t("Optional")}
 								onChange={(event) => setDescription(event.target.value)}
 							/>
-							<span className="cm-help">What it offers, in a sentence. The agent reads it to decide when to look at its tools.</span>
+							<span className="cm-help">{t("What it offers, in a sentence. The agent reads it to decide when to look at its tools.")}</span>
 						</label>
 					)}
 				</div>
@@ -229,15 +237,15 @@ export function ConnectorDialog({
 					{server && (
 						<button type="button" className="btn ghost cm-delete" disabled={saving} onClick={() => void remove()}>
 							<TrashIcon size={14} />
-							Remove server
+							{t("Remove server")}
 						</button>
 					)}
 					<span className="btn-row">
 						<button type="button" className="btn ghost" disabled={saving} onClick={onClose}>
-							Cancel
+							{t("Cancel")}
 						</button>
 						<button type="button" className="btn primary" disabled={saving} onClick={() => void save()}>
-							{saving ? "Saving…" : server ? "Save" : "Add"}
+							{t(saving ? "Saving…" : server ? "Save" : "Add")}
 						</button>
 					</span>
 				</div>

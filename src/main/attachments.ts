@@ -9,6 +9,7 @@ import {
 	resizeImage,
 } from "@earendil-works/pi-coding-agent";
 import type { AttachmentInfo } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 import type { MessageFile } from "./transcript.ts";
 
 /** Larger text files are refused: they would crowd out the conversation. */
@@ -37,16 +38,16 @@ export class AttachmentStore {
 		const infos: AttachmentInfo[] = [];
 		for (const path of paths) {
 			const stats = await stat(path);
-			if (stats.isDirectory()) throw new Error(`${basename(path)} is a folder. Attach files instead.`);
+			if (stats.isDirectory()) throw new Error(t("{name} is a folder. Attach files instead.", { name: basename(path) }));
 			const mimeType = await detectSupportedImageMimeTypeFromFile(path);
 			if (mimeType || CONVERTIBLE_IMAGE.test(path)) {
 				const bytes = await readFile(path);
 				infos.push(await this.addImage(basename(path), path, bytes, mimeType ?? imageTypeFromExtension(path), stats.size));
 				continue;
 			}
-			if (stats.size > MAX_TEXT_BYTES) throw new Error(`${basename(path)} is larger than 1 MB. Attach a smaller file.`);
+			if (stats.size > MAX_TEXT_BYTES) throw new Error(t("{name} is larger than 1 MB. Attach a smaller file.", { name: basename(path) }));
 			const bytes = await readFile(path);
-			if (bytes.subarray(0, 8192).includes(0)) throw new Error(`${basename(path)} is not a text file or a supported image.`);
+			if (bytes.subarray(0, 8192).includes(0)) throw new Error(t("{name} is not a text file or a supported image.", { name: basename(path) }));
 			const text = bytes.toString("utf8").replace(/^﻿/, "");
 			const info: AttachmentInfo = { id: randomUUID(), name: basename(path), kind: "file", size: stats.size };
 			this.items.set(info.id, { info, label: path, hints: [], text });
@@ -67,13 +68,13 @@ export class AttachmentStore {
 		const hints: string[] = [];
 		if (!INLINE_IMAGE_TYPES.has(type)) {
 			const png = await convertToPng(bytes.toString("base64"), type);
-			if (!png) throw new Error(`${name} could not be converted to an image the model can read.`);
+			if (!png) throw new Error(t("{name} could not be converted to an image the model can read.", { name }));
 			hints.push(`[Image converted from ${type} to ${png.mimeType}.]`);
 			data = Buffer.from(png.data, "base64");
 			type = png.mimeType;
 		}
 		const resized = await resizeImage(new Uint8Array(data), type);
-		if (!resized) throw new Error(`${name} is too large to send, even after resizing.`);
+		if (!resized) throw new Error(t("{name} is too large to send, even after resizing.", { name }));
 		const note = formatDimensionNote(resized);
 		if (note) hints.push(note);
 		const image: ImageContent = { type: "image", data: resized.data, mimeType: resized.mimeType };
@@ -128,7 +129,7 @@ export class AttachmentStore {
 		const images: ImageContent[] = [];
 		for (const id of ids) {
 			const item = this.items.get(id);
-			if (!item) throw new Error("An attachment expired. Attach it again.");
+			if (!item) throw new Error(t("An attachment expired. Attach it again."));
 			if (item.image) {
 				images.push(item.image);
 				prefix += `<file name="${item.label}">${item.hints.join("\n")}</file>\n`;

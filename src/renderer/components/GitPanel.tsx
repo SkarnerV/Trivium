@@ -5,6 +5,7 @@ import { BranchIcon, Chevron, ExternalIcon, EyeIcon } from "../icons.tsx";
 import { attempt, errorText, openPreview, trivium } from "../store.ts";
 import { transition } from "../transition.ts";
 import { DiffView } from "./DiffView.tsx";
+import { t } from "../i18n.tsx";
 
 const MARK: Record<GitFile["status"], string> = {
 	added: "A",
@@ -34,7 +35,7 @@ export function gitFileCount(git: GitStatus): number {
 
 /** The branch as the header shows it: its name, or the commit a detached HEAD is at. */
 export function branchLabel(git: GitStatus): string {
-	return git.branch ?? (git.head ? `detached at ${git.head}` : "detached");
+	return git.branch ?? (git.head ? t("detached at {commit}", { commit: git.head }) : t("detached"));
 }
 
 function dirName(rel: string): string {
@@ -43,10 +44,10 @@ function dirName(rel: string): string {
 }
 
 function emptyNote(file: GitFile, diff: GitDiff): string {
-	if (diff.binary) return "Binary file.";
-	if (file.status === "deleted") return "File deleted.";
-	if (file.status === "renamed" || file.status === "copied" || file.status === "typechange") return "No changes to the content.";
-	return "Empty file.";
+	if (diff.binary) return t("Binary file.");
+	if (file.status === "deleted") return t("File deleted.");
+	if (file.status === "renamed" || file.status === "copied" || file.status === "typechange") return t("No changes to the content.");
+	return t("Empty file.");
 }
 
 /** The Code panel's Git tab: the branch, the working tree's changes by area, and the selected file's diff. */
@@ -77,13 +78,13 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 				<BranchIcon size={13} />
 				<span className="mono ellipsis">{branchLabel(git)}</span>
 				{git.upstream && <span className="git-upstream mono ellipsis">{git.upstream}</span>}
-				{git.ahead > 0 && <span className="git-sync">{git.ahead} to push</span>}
-				{git.behind > 0 && <span className="git-sync is-pull">{git.behind} to pull</span>}
+				{git.ahead > 0 && <span className="git-sync">{t("{n} to push", { n: git.ahead })}</span>}
+				{git.behind > 0 && <span className="git-sync is-pull">{t("{n} to pull", { n: git.behind })}</span>}
 			</div>
 			{!current ? (
 				<div className="side-body panel-empty">
-					<h3>Nothing to commit</h3>
-					<p>The working tree matches the last commit.</p>
+					<h3>{t("Nothing to commit")}</h3>
+					<p>{t("The working tree matches the last commit.")}</p>
 				</div>
 			) : (
 				<>
@@ -100,7 +101,7 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 										onClick={() => setFolded({ ...folded, [area]: !folded[area] })}
 									>
 										<Chevron open={!folded[area]} size={10} />
-										<span>{label}</span>
+										<span>{t(label)}</span>
 										<span className="git-section-count">{files.length}</span>
 									</button>
 									{!folded[area] &&
@@ -123,9 +124,9 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 								</section>
 							);
 						})}
-						{git.truncated && <p className="git-more">Showing the first {git.files.length} changes.</p>}
+						{git.truncated && <p className="git-more">{t("Showing the first {n} changes.", { n: git.files.length })}</p>}
 					</div>
-					<div className="diff git-diff" role="region" aria-label={`Diff of ${current.rel}`}>
+					<div className="diff git-diff" role="region" aria-label={t("Diff of {file}", { file: current.rel })}>
 						<div className="diff-path git-diff-path">
 							<span className="ellipsis">{current.from ? `${current.from} → ${current.rel}` : current.rel}</span>
 							{diff?.diff && (diff.diff.adds > 0 || diff.diff.dels > 0) && (
@@ -134,7 +135,7 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 								</span>
 							)}
 							{current.status !== "deleted" && (
-								<button type="button" className="icon-btn" aria-label="Preview" title="Preview" onClick={() => void openPreview(view.path, current.path)}>
+								<button type="button" className="icon-btn" aria-label={t("Preview")} title={t("Preview")} onClick={() => void openPreview(view.path, current.path)}>
 									<EyeIcon size={14} />
 								</button>
 							)}
@@ -142,8 +143,8 @@ export function GitChanges({ view, git }: { view: SessionView; git: GitStatus })
 								<button
 									type="button"
 									className="icon-btn"
-									aria-label="Open in editor"
-									title="Open in VS Code"
+									aria-label={t("Open in editor")}
+									title={t("Open in VS Code")}
 									onClick={() => void attempt(() => trivium.openInEditor(current.path))}
 								>
 									<ExternalIcon size={13} />

@@ -3,6 +3,7 @@ import type { Step, Subagent, SubagentChild, SubagentNotice } from "../../shared
 import { duration, tokens } from "../format.ts";
 import { ReturnIcon } from "../icons.tsx";
 import { Markdown } from "./Markdown.tsx";
+import { t } from "../i18n.tsx";
 
 /** How many of a child's steps an opened subagent step lists before "+ N more". */
 const SHOWN_STEPS = 6;
@@ -24,7 +25,9 @@ export function SubagentTarget({ subagent, fallback }: { subagent: Subagent; fal
 				<AgentTag key={agent} agent={agent} />
 			))}
 			<span className="ellipsis prose">
-				{only ? firstLine(only.task) : `${children.length} agents${agents.length > 3 ? ` · +${agents.length - 3} more` : ""}`}
+				{only
+					? firstLine(only.task)
+					: `${t("{n} agents", { n: children.length })}${agents.length > 3 ? ` · ${t("+{n} more", { n: agents.length - 3 })}` : ""}`}
 			</span>
 		</span>
 	);
@@ -35,7 +38,9 @@ function firstLine(text: string): string {
 }
 
 function usage(child: SubagentChild): string {
-	return [child.model, child.context && `${child.context} context`, child.tokens && `${tokens(child.tokens)} tokens`].filter(Boolean).join(" · ");
+	return [child.model, child.context && t("{context} context", { context: child.context }), child.tokens && t("{n} tokens", { n: tokens(child.tokens) })]
+		.filter(Boolean)
+		.join(" · ");
 }
 
 function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolean }) {
@@ -53,13 +58,13 @@ function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolea
 			)}
 			{child.task && (
 				<>
-					<div className="step-detail-label">Task</div>
+					<div className="step-detail-label">{t("Task")}</div>
 					<p className="subagent-task">{child.task}</p>
 				</>
 			)}
 			{shown.length > 0 && (
 				<>
-					<div className="step-detail-label">Steps</div>
+					<div className="step-detail-label">{t("Steps")}</div>
 					<ol className="subagent-steps">
 						{shown.map((step, index) => (
 							<li key={index}>
@@ -67,13 +72,13 @@ function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolea
 								<span className="ellipsis">{step.target}</span>
 							</li>
 						))}
-						{more > 0 && <li className="more">+ {more} more</li>}
+						{more > 0 && <li className="more">{t("+{n} more", { n: more })}</li>}
 					</ol>
 				</>
 			)}
 			{(child.output || child.error) && (
 				<>
-					<div className="step-detail-label">{child.error ? "Error" : "Result"}</div>
+					<div className="step-detail-label">{t(child.error ? "Error" : "Result")}</div>
 					{child.error && <pre className="subagent-error">{child.error}</pre>}
 					{child.output && (
 						<div className="subagent-result">
@@ -91,7 +96,7 @@ function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolea
 export function SubagentDetail({ subagent }: { subagent: Subagent }) {
 	return (
 		<div className="subagent-detail">
-			{subagent.background && <p className="subagent-note">Running in the background. Its result arrives as its own message.</p>}
+			{subagent.background && <p className="subagent-note">{t("Running in the background. Its result arrives as its own message.")}</p>}
 			{subagent.children.map((child, index) => (
 				<ChildDetail key={index} child={child} heading={subagent.children.length > 1} />
 			))}
@@ -101,11 +106,11 @@ export function SubagentDetail({ subagent }: { subagent: Subagent }) {
 
 /** What a running child is doing, in a few words: its tool now, or how it ended. */
 function activity(child: SubagentChild): { text: string; tone: "" | "done" | "error" } {
-	if (child.status === "error") return { text: child.error ? `Failed · ${firstLine(child.error)}` : "Failed", tone: "error" };
-	if (child.status === "done") return { text: child.output ? `Done · ${firstLine(child.output)}` : "Done", tone: "done" };
-	if (child.status === "pending") return { text: "Waiting to start", tone: "" };
+	if (child.status === "error") return { text: child.error ? `${t("Failed")} · ${firstLine(child.error)}` : t("Failed"), tone: "error" };
+	if (child.status === "done") return { text: child.output ? `${t("Done")} · ${firstLine(child.output)}` : t("Done"), tone: "done" };
+	if (child.status === "pending") return { text: t("Waiting to start"), tone: "" };
 	if (child.current) return { text: `${child.current.tool} ${child.current.target}`.trim(), tone: "" };
-	return { text: child.tools ? "Thinking" : "Starting", tone: "" };
+	return { text: t(child.tools ? "Thinking" : "Starting"), tone: "" };
 }
 
 /**
@@ -119,16 +124,20 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 	const { children } = subagent;
 	if (subagent.background || children.length <= 1) {
 		const child = children[0];
-		const counts = child && [child.tools && `${child.tools} ${child.tools === 1 ? "tool" : "tools"}`, child.tokens && `${tokens(child.tokens)} tok`].filter(Boolean).join(" · ");
+		const counts =
+			child &&
+			[child.tools && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }), child.tokens && t("{n} tok", { n: tokens(child.tokens) })]
+				.filter(Boolean)
+				.join(" · ");
 		return (
 			<div className={`live-cmd subagent-live${running ? "" : " idle"}`}>
 				<div className="live-cmd-head">
 					<span className="live-dot" />
-					<span className="live-cmd-label">{subagent.background ? "Started" : running ? "Delegating to" : "Delegated to"}</span>
+					<span className="live-cmd-label">{t(subagent.background ? "Started" : running ? "Delegating to" : "Delegated to")}</span>
 					{child && <AgentTag agent={child.agent} />}
 					<span className="live-cmd-prose ellipsis">
 						{child ? firstLine(child.task) : step.target}
-						{subagent.background && <span className="subagent-bg"> · in the background</span>}
+						{subagent.background && <span className="subagent-bg"> · {t("in the background")}</span>}
 					</span>
 					<span className="live-cmd-time">{time}</span>
 				</div>
@@ -147,8 +156,8 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 			<div className="live-cmd-head">
 				<span className="live-dot" />
 				<span className="live-cmd-prose">
-					{running ? `Running ${children.length} subagents` : `Ran ${children.length} subagents`}
-					{running && working < children.length && <span className="subagent-bg"> · {children.length - working} done</span>}
+					{t(running ? "Running {n} subagents" : "Ran {n} subagents", { n: children.length })}
+					{running && working < children.length && <span className="subagent-bg"> · {t("{n} done", { n: children.length - working })}</span>}
 				</span>
 				<span className="live-cmd-time">{time}</span>
 			</div>
@@ -161,7 +170,7 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 						{child.label && <span className="subagent-label ellipsis">{child.label}</span>}
 						<span className={`subagent-activity ellipsis ${tone}`}>{text}</span>
 						<span className="subagent-now-count">
-							{finished ? duration(child.durationMs) : child.tools ? `${child.tools} ${child.tools === 1 ? "tool" : "tools"}` : ""}
+							{finished ? duration(child.durationMs) : child.tools ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : ""}
 						</span>
 					</div>
 				);
@@ -180,7 +189,8 @@ const NOTICE_VERBS: Record<SubagentNotice["status"], string> = {
 /** The line that opens a run started by a background subagent's result, in place of a user message. */
 export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 	const [open, setOpen] = useState(false);
-	const took = notice.durationMs !== undefined ? ` ${notice.status === "completed" ? "in" : "after"} ${duration(notice.durationMs)}` : "";
+	const took =
+		notice.durationMs !== undefined ? ` ${t(notice.status === "completed" ? "in {time}" : "after {time}", { time: duration(notice.durationMs) })}` : "";
 	const preview = firstLine(notice.text.replace(/^[#>*\-\s]+/gm, ""));
 	return (
 		<div className={`subagent-notice${notice.status === "completed" ? "" : " problem"}`}>
@@ -192,13 +202,13 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 					<AgentTag key={agent} agent={agent} />
 				))}
 				<span className="subagent-notice-status">
-					{NOTICE_VERBS[notice.status]}
+					{t(NOTICE_VERBS[notice.status])}
 					{took}
 				</span>
 				{!open && preview && <span className="subagent-notice-preview ellipsis">· {preview}</span>}
 				{notice.text && (
 					<button type="button" className="subagent-notice-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-						{open ? "Hide result" : "Show result"}
+						{t(open ? "Hide result" : "Show result")}
 					</button>
 				)}
 			</div>

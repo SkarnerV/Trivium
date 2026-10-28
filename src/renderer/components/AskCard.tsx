@@ -3,6 +3,7 @@ import type { DialogAnswer, DialogRequest } from "../../shared/protocol.ts";
 import { WarnIcon } from "../icons.tsx";
 import { commandKey } from "../platform.ts";
 import { attempt, trivium, setState } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 export function answer(id: string, value: DialogAnswer): void {
 	setState((s) => ({ dialogs: s.dialogs.filter((d) => d.id !== id) }));
@@ -12,7 +13,7 @@ export function answer(id: string, value: DialogAnswer): void {
 function Waiting() {
 	return (
 		<div className="ask-head">
-			<strong className="shimmer">Waiting for your answer</strong>
+			<strong className="shimmer">{t("Waiting for your answer")}</strong>
 		</div>
 	);
 }
@@ -84,10 +85,10 @@ function ConfirmCard({ request }: { request: Extract<DialogRequest, { kind: "con
 			{request.message && <p className="ask-msg">{request.message}</p>}
 			<div className="btn-row">
 				<button type="button" className="btn" onClick={() => answer(request.id, { confirmed: false })}>
-					Decline
+					{t("Decline")}
 				</button>
 				<button type="button" className="btn primary" onClick={() => answer(request.id, { confirmed: true })}>
-					Allow
+					{t("Allow")}
 				</button>
 			</div>
 		</div>
@@ -118,13 +119,13 @@ function TextCard({ request }: { request: Extract<DialogRequest, { kind: "input"
 							ref={ref}
 							type="text"
 							value={value}
-							placeholder={request.placeholder ?? "Your answer"}
+							placeholder={request.placeholder ?? t("Your answer")}
 							onChange={(e) => setValue(e.target.value)}
 							onKeyDown={onKeyDown}
 						/>
 					)}
 					<button type="button" className="btn primary" style={{ minHeight: 30 }} onClick={submit}>
-						Answer
+						{t("Answer")}
 					</button>
 				</span>
 			</label>

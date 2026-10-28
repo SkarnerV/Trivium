@@ -5,6 +5,7 @@ import { AppIcon, CloseIcon, FolderIcon } from "../icons.tsx";
 import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { commandKey } from "../platform.ts";
+import { t } from "../i18n.tsx";
 import { AskCard, answer } from "./AskCard.tsx";
 
 const close = () => setState({ overlay: null });
@@ -61,18 +62,18 @@ export function NewSessionDialog() {
 					<span className="app-badge">
 						<AppIcon app={app} />
 					</span>
-					<h2 id="new-session-title">New {name} session</h2>
-					<button type="button" className="icon-btn" aria-label="Close" onClick={close}>
+					<h2 id="new-session-title">{t("New {mode} session", { mode: t(name) })}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} onClick={close}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
-				<div role="radiogroup" aria-label="Project" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-					<span className="group-label">Where</span>
+				<div role="radiogroup" aria-label={t("Project")} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+					<span className="group-label">{t("Where")}</span>
 					<button type="button" role="radio" className="radio" aria-checked={cwd === null} onClick={() => setCwd(null)}>
 						<span className="ring" />
-						<span style={{ fontWeight: cwd === null ? 500 : 400 }}>No project</span>
+						<span style={{ fontWeight: cwd === null ? 500 : 400 }}>{t("No project")}</span>
 						<span className="path ellipsis" style={{ fontFamily: "inherit" }}>
-							Just chat. Any files go in Trivium's own folder.
+							{t("Just chat. Any files go in Trivium's own folder.")}
 						</span>
 					</button>
 					{projects.map((path) => (
@@ -91,15 +92,15 @@ export function NewSessionDialog() {
 					))}
 					<button type="button" className="radio" onClick={() => void pickFolder()} style={{ color: "var(--ink-2)" }}>
 						<FolderIcon />
-						Open another folder…
+						{t("Open another folder…")}
 					</button>
 				</div>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={close}>
-						Cancel
+						{t("Cancel")}
 					</button>
 					<button type="button" className="btn primary" disabled={cwd === undefined || busy} onClick={() => void start()}>
-						{busy ? "Starting…" : "Start session"}
+						{t(busy ? "Starting…" : "Start session")}
 					</button>
 				</div>
 			</div>
@@ -125,11 +126,11 @@ export function SearchOverlay() {
 	};
 	return (
 		<div className="scrim top" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-			<div className="modal" role="dialog" aria-modal="true" aria-label="Search sessions" style={{ gap: 14 }}>
+			<div className="modal" role="dialog" aria-modal="true" aria-label={t("Search sessions")} style={{ gap: 14 }}>
 				<input
 					className="search-input"
 					autoFocus
-					placeholder="Search sessions in all modes"
+					placeholder={t("Search sessions in all modes")}
 					value={query}
 					onChange={(event) => {
 						setQuery(event.target.value);
@@ -161,7 +162,7 @@ export function SearchOverlay() {
 							<span className="session-meta">{relativeTime(session.modified)}</span>
 						</button>
 					))}
-					{!results.length && <p className="sb-empty">No sessions match.</p>}
+					{!results.length && <p className="sb-empty">{t("No sessions match.")}</p>}
 				</div>
 			</div>
 		</div>
@@ -193,7 +194,7 @@ export function ConfirmDialog() {
 				</p>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={() => request.resolve(false)}>
-						Cancel
+						{t("Cancel")}
 					</button>
 					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
 						{request.confirmLabel}
@@ -243,10 +244,10 @@ export function StartingSessionDialog() {
 				)}
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={() => answer(request.id, { confirmed: false })}>
-						Decline
+						{t("Decline")}
 					</button>
 					<button ref={allowButton} type="button" className="btn primary" onClick={() => answer(request.id, { confirmed: true })}>
-						Allow
+						{t("Allow")}
 					</button>
 				</div>
 			</div>
@@ -271,11 +272,12 @@ export function TrustDialog() {
 					<span className="trust-icon">
 						<FolderIcon size={16} />
 					</span>
-					<h2 id="trust-title">Trust {baseName(request.cwd)}?</h2>
+					<h2 id="trust-title">{t("Trust {project}?", { project: baseName(request.cwd) })}</h2>
 				</div>
 				<p className="set-sub" style={{ margin: 0 }}>
-					This project has its own pi setup. Trusting it lets its settings apply and its extensions, MCP servers
-					and packages run on your computer. Only trust projects you know.
+					{t(
+						"This project has its own pi setup. Trusting it lets its settings apply and its extensions, MCP servers and packages run on your computer. Only trust projects you know.",
+					)}
 				</p>
 				<div className="trust-box">
 					<span className="mono trust-path" title={request.cwd}>
@@ -291,16 +293,16 @@ export function TrustDialog() {
 						</div>
 					)}
 				</div>
-				<p className="trust-note">Saved in pi&apos;s trust list, so the pi CLI remembers it too. &ldquo;Just this time&rdquo; asks again next launch.</p>
+				<p className="trust-note">{t("Saved in pi's trust list, so the pi CLI remembers it too. “Just this time” asks again next launch.")}</p>
 				<div className="modal-foot">
 					<button type="button" className="btn ghost" onClick={() => answer("never")}>
-						Don&apos;t trust
+						{t("Don't trust")}
 					</button>
 					<button type="button" className="btn" onClick={() => answer("once")}>
-						Just this time
+						{t("Just this time")}
 					</button>
 					<button ref={trustButton} type="button" className="btn primary" onClick={() => answer("trust")}>
-						Trust
+						{t("Trust")}
 					</button>
 				</div>
 			</div>

@@ -16,18 +16,19 @@ import { attempt, closeSettings, errorText, trivium, useStore } from "../store.t
 import { MEMORY_COLORS, NEUTRAL, THEMES, themeVars } from "../theme.ts";
 import { transition } from "../transition.ts";
 import { Dropdown } from "./Dropdown.tsx";
+import { getLocale, t, tx } from "../i18n.tsx";
 
 type Section = { kind: "global" } | { kind: "project"; cwd: string } | { kind: "daily" } | { kind: "deleted" };
 
 const sameSection = (a: Section, b: Section) => a.kind === b.kind && (a.kind !== "project" || a.cwd === (b as { cwd: string }).cwd);
 
-const CATEGORY_OPTIONS = [
+const categoryOptions = () => [
 	...MEMORY_CATEGORIES.map((category) => ({ value: category, label: categoryLabel(category) })),
-	{ value: "", label: "note" },
+	{ value: "", label: t("note") },
 ];
 
 function categoryLabel(category: MemoryCategory | undefined): string {
-	return category === "tool-quirk" ? "tool quirk" : (category ?? "note");
+	return t(category === "tool-quirk" ? "tool quirk" : (category ?? "note"));
 }
 
 const FILTERS: { label: string; match: (category: MemoryCategory | undefined) => boolean }[] = [
@@ -112,27 +113,32 @@ export function MemoryPage() {
 
 	return (
 		<div className="mem-page" style={themeVars({ ...NEUTRAL, ...MEMORY_COLORS[section.kind] })}>
-			<nav className="set-nav drag" aria-label="Memory">
+			<nav className="set-nav drag" aria-label={t("Memory")}>
 				<button type="button" className="back" onClick={closeSettings}>
 					<BackIcon />
-					Back to {THEMES[app].name}
+					{t("Back to {mode}", { mode: t(THEMES[app].name) })}
 				</button>
-				<h1>Memory</h1>
-				{item({ kind: "global" }, "Everywhere", <GlobeIcon size={14} />, <span className="s-nav-meta">{overview?.global.entries ?? ""}</span>)}
-				<div className="set-nav-head">Workspaces</div>
+				<h1>{t("Memory")}</h1>
+				{item({ kind: "global" }, t("Everywhere"), <GlobeIcon size={14} />, <span className="s-nav-meta">{overview?.global.entries ?? ""}</span>)}
+				<div className="set-nav-head">{t("Workspaces")}</div>
 				{overview?.workspaces.map((entry) =>
 					item(
 						{ kind: "project", cwd: entry.cwd },
 						entry.name,
 						<FolderIcon size={14} />,
-						entry.consent === false ? <span className="s-nav-meta warn">Off</span> : <span className="s-nav-meta">{entry.entries}</span>,
+						entry.consent === false ? <span className="s-nav-meta warn">{t("Off")}</span> : <span className="s-nav-meta">{entry.entries}</span>,
 					),
 				)}
-				{overview && !overview.workspaces.length && <p className="mem-nav-empty">None yet. A project gets one when the agent first saves something there.</p>}
-				<div className="set-nav-head">Logs</div>
-				{item({ kind: "daily" }, "Daily log", <CalendarIcon size={14} />, <span className="s-nav-meta">{overview ? `${overview.days} ${overview.days === 1 ? "day" : "days"}` : ""}</span>)}
+				{overview && !overview.workspaces.length && <p className="mem-nav-empty">{t("None yet. A project gets one when the agent first saves something there.")}</p>}
+				<div className="set-nav-head">{t("Logs")}</div>
+				{item(
+					{ kind: "daily" },
+					t("Daily log"),
+					<CalendarIcon size={14} />,
+					<span className="s-nav-meta">{overview ? t(overview.days === 1 ? "{n} day" : "{n} days", { n: overview.days }) : ""}</span>,
+				)}
 				<span style={{ flex: 1 }} />
-				{item({ kind: "deleted" }, "Recently deleted", <TrashIcon size={14} />, overview?.deleted ? <span className="s-nav-meta">{overview.deleted}</span> : undefined)}
+				{item({ kind: "deleted" }, t("Recently deleted"), <TrashIcon size={14} />, overview?.deleted ? <span className="s-nav-meta">{overview.deleted}</span> : undefined)}
 			</nav>
 			<div className="workspace">
 				<main className="card set-card">
@@ -148,10 +154,10 @@ export function MemoryPage() {
 			</div>
 			{undo && (
 				<div className="mem-undo" role="status">
-					<span className="ellipsis">Deleted “{undo.text.replaceAll("`", "")}”</span>
+					<span className="ellipsis">{t("Deleted “{text}”", { text: undo.text.replaceAll("`", "") })}</span>
 					<button type="button" onClick={() => void restore(undo.id)}>
 						<UndoIcon />
-						Undo
+						{t("Undo")}
 					</button>
 				</div>
 			)}
@@ -188,17 +194,20 @@ const matches = (entry: MemoryEntry, query: string) => !query || `${entry.catego
 function Meter({ file, off }: { file: MemoryFile; off?: boolean }) {
 	const cut = file.entries.filter((entry) => !entry.loaded).length;
 	const full = cut > 0 || file.chars >= file.limit;
-	const label = off
-		? "Not loading: turned off for this workspace"
-		: cut
-			? `Full: the last ${cut === 1 ? "entry doesn't" : `${cut} entries don't`} load`
-			: "load into each session";
+	const label = t(
+		off
+			? "Not loading: turned off for this workspace"
+			: cut
+				? cut === 1
+					? "Full: the last entry doesn't load"
+					: "Full: the last {n} entries don't load"
+				: "load into each session",
+		{ n: cut },
+	);
 	return (
 		<div className="s-card mem-meter">
 			<div className="mem-meter-top">
-				<div>
-					<strong>{chars(Math.min(file.chars, file.limit))}</strong> of {chars(file.limit)} characters
-				</div>
+				<div>{tx("{used} of {limit} characters", { used: <strong>{chars(Math.min(file.chars, file.limit))}</strong>, limit: chars(file.limit) })}</div>
 				<span>{label}</span>
 			</div>
 			<div className={`mem-bar${full ? " full" : ""}${off ? " off" : ""}`}>
@@ -236,20 +245,20 @@ function EntryRow({ entry, actions }: { entry: MemoryEntry; actions: RowActions 
 				<EntryText text={entry.text} />
 			</span>
 			{entry.recalled && (
-				<span className="mem-recalled" title="Failures and corrections from the last 30 days reach every new session">
-					Recalled
+				<span className="mem-recalled" title={t("Failures and corrections from the last 30 days reach every new session")}>
+					{t("Recalled")}
 				</span>
 			)}
 			<span className="mem-actions">
 				{actions.canMoveUp && (
-					<button type="button" className="s-icon-btn" aria-label="Move to top" title="Move to top" onClick={() => void moveUp()}>
+					<button type="button" className="s-icon-btn" aria-label={t("Move to top")} title={t("Move to top")} onClick={() => void moveUp()}>
 						<ToTopIcon />
 					</button>
 				)}
-				<button type="button" className="s-icon-btn" aria-label="Edit" title="Edit" onClick={() => setEditing(true)}>
+				<button type="button" className="s-icon-btn" aria-label={t("Edit")} title={t("Edit")} onClick={() => setEditing(true)}>
 					<PenIcon size={13} />
 				</button>
-				<button type="button" className="s-icon-btn" aria-label="Delete" title="Delete" onClick={() => void remove()}>
+				<button type="button" className="s-icon-btn" aria-label={t("Delete")} title={t("Delete")} onClick={() => void remove()}>
 					<TrashIcon />
 				</button>
 			</span>
@@ -298,7 +307,7 @@ function EntryForm({ actions, entry, done, file }: { actions: RowActions; entry?
 			done();
 		}
 	};
-	const picker = <Dropdown value={category} options={CATEGORY_OPTIONS} onChange={setCategory} label="Category" />;
+	const picker = <Dropdown value={category} options={categoryOptions()} onChange={setCategory} label={t("Category")} />;
 	const secret = error && (
 		<div className="mem-error">
 			<ShieldIcon />
@@ -308,16 +317,16 @@ function EntryForm({ actions, entry, done, file }: { actions: RowActions; entry?
 	if (entry) {
 		return (
 			<div className={`mem-edit${error ? " bad" : ""}`}>
-				<textarea ref={field} rows={2} value={text} aria-label="Memory" onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown} />
+				<textarea ref={field} rows={2} value={text} aria-label={t("Memory")} onChange={(event) => setText(event.target.value)} onKeyDown={onKeyDown} />
 				{secret}
 				<div className="mem-edit-foot">
 					{picker}
-					<span className="hint">One line{file ? ` in ${file}` : ""}. Enter saves, Esc cancels.</span>
+					<span className="hint">{t(file ? "One line in {file}. Enter saves, Esc cancels." : "One line. Enter saves, Esc cancels.", { file: file ?? "" })}</span>
 					<button type="button" className="s-btn" onClick={done}>
-						Cancel
+						{t("Cancel")}
 					</button>
 					<button type="button" className="s-btn accent" disabled={!text.trim() || busy} onClick={() => void save()}>
-						Save
+						{t("Save")}
 					</button>
 				</div>
 			</div>
@@ -330,8 +339,8 @@ function EntryForm({ actions, entry, done, file }: { actions: RowActions; entry?
 				<input
 					ref={field}
 					value={text}
-					placeholder="Add something to remember, such as how to start the dev server"
-					aria-label="New memory"
+					placeholder={t("Add something to remember, such as how to start the dev server")}
+					aria-label={t("New memory")}
 					onChange={(event) => {
 						setText(event.target.value);
 						setError(undefined);
@@ -340,7 +349,7 @@ function EntryForm({ actions, entry, done, file }: { actions: RowActions; entry?
 				/>
 				<button type="button" className="s-btn accent" disabled={!text.trim() || busy} onClick={() => void save()}>
 					<PlusIcon size={13} />
-					Add
+					{t("Add")}
 				</button>
 			</div>
 			{secret}
@@ -376,14 +385,18 @@ function FilePage({
 		<>
 			<Header
 				icon={global ? <GlobeIcon size={20} /> : <FolderIcon size={20} />}
-				title={global ? "Everywhere" : (workspace?.name ?? "Workspace")}
-				subtitle={global ? "Preferences and facts that follow you into every project and mode." : "What the agent knows about this project, loaded into every session here."}
+				title={global ? t("Everywhere") : (workspace?.name ?? t("Workspace"))}
+				subtitle={t(
+					global
+						? "Preferences and facts that follow you into every project and mode."
+						: "What the agent knows about this project, loaded into every session here.",
+				)}
 			>
-				<Search value={query} onChange={setQuery} placeholder={global ? "Search everywhere" : "Search this workspace"} />
+				<Search value={query} onChange={setQuery} placeholder={t(global ? "Search everywhere" : "Search this workspace")} />
 				{file.exists && (
 					<button type="button" className="s-btn" onClick={() => void attempt(() => trivium.openFile(file.path))}>
 						<ExternalIcon size={13} />
-						Open file
+						{t("Open file")}
 					</button>
 				)}
 			</Header>
@@ -391,13 +404,13 @@ function FilePage({
 			<section className="s-group">
 				<div className="s-group-head">
 					<div>
-						<h3>Entries</h3>
-						<p>{global ? "Loaded from the top, so move what matters most up." : "Saved by the agent when you ask it to remember, or when you correct it."}</p>
+						<h3>{t("Entries")}</h3>
+						<p>{t(global ? "Loaded from the top, so move what matters most up." : "Saved by the agent when you ask it to remember, or when you correct it.")}</p>
 					</div>
-					<div className="mem-filters" role="group" aria-label="Show">
+					<div className="mem-filters" role="group" aria-label={t("Show")}>
 						{FILTERS.map((entry) => (
 							<button key={entry.label} type="button" aria-pressed={entry === filter} onClick={() => setFilter(entry)}>
-								{entry.label}
+								{t(entry.label)}
 							</button>
 						))}
 					</div>
@@ -405,16 +418,16 @@ function FilePage({
 				<div className="s-card mem-list">
 					{!file.entries.length && (
 						<p className="s-empty">
-							{global ? "Nothing yet. The agent saves here what you ask it to remember in every project." : "Nothing here yet."}
+							{t(global ? "Nothing yet. The agent saves here what you ask it to remember in every project." : "Nothing here yet.")}
 						</p>
 					)}
-					{file.entries.length > 0 && !shown.length && <p className="s-empty">No entries match.</p>}
+					{file.entries.length > 0 && !shown.length && <p className="s-empty">{t("No entries match.")}</p>}
 					{shown.map((entry, index) => (
 						<div key={`${entry.line}:${entry.raw}`} className="mem-item">
 							{index === firstOut && (
 								<div className="mem-cut">
 									<InfoIcon />
-									Past {chars(file.limit)} characters. These don't load, but the agent can still find them with search.
+									{t("Past {limit} characters. These don't load, but the agent can still find them with search.", { limit: chars(file.limit) })}
 								</div>
 							)}
 							<EntryRow entry={entry} actions={{ ...actions, canMoveUp: entry.line !== file.entries[0]?.line }} />
@@ -437,12 +450,13 @@ const GIT_HINT: Record<MemoryWorkspace["git"], string> = {
 
 function WorkspaceSettings({ workspace, reload }: { workspace: MemoryWorkspace; reload: () => void }) {
 	const on = workspace.consent === true;
-	const hint =
+	const hint = t(
 		workspace.consent === undefined
 			? "Not asked yet. The next session here asks before loading it."
 			: on
 				? "Sessions here load it. Turning it off applies to new sessions; the file stays."
-				: "Turned off, so sessions here don't load it. The file stays.";
+				: "Turned off, so sessions here don't load it. The file stays.",
+	);
 	const setConsent = async (allowed: boolean) => {
 		await attempt(() => trivium.setMemoryConsent(workspace.cwd, allowed));
 		reload();
@@ -455,32 +469,32 @@ function WorkspaceSettings({ workspace, reload }: { workspace: MemoryWorkspace; 
 		<section className="s-group">
 			<div className="s-group-head">
 				<div>
-					<h3>This workspace</h3>
+					<h3>{t("This workspace")}</h3>
 				</div>
 			</div>
 			<div className="s-card">
 				<div className="s-row">
 					<div className="s-row-text">
-						<span className="s-label">Load in sessions here</span>
+						<span className="s-label">{t("Load in sessions here")}</span>
 						<span className="s-hint">{hint}</span>
 					</div>
 					<div className="s-row-control">
-						<button type="button" role="switch" aria-checked={on} aria-label="Load in sessions here" className="switch" onClick={() => void setConsent(!on)}>
+						<button type="button" role="switch" aria-checked={on} aria-label={t("Load in sessions here")} className="switch" onClick={() => void setConsent(!on)}>
 							<span />
 						</button>
 					</div>
 				</div>
 				<div className="s-row">
 					<div className="s-row-text">
-						<span className="s-label">Memory file</span>
+						<span className="s-label">{t("Memory file")}</span>
 						<span className="s-hint">
-							<span className="mono s-path">.pi/memory/MEMORY.md</span> · {GIT_HINT[workspace.git]}
+							<span className="mono s-path">.pi/memory/MEMORY.md</span> · {t(GIT_HINT[workspace.git])}
 						</span>
 					</div>
 					{workspace.git === "untracked" && (
 						<div className="s-row-control">
-							<button type="button" className="s-btn" title="Adds it to .git/info/exclude, which only this computer reads" onClick={() => void keepLocal()}>
-								Keep it to me
+							<button type="button" className="s-btn" title={t("Adds it to .git/info/exclude, which only this computer reads")} onClick={() => void keepLocal()}>
+								{t("Keep it to me")}
 							</button>
 						</div>
 					)}
@@ -493,9 +507,9 @@ function WorkspaceSettings({ workspace, reload }: { workspace: MemoryWorkspace; 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function dayLabel(date: string, now = new Date()): string {
-	const label = new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
-	if (date === localDate(now)) return `Today · ${label}`;
-	if (date === localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return `Yesterday · ${label}`;
+	const label = new Date(`${date}T12:00:00`).toLocaleDateString(getLocale(), { weekday: "long", day: "numeric", month: "long" });
+	if (date === localDate(now)) return `${t("Today")} · ${label}`;
+	if (date === localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return `${t("Yesterday")} · ${label}`;
 	return label;
 }
 
@@ -509,38 +523,42 @@ function DailyPage({ version, reload, onDeleted }: { version: number; reload: ()
 	const shown = days.map((day) => ({ day, entries: day.file.entries.filter((entry) => matches(entry, query)) })).filter((day) => day.entries.length);
 	return (
 		<>
-			<Header icon={<CalendarIcon size={20} />} title="Daily log" subtitle="Notes the agent keeps as it works, by day, across every project.">
-				<Search value={query} onChange={setQuery} placeholder="Search the log" />
+			<Header icon={<CalendarIcon size={20} />} title={t("Daily log")} subtitle={t("Notes the agent keeps as it works, by day, across every project.")}>
+				<Search value={query} onChange={setQuery} placeholder={t("Search the log")} />
 			</Header>
 			<div className="s-card mem-rules">
 				<div>
-					<strong>Loaded</strong>
-					<span>Today and yesterday, in every session</span>
+					<strong>{t("Loaded")}</strong>
+					<span>{t("Today and yesterday, in every session")}</span>
 				</div>
 				<div>
-					<strong>Recalled</strong>
-					<span>Failures and corrections from the last 30 days</span>
+					<strong>{t("Recalled")}</strong>
+					<span>{t("Failures and corrections from the last 30 days")}</span>
 				</div>
 				<div>
-					<strong>Searched</strong>
-					<span>Every older day, when the agent looks</span>
+					<strong>{t("Searched")}</strong>
+					<span>{t("Every older day, when the agent looks")}</span>
 				</div>
 			</div>
 			<section className="s-group">
 				<div className="s-group-head">
 					<div>
-						<h3>Days</h3>
-						<p>One file per day, newest first.</p>
+						<h3>{t("Days")}</h3>
+						<p>{t("One file per day, newest first.")}</p>
 					</div>
 				</div>
 				<div className="s-card mem-list">
-					{!days.length && <p className="s-empty">No log yet. The agent writes here as it works.</p>}
-					{days.length > 0 && !shown.length && <p className="s-empty">No entries match.</p>}
+					{!days.length && <p className="s-empty">{t("No log yet. The agent writes here as it works.")}</p>}
+					{days.length > 0 && !shown.length && <p className="s-empty">{t("No entries match.")}</p>}
 					{shown.map(({ day, entries }) => (
 						<div key={day.date} className="mem-item">
 							<div className="mem-day">
 								<span>{dayLabel(day.date)}</span>
-								<span>{day.file.loads ? `${chars(Math.min(day.file.chars, day.file.limit))} of ${chars(day.file.limit)} characters` : "Not loaded"}</span>
+								<span>
+									{day.file.loads
+										? t("{used} of {limit} characters", { used: chars(Math.min(day.file.chars, day.file.limit)), limit: chars(day.file.limit) })
+										: t("Not loaded")}
+								</span>
 							</div>
 							{entries.map((entry) => (
 								<EntryRow key={`${entry.line}:${entry.raw}`} entry={entry} actions={{ target: { kind: "daily", date: day.date }, reload, onDeleted }} />
@@ -561,10 +579,10 @@ function DeletedPage({ version, restore }: { version: number; restore: (id: stri
 	if (!list) return null;
 	return (
 		<>
-			<Header icon={<TrashIcon size={20} />} title="Recently deleted" subtitle="What you or the agent deleted stays here until it's restored." />
+			<Header icon={<TrashIcon size={20} />} title={t("Recently deleted")} subtitle={t("What you or the agent deleted stays here until it's restored.")} />
 			<section className="s-group">
 				<div className="s-card mem-list">
-					{!list.length && <p className="s-empty">Nothing deleted.</p>}
+					{!list.length && <p className="s-empty">{t("Nothing deleted.")}</p>}
 					{list.map((deletion) => (
 						<div key={deletion.id} className="mem-entry mem-deleted">
 							<span className="mem-time">{relativeTime(deletion.timestamp)}</span>
@@ -581,7 +599,7 @@ function DeletedPage({ version, restore }: { version: number; restore: (id: stri
 							</div>
 							<button type="button" className="s-btn" onClick={() => void restore(deletion.id)}>
 								<UndoIcon size={13} />
-								Restore
+								{t("Restore")}
 							</button>
 						</div>
 					))}

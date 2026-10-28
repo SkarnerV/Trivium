@@ -1,3 +1,4 @@
+import { sentences, t } from "../shared/i18n.ts";
 import type { LimitNotice } from "../shared/protocol.ts";
 
 /**
@@ -6,7 +7,7 @@ import type { LimitNotice } from "../shared/protocol.ts";
  * stays available as the notice's detail. Unrecognized errors return undefined and show as they are.
  */
 
-const PICK = "Pick another model to keep going.";
+const pick = () => t("Pick another model to keep going.");
 
 interface Body {
 	code: string;
@@ -40,35 +41,34 @@ function statusOf(text: string): number | undefined {
 	return match ? Number(match[1]) : undefined;
 }
 
-function inAbout(minutes: number): string {
-	if (minutes < 2) return "in a minute or so";
-	if (minutes < 90) return `in about ${minutes} minutes`;
-	const hours = Math.round(minutes / 60);
-	return `in about ${hours} hours`;
+function resetsIn(minutes: number): string {
+	if (minutes < 2) return t("It resets in a minute or so.");
+	if (minutes < 90) return t("It resets in about {n} minutes.", { n: minutes });
+	return t("It resets in about {n} hours.", { n: Math.round(minutes / 60) });
 }
 
 /** `seen` is the text plus the JSON error type, which some providers name the limit with. */
 function chatgpt(text: string, seen: string): LimitNotice | undefined {
 	if (/subscription_sharing_workplace_individual_usage_limit_exceeded|workspace's usage limit/i.test(seen)) {
 		return {
-			message: `You've reached the ChatGPT usage limit your workspace admin set. Only an admin can raise it. ${PICK}`,
-			link: { label: "Workspace usage limits", url: "https://admin.openai.com" },
+			message: sentences(t("You've reached the ChatGPT usage limit your workspace admin set. Only an admin can raise it."), pick()),
+			link: { label: t("Workspace usage limits"), url: "https://admin.openai.com" },
 			detail: text,
 		};
 	}
 	if (/subscription.?sharing.?usage.?limit|usage_limit_reached|hit your ChatGPT usage limit/i.test(seen)) {
 		const minutes = /try again in ~(\d+) min/i.exec(seen)?.[1];
-		const when = minutes ? `It resets ${inAbout(Number(minutes))}.` : "It resets after a while; your usage page shows when.";
+		const when = minutes ? resetsIn(Number(minutes)) : t("It resets after a while; your usage page shows when.");
 		return {
-			message: `You've reached your ChatGPT plan's usage limit. ${when} ${PICK}`,
-			link: { label: "ChatGPT usage", url: "https://chatgpt.com/settings/usage" },
+			message: sentences(t("You've reached your ChatGPT plan's usage limit."), when, pick()),
+			link: { label: t("ChatGPT usage"), url: "https://chatgpt.com/settings/usage" },
 			detail: text,
 		};
 	}
 	if (/insufficient_quota|exceeded your current quota/i.test(seen)) {
 		return {
-			message: `Your OpenAI API account has run out of credit. Add credit in OpenAI's billing settings, or ${PICK.toLowerCase()}`,
-			link: { label: "OpenAI billing", url: "https://platform.openai.com/settings/organization/billing/overview" },
+			message: t("Your OpenAI API account has run out of credit. Add credit in OpenAI's billing settings, or pick another model to keep going."),
+			link: { label: t("OpenAI billing"), url: "https://platform.openai.com/settings/organization/billing/overview" },
 			detail: text,
 		};
 	}
@@ -76,14 +76,17 @@ function chatgpt(text: string, seen: string): LimitNotice | undefined {
 }
 
 function opencode(text: string, seen: string, provider: string): LimitNotice | undefined {
-	const link = { label: "OpenCode Go limits", url: "https://opencode.ai/docs/go/" };
+	const link = { label: t("OpenCode Go limits"), url: "https://opencode.ai/docs/go/" };
 	if (/FreeUsageLimitError|free usage exceeded/i.test(seen)) {
-		return { message: `You've used up OpenCode's free usage. Subscribe to OpenCode Go, or ${PICK.toLowerCase()}`, link, detail: text };
+		return { message: t("You've used up OpenCode's free usage. Subscribe to OpenCode Go, or pick another model to keep going."), link, detail: text };
 	}
 	const go = /GoUsageLimitError|Go usage limit/i.test(seen);
 	if (go || (provider.startsWith("opencode") && /usage limit reached|available balance|quota exceeded/i.test(seen))) {
 		return {
-			message: `You've reached an OpenCode Go usage limit. Go has 5-hour, weekly and monthly limits; it can fall back to your Zen balance if you turn that on in OpenCode. ${PICK}`,
+			message: sentences(
+				t("You've reached an OpenCode Go usage limit. Go has 5-hour, weekly and monthly limits; it can fall back to your Zen balance if you turn that on in OpenCode."),
+				pick(),
+			),
 			link,
 			detail: text,
 		};
@@ -95,8 +98,8 @@ function deepseek(text: string, provider: string, status: number | undefined): L
 	if (!provider.startsWith("deepseek") && !/deepseek/i.test(text)) return undefined;
 	if (status !== 402 && !/insufficient.?balance/i.test(text)) return undefined;
 	return {
-		message: `Your DeepSeek balance has run out. Top it up, or ${PICK.toLowerCase()}`,
-		link: { label: "Top up DeepSeek", url: "https://platform.deepseek.com/top_up" },
+		message: t("Your DeepSeek balance has run out. Top it up, or pick another model to keep going."),
+		link: { label: t("Top up DeepSeek"), url: "https://platform.deepseek.com/top_up" },
 		detail: text,
 	};
 }
@@ -116,32 +119,37 @@ function zai(text: string, provider: string, body: Body): LimitNotice | undefine
 		: { label: "GLM Coding Plan", url: "https://z.ai/subscribe" };
 	const said = body.message || text;
 	const reset = /resets? at ([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]{5,8})/i.exec(said)?.[1];
-	const when = reset ? ` It resets at ${reset}.` : "";
+	const when = reset && t("It resets at {time}.", { time: reset });
 	switch (code) {
 		case "1113":
-			return { message: `Your Z.ai account has no balance or resource package left. Recharge it, or ${PICK.toLowerCase()}`, link, detail: text };
+			return { message: t("Your Z.ai account has no balance or resource package left. Recharge it, or pick another model to keep going."), link, detail: text };
 		case "1309":
-			return { message: `Your GLM Coding Plan has expired. Renew it, or ${PICK.toLowerCase()}`, link, detail: text };
+			return { message: t("Your GLM Coding Plan has expired. Renew it, or pick another model to keep going."), link, detail: text };
 		case "1311":
-			return { message: "Your GLM Coding Plan doesn't include this model. Pick another model to keep going.", link, detail: text };
+			return { message: sentences(t("Your GLM Coding Plan doesn't include this model."), pick()), link, detail: text };
 		case "1313":
 			return {
-				message: `Z.ai has slowed your requests under its Fair Usage Policy, and asks for a request on its site to restore access. ${PICK}`,
+				message: sentences(t("Z.ai has slowed your requests under its Fair Usage Policy, and asks for a request on its site to restore access."), pick()),
 				link,
 				detail: text,
 			};
 	}
 	const window = { "1316": "5-hour", "1317": "weekly", "1318": "5-hour", "1319": "weekly", "1320": "5-hour", "1321": "weekly" }[code];
 	const hours = /for (\d+) ?hours?\b/i.exec(said)?.[1];
-	const span = window ?? (code === "1310" ? "weekly or monthly" : hours ? `${hours}-hour` : "");
+	const span = window ? t(window) : code === "1310" ? t("weekly or monthly") : hours ? t("{n}-hour", { n: hours }) : "";
 	const extra =
 		code === "1316" || code === "1317"
-			? " Your balance can't cover extra usage."
+			? t("Your balance can't cover extra usage.")
 			: /^13(1[89]|2[01])$/.test(code)
-				? " Extra usage is blocked by your monthly spend limit."
+				? t("Extra usage is blocked by your monthly spend limit.")
 				: "";
 	return {
-		message: `You've reached your GLM Coding Plan's ${span ? `${span} ` : ""}usage limit.${when}${extra} ${PICK}`,
+		message: sentences(
+			span ? t("You've reached your GLM Coding Plan's {span} usage limit.", { span }) : t("You've reached your GLM Coding Plan's usage limit."),
+			when,
+			extra,
+			pick(),
+		),
 		link,
 		detail: text,
 	};
@@ -161,19 +169,21 @@ function zaiCodeFromText(text: string): string | undefined {
 
 function xiaomi(text: string, provider: string, status: number | undefined, body: Body): LimitNotice | undefined {
 	if (!provider.startsWith("xiaomi") && !/xiaomimimo/i.test(text)) return undefined;
-	const link = { label: "Xiaomi MiMo console", url: "https://platform.xiaomimimo.com/" };
+	const link = { label: t("Xiaomi MiMo console"), url: "https://platform.xiaomimimo.com/" };
 	if (status === 402 || /insufficient.?balance/i.test(text)) {
-		return { message: `Your Xiaomi MiMo balance has run out. Recharge it, or ${PICK.toLowerCase()}`, link, detail: text };
+		return { message: t("Your Xiaomi MiMo balance has run out. Recharge it, or pick another model to keep going."), link, detail: text };
 	}
 	if (status !== 429) return undefined;
 	if (/quota|token.?plan/i.test(body.message || text)) {
-		return { message: `Your Xiaomi MiMo Token Plan quota is used up. ${PICK}`, link, detail: text };
+		return { message: sentences(t("Your Xiaomi MiMo Token Plan quota is used up."), pick()), link, detail: text };
 	}
 	// MiMo answers 429 both for requests sent too fast and for a used-up Token Plan.
 	return {
-		message: provider.includes("token-plan")
-			? `Xiaomi MiMo turned the request away: either requests came too fast, or your Token Plan quota is used up. Wait a minute and try again; if it keeps happening, check your quota, or ${PICK.toLowerCase()}`
-			: "Xiaomi MiMo is limiting how fast requests can be sent. Wait a minute and try again.",
+		message: t(
+			provider.includes("token-plan")
+				? "Xiaomi MiMo turned the request away: either requests came too fast, or your Token Plan quota is used up. Wait a minute and try again; if it keeps happening, check your quota, or pick another model to keep going."
+				: "Xiaomi MiMo is limiting how fast requests can be sent. Wait a minute and try again.",
+		),
 		link,
 		detail: text,
 	};

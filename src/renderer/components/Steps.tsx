@@ -7,6 +7,7 @@ import { usePreviewOpener } from "../preview.ts";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
+import { t } from "../i18n.tsx";
 
 /** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". A note is its own words. */
 const VERBS: Record<string, string> = {
@@ -33,7 +34,7 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 		<div className={`live-cmd${running ? "" : " idle"}`}>
 			<div className="live-cmd-head">
 				<span className="live-dot" />
-				{step.tool !== "note" && <span className="live-cmd-label">{VERBS[step.tool] ?? `Using ${step.tool}`}</span>}
+				{step.tool !== "note" && <span className="live-cmd-label">{VERBS[step.tool] ? t(VERBS[step.tool]!) : t("Using {tool}", { tool: step.tool })}</span>}
 				{prose ? (
 					<span className="live-cmd-prose ellipsis">{step.target}</span>
 				) : (
@@ -45,7 +46,7 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 			</div>
 			{/* Only the latest line: enough to see it is moving. The full output is in the step. Until the
 			    command prints something, the line says so rather than sitting empty. */}
-			{step.tool === "bash" && running && <div className="live-cmd-out ellipsis">{lastLine(step.tail) || "Waiting for output\u2026"}</div>}
+			{step.tool === "bash" && running && <div className="live-cmd-out ellipsis">{lastLine(step.tail) || t("Waiting for output…")}</div>}
 		</div>
 	);
 }
@@ -75,11 +76,11 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 		<>
 			<button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
 				<span>
-					<strong className={live ? "shimmer" : undefined}>{live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked"}</strong>
-					{total && ` for ${total}`}
+					<strong className={live ? "shimmer" : undefined}>{t(live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked")}</strong>
+					{total && ` ${t("for {time}", { time: total })}`}
 				</span>
-				{count > 0 && <span>· {count} {count === 1 ? "step" : "steps"}</span>}
-				{failed > 0 && <span className="steps-failed">· {failed} failed</span>}
+				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
+				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
 				{count > 0 && <Chevron open={open} />}
 			</button>
 			{open && count > 0 && (
@@ -110,8 +111,8 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 												<button
 													type="button"
 													className="step-preview"
-													aria-label={`Preview ${step.target}`}
-													title="Preview"
+													aria-label={t("Preview {file}", { file: step.target })}
+													title={t("Preview")}
 													onClick={(event) => {
 														// Inside the step's summary: open the file, not the step.
 														event.preventDefault();
@@ -133,9 +134,9 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 											<Markdown text={step.content ?? step.target} />
 										) : (
 											<>
-												<div className="step-detail-label">Input</div>
+												<div className="step-detail-label">{t("Input")}</div>
 												<pre>{step.input ?? step.target}</pre>
-												<div className="step-detail-label">Output</div>
+												<div className="step-detail-label">{t("Output")}</div>
 												{step.images?.length ? (
 													<div className="step-images">
 														{step.images.map((image) => (
@@ -145,7 +146,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 												) : null}
 												{/* Beside an image, a one-line result like "Read image file [image/png]" says nothing new. */}
 												{!(step.images?.length && !step.output?.includes("\n")) && (
-													<pre>{step.output || step.tail || (step.status === "running" ? "Waiting for output…" : "No text output.")}</pre>
+													<pre>{step.output || step.tail || t(step.status === "running" ? "Waiting for output…" : "No text output.")}</pre>
 												)}
 											</>
 										)}

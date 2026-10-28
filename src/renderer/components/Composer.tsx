@@ -8,7 +8,8 @@ import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { ModelMenu } from "./ModelSelect.tsx";
-import { keyCombo } from "../platform.ts";
+import { keyCombo, keyName } from "../platform.ts";
+import { t } from "../i18n.tsx";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
 	const [open, setOpen] = useState(false);
@@ -19,7 +20,7 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 	const system = Math.min(context.systemTokens, used);
 	const conversation = Math.max(0, used - system);
 	const share = (value: number) => `${(value / context.window) * 100}%`;
-	const label = `Context used: ${tokens(used)} of ${tokens(context.window)} tokens`;
+	const label = t("Context used: {used} of {total} tokens", { used: tokens(used), total: tokens(context.window) });
 	return (
 		<div className="ctx">
 			<button
@@ -47,12 +48,10 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 			</button>
 			{open && (
 				<div className="ctx-card" role="tooltip">
-					<span className="ctx-title">Context</span>
+					<span className="ctx-title">{t("Context")}</span>
 					<div className="ctx-head">
 						<span className="ctx-percent">{Math.round(percent)}%</span>
-						<span className="ctx-total">
-							{tokens(used)} of {tokens(context.window)} tokens
-						</span>
+						<span className="ctx-total">{t("{used} of {total} tokens", { used: tokens(used), total: tokens(context.window) })}</span>
 					</div>
 					<div className="ctx-bar">
 						<div className="ctx-fill">
@@ -63,18 +62,18 @@ function ContextRing({ context }: { context?: ContextInfo }) {
 					</div>
 					<div className="ctx-legend">
 						<span className="swatch" style={{ background: "var(--ctx-system)" }} />
-						<span>System prompt and tools</span>
+						<span>{t("System prompt and tools")}</span>
 						<span className="num">~{tokens(system)}</span>
 						<span className="swatch" style={{ background: "var(--ctx-conversation)" }} />
-						<span>Conversation</span>
+						<span>{t("Conversation")}</span>
 						<span className="num">{context.tokens === null ? "?" : tokens(conversation)}</span>
 					</div>
 					<span className="ctx-note">
 						{context.tokens === null
-							? "Exact count arrives with the next response"
+							? t("Exact count arrives with the next response")
 							: context.compactAt === null
-								? "Automatic compaction is off"
-								: `Compacts automatically near ${context.compactAt}%`}
+								? t("Automatic compaction is off")
+								: t("Compacts automatically near {percent}%", { percent: context.compactAt })}
 					</span>
 				</div>
 			)}
@@ -99,8 +98,8 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 	// A config Trivium can't parse is the user's to edit by hand.
 	if (permissions.unreadable) return null;
 	const known = PERMISSION_LEVELS.some((entry) => entry.id === permissions.level);
-	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: entry.label }));
-	if (!known) options.push({ value: "custom", label: "Your own rules" });
+	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: t(entry.label) }));
+	if (!known) options.push({ value: "custom", label: t("Your own rules") });
 	const change = async (level: string) => {
 		const next = await attempt(() => trivium.setSessionPermissions(level));
 		if (!next) return;
@@ -112,7 +111,7 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 	};
 	return (
 		<Dropdown
-			label="Permission mode"
+			label={t("Permission mode")}
 			value={known ? permissions.level : "custom"}
 			options={options}
 			variant="ghost"
@@ -132,18 +131,18 @@ function Tray({ view }: { view: SessionView }) {
 	const row = (kind: "steer" | "queue", text: string, index: number) => (
 		<div key={`${kind}-${index}`} className="tray-row">
 			{kind === "steer" ? <SteerIcon /> : <QueueIcon />}
-			<span className={`kind ${kind === "steer" ? "steer" : ""}`}>{kind === "steer" ? "Steering" : "Queued"}</span>
+			<span className={`kind ${kind === "steer" ? "steer" : ""}`}>{t(kind === "steer" ? "Steering" : "Queued")}</span>
 			<span className="text ellipsis" title={text}>
 				{text}
 			</span>
-			<span className="when">{kind === "steer" ? "after this tool" : "after this run"}</span>
-			<button type="button" className="mini-btn" aria-label="Clear pending messages" title="Clear all pending messages" onClick={() => void clear()}>
+			<span className="when">{t(kind === "steer" ? "after this tool" : "after this run")}</span>
+			<button type="button" className="mini-btn" aria-label={t("Clear pending messages")} title={t("Clear all pending messages")} onClick={() => void clear()}>
 				<CloseIcon size={12} />
 			</button>
 		</div>
 	);
 	return (
-		<div className="tray" role="region" aria-label="Pending work">
+		<div className="tray" role="region" aria-label={t("Pending work")}>
 			{steering.map((text, index) => row("steer", text, index))}
 			{followUp.map((text, index) => row("queue", text, index))}
 		</div>
@@ -179,7 +178,7 @@ export function Composer({ view }: { view: SessionView }) {
 	const model = models.find((m) => m.key === view.model);
 	const imageWarning =
 		model && !model.images && files.items.some((item) => item.kind === "image")
-			? `${model.name} can't read images. Pick another model to send them.`
+			? t("{model} can't read images. Pick another model to send them.", { model: model.name })
 			: undefined;
 
 	useLayoutEffect(() => {
@@ -253,12 +252,16 @@ export function Composer({ view }: { view: SessionView }) {
 				>
 					<AttachmentChips items={files.items} pending={files.pending} warning={imageWarning} onRemove={files.remove} />
 					<label style={{ display: "block" }}>
-						<span className="sr-only">Message</span>
+						<span className="sr-only">{t("Message")}</span>
 						<textarea
 							ref={ref}
 							rows={1}
 							value={text}
-							placeholder={running ? `Queue a message for after this run, or ${keyCombo(["⌥", "↵"])} to steer it` : "Ask for the next change, or type / for commands"}
+							placeholder={
+								running
+									? t("Queue a message for after this run, or {keys} to steer it", { keys: keyCombo(["⌥", "↵"]) })
+									: t("Ask for the next change, or type / for commands")
+							}
 							onChange={(event) => setText(event.target.value)}
 							onPaste={(event) => {
 								const pasted = [...event.clipboardData.files];
@@ -270,21 +273,21 @@ export function Composer({ view }: { view: SessionView }) {
 						/>
 					</label>
 					<div className="composer-bar">
-						<button type="button" className="icon-btn attach-btn" aria-label="Attach files" title="Attach files or images" onClick={files.pick}>
+						<button type="button" className="icon-btn attach-btn" aria-label={t("Attach files")} title={t("Attach files or images")} onClick={files.pick}>
 							<PaperclipIcon />
 						</button>
 						{view.permissions && <PermissionPicker permissions={view.permissions} />}
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />
 						{running ? (
-							<button type="button" className="round-btn" aria-label="Stop" title="Stop (esc)" onClick={stop}>
+							<button type="button" className="round-btn" aria-label={t("Stop")} title={t("Stop ({key})", { key: keyName("esc") })} onClick={stop}>
 								<StopIcon />
 							</button>
 						) : (
 							<button
 								type="button"
 								className="round-btn"
-								aria-label="Send"
+								aria-label={t("Send")}
 								disabled={!text.trim() && !files.items.length}
 								onClick={() => void send("prompt")}
 							>

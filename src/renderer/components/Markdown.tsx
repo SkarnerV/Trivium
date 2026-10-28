@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { filePath, usePreviewOpener } from "../preview.ts";
+import { t } from "../i18n.tsx";
 
 // A small Markdown subset rendered straight to React elements, so model output
 // never reaches the DOM as HTML. Covers what agents write most: paragraphs,
@@ -38,7 +39,7 @@ function code(text: string, key: string, open: Opener): ReactNode {
 	const file = open && filePath(text);
 	if (!file) return <code key={key}>{text}</code>;
 	return (
-		<button key={key} type="button" className="path-link" title={`Preview ${file}`} onClick={() => open(file)}>
+		<button key={key} type="button" className="path-link" title={t("Preview {file}", { file })} onClick={() => open(file)}>
 			<code>{text}</code>
 		</button>
 	);

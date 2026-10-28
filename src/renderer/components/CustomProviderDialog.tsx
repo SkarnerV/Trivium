@@ -4,6 +4,7 @@ import { CloseIcon, TrashIcon } from "../icons.tsx";
 import { askConfirm, notify, trivium } from "../store.ts";
 import { Dropdown } from "./Dropdown.tsx";
 import { ModelList, messageOf, type Row } from "./ModelList.tsx";
+import { t, tx } from "../i18n.tsx";
 
 const APIS: { value: CustomApi; label: string; baseUrl: string }[] = [
 	{ value: "openai-completions", label: "OpenAI-compatible (Chat Completions)", baseUrl: "http://localhost:11434/v1" },
@@ -58,9 +59,9 @@ export function CustomProviderDialog({
 
 	const save = async () => {
 		setError(undefined);
-		if (!providerId) return setError("Give the endpoint a name.");
-		if (!provider && takenIds.includes(providerId)) return setError(`A provider called “${providerId}” exists already. Choose another ID.`);
-		if (!chosen.length) return setError("Choose at least one model, or add one by its ID.");
+		if (!providerId) return setError(t("Give the endpoint a name."));
+		if (!provider && takenIds.includes(providerId)) return setError(t("A provider called “{id}” exists already. Choose another ID.", { id: providerId }));
+		if (!chosen.length) return setError(t("Choose at least one model, or add one by its ID."));
 		setSaving(true);
 		try {
 			await trivium.saveCustomProvider(
@@ -74,7 +75,7 @@ export function CustomProviderDialog({
 				},
 				provider?.id,
 			);
-			notify(`Saved ${name.trim() || providerId}`, "info");
+			notify(t("Saved {name}", { name: name.trim() || providerId }), "info");
 			onSaved();
 			onClose();
 		} catch (thrown) {
@@ -87,9 +88,9 @@ export function CustomProviderDialog({
 	const remove = async () => {
 		if (!provider) return;
 		const ok = await askConfirm({
-			title: `Remove ${provider.name}?`,
-			message: "Its models disappear from Trivium and the pi CLI. Sessions that use them stay as they are.",
-			confirmLabel: "Remove",
+			title: t("Remove {name}?", { name: provider.name }),
+			message: t("Its models disappear from Trivium and the pi CLI. Sessions that use them stay as they are."),
+			confirmLabel: t("Remove"),
 		});
 		if (!ok) return;
 		try {
@@ -109,19 +110,20 @@ export function CustomProviderDialog({
 		>
 			<div className="modal cm" role="dialog" aria-modal="true" aria-labelledby="cm-title" style={{ width: 640 }}>
 				<div className="modal-head">
-					<h2 id="cm-title">{provider ? `Edit ${provider.name}` : "Add a custom endpoint"}</h2>
-					<button type="button" className="icon-btn" aria-label="Close" disabled={saving} onClick={onClose}>
+					<h2 id="cm-title">{provider ? t("Edit {name}", { name: provider.name }) : t("Add a custom endpoint")}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} disabled={saving} onClick={onClose}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
 				<p className="add-ext-intro">
-					For Ollama, LM Studio, vLLM, a proxy or any server that speaks one of these APIs. Saved in pi's{" "}
-					<span className="mono">models.json</span>, so the pi CLI offers the same models.
+					{tx("For Ollama, LM Studio, vLLM, a proxy or any server that speaks one of these APIs. Saved in pi's {file}, so the pi CLI offers the same models.", {
+						file: <span className="mono">models.json</span>,
+					})}
 				</p>
 
 				<div className="cm-grid">
 					<label className="cm-field">
-						<span>Name</span>
+						<span>{t("Name")}</span>
 						<input ref={first} className="cm-input" value={name} placeholder="Ollama" onChange={(event) => setName(event.target.value)} />
 					</label>
 					<label className="cm-field">
@@ -139,10 +141,10 @@ export function CustomProviderDialog({
 					</label>
 					<div className="cm-field wide">
 						<span>API</span>
-						<Dropdown label="API" value={api} options={APIS} onChange={(value) => setApi(value as CustomApi)} />
+						<Dropdown label="API" value={api} options={APIS.map((entry) => ({ ...entry, label: t(entry.label) }))} onChange={(value) => setApi(value as CustomApi)} />
 					</div>
 					<label className="cm-field wide">
-						<span>Base URL</span>
+						<span>{t("Base URL")}</span>
 						<input
 							className="cm-input mono"
 							value={baseUrl}
@@ -152,19 +154,21 @@ export function CustomProviderDialog({
 						/>
 					</label>
 					<label className="cm-field wide">
-						<span>API key</span>
+						<span>{t("API key")}</span>
 						<input
 							className="cm-input mono"
 							type={keyIsReference ? "text" : "password"}
 							autoComplete="off"
 							spellCheck={false}
 							value={apiKey}
-							placeholder="Not needed for local servers"
+							placeholder={t("Not needed for local servers")}
 							onChange={(event) => setApiKey(event.target.value)}
 						/>
 						<span className="cm-help">
-							Written to models.json as typed. <span className="mono">$NAME</span> reads an environment variable instead,{" "}
-							<span className="mono">!command</span> a command's output.
+							{tx("Written to models.json as typed. {env} reads an environment variable instead, {command} a command's output.", {
+								env: <span className="mono">$NAME</span>,
+								command: <span className="mono">!command</span>,
+							})}
 						</span>
 					</label>
 				</div>
@@ -173,8 +177,8 @@ export function CustomProviderDialog({
 					rows={rows}
 					setRows={setRows}
 					fetchModels={fetchModels}
-					manualPlaceholder="Add a model by ID, such as qwen3:8b"
-					emptyText="Fetch the endpoint's models, or add one by its ID. Limits and abilities can be set per model."
+					manualPlaceholder={t("Add a model by ID, such as qwen3:8b")}
+					emptyText={t("Fetch the endpoint's models, or add one by its ID. Limits and abilities can be set per model.")}
 				/>
 
 				{error && <div className="run-error">{error}</div>}
@@ -182,15 +186,15 @@ export function CustomProviderDialog({
 					{provider && (
 						<button type="button" className="btn ghost cm-delete" disabled={saving} onClick={() => void remove()}>
 							<TrashIcon size={14} />
-							Remove endpoint
+							{t("Remove endpoint")}
 						</button>
 					)}
 					<span className="btn-row">
 						<button type="button" className="btn ghost" disabled={saving} onClick={onClose}>
-							Cancel
+							{t("Cancel")}
 						</button>
 						<button type="button" className="btn primary" disabled={saving} onClick={() => void save()}>
-							{saving ? "Saving…" : "Save"}
+							{t(saving ? "Saving…" : "Save")}
 						</button>
 					</span>
 				</div>

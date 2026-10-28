@@ -12,6 +12,7 @@ import { hasSource, PreviewBody, PreviewTabs, previewMenu } from "./PreviewPanel
 import { Resizer } from "./Resizer.tsx";
 import { ServicesBody, useServices } from "./ServicesPanel.tsx";
 import { transition } from "../transition.ts";
+import { t } from "../i18n.tsx";
 
 function totals(changes: FileChange[]): { adds: number; dels: number } {
 	return changes.reduce((sum, change) => ({ adds: sum.adds + change.adds, dels: sum.dels + change.dels }), { adds: 0, dels: 0 });
@@ -59,10 +60,10 @@ function SessionChanges({ view }: { view: SessionView }) {
 		}
 	};
 
-	const files = changes.length === 1 ? "1 file" : `${changes.length} files`;
+	const files = t(changes.length === 1 ? "1 file" : "{n} files", { n: changes.length });
 	return (
 		<>
-			<div className="chips" role="tablist" aria-label="Changed files">
+			<div className="chips" role="tablist" aria-label={t("Changed files")}>
 				{changes.map((change) => (
 					<button
 						key={change.path}
@@ -74,8 +75,8 @@ function SessionChanges({ view }: { view: SessionView }) {
 						onClick={() => transition("tab", () => setSelected(change.path))}
 					>
 						<span>{baseName(change.rel)}</span>
-						{change.status === "added" && <span className="tag">new</span>}
-						{change.status === "deleted" && <span className="tag">deleted</span>}
+						{change.status === "added" && <span className="tag">{t("new")}</span>}
+						{change.status === "deleted" && <span className="tag">{t("deleted")}</span>}
 						{change.adds > 0 && <span className="plus">+{change.adds}</span>}
 						{change.dels > 0 && <span className="minus">−{change.dels}</span>}
 					</button>
@@ -84,24 +85,24 @@ function SessionChanges({ view }: { view: SessionView }) {
 			{current && (
 				<div className="diff" role="tabpanel">
 					<div className="diff-path">{current.rel}</div>
-					<DiffView lines={current.lines} tooLarge={current.tooLarge} empty={current.status === "deleted" ? "File deleted." : "Empty file."} />
+					<DiffView lines={current.lines} tooLarge={current.tooLarge} empty={t(current.status === "deleted" ? "File deleted." : "Empty file.")} />
 				</div>
 			)}
 			<div className="changes-foot">
 				<button type="button" className="btn primary" style={{ flex: 1 }} disabled={busy} onClick={() => void apply("keep")}>
-					Keep changes
+					{t("Keep changes")}
 				</button>
 				<button
 					type="button"
 					className={`btn revert${confirmRevert ? " confirm" : ""}`}
 					disabled={busy || view.running}
-					title={view.running ? "Stop the run before reverting" : `Restore ${files} to how they were before this session changed them`}
+					title={view.running ? t("Stop the run before reverting") : t("Restore {files} to how they were before this session changed them", { files })}
 					onClick={() => (confirmRevert ? void apply("revert") : setConfirmRevert(true))}
 				>
-					{confirmRevert ? `Revert ${files}?` : "Revert"}
+					{confirmRevert ? t("Revert {files}?", { files }) : t("Revert")}
 				</button>
 				{current && current.status !== "deleted" && (
-					<button type="button" className="btn square" aria-label="Preview" title="Preview" onClick={() => void openPreview(view.path, current.path)}>
+					<button type="button" className="btn square" aria-label={t("Preview")} title={t("Preview")} onClick={() => void openPreview(view.path, current.path)}>
 						<EyeIcon size={15} />
 					</button>
 				)}
@@ -109,8 +110,8 @@ function SessionChanges({ view }: { view: SessionView }) {
 					<button
 						type="button"
 						className="btn square"
-						aria-label="Open in editor"
-						title="Open in VS Code"
+						aria-label={t("Open in editor")}
+						title={t("Open in VS Code")}
 						onClick={() => void attempt(() => trivium.openInEditor(current.path, firstChangedLine(current)))}
 					>
 						<ExternalIcon />
@@ -146,23 +147,23 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 		const rect = event.currentTarget.getBoundingClientRect();
 		setMenu({ kind, x: rect.right, y: rect.bottom + 6 });
 	};
-	const title = { session: "Changes", git: "Git", preview: "Preview", services: "Services" }[tab];
+	const title = t({ session: "Changes", git: "Git", preview: "Preview", services: "Services" }[tab]);
 	const views: MenuEntry[] = [
 		{
-			label: "Changes",
+			label: t("Changes"),
 			icon: <FileIcon size={14} />,
-			hint: view.changes.length ? count(view.changes.length, "file") : undefined,
+			hint: view.changes.length ? fileCount(view.changes.length) : undefined,
 			checked: tab === "session",
 			onSelect: () => pick("session"),
 		},
 		...(git
-			? [{ label: "Git", icon: <BranchIcon size={14} />, hint: gitFileCount(git) ? count(gitFileCount(git), "file") : undefined, checked: tab === "git", onSelect: () => pick("git") }]
+			? [{ label: t("Git"), icon: <BranchIcon size={14} />, hint: gitFileCount(git) ? fileCount(gitFileCount(git)) : undefined, checked: tab === "git", onSelect: () => pick("git") }]
 			: []),
-		{ label: "Preview", icon: <EyeIcon size={14} />, hint: files.length ? `${files.length} open` : undefined, checked: tab === "preview", onSelect: () => pick("preview") },
+		{ label: t("Preview"), icon: <EyeIcon size={14} />, hint: files.length ? t("{n} open", { n: files.length }) : undefined, checked: tab === "preview", onSelect: () => pick("preview") },
 		{
-			label: "Services",
+			label: t("Services"),
 			icon: <ServerIcon size={14} />,
-			hint: services.length ? `${services.length} running` : undefined,
+			hint: services.length ? t("{n} running", { n: services.length }) : undefined,
 			checked: tab === "services",
 			onSelect: () => pick("services"),
 		},
@@ -185,23 +186,23 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 							type="button"
 							className="icon-btn"
 							aria-pressed={source}
-							aria-label="Show source"
-							title={source ? "Show it rendered" : "Show source"}
+							aria-label={t("Show source")}
+							title={t(source ? "Show it rendered" : "Show source")}
 							onClick={() => setSources({ ...sources, [file.path]: !source })}
 						>
 							<CodeIcon size={15} />
 						</button>
 					)}
 					{tab === "preview" && (
-						<button type="button" className="icon-btn" aria-label="More" title="More" aria-expanded={menu?.kind === "more"} onClick={toggleMenu("more")}>
+						<button type="button" className="icon-btn" aria-label={t("More")} title={t("More")} aria-expanded={menu?.kind === "more"} onClick={toggleMenu("more")}>
 							<MoreIcon size={16} />
 						</button>
 					)}
 					<button
 						type="button"
 						className="icon-btn"
-						aria-label="Choose what the panel shows"
-						title="Panel views"
+						aria-label={t("Choose what the panel shows")}
+						title={t("Panel views")}
 						aria-haspopup="menu"
 						aria-expanded={menu?.kind === "views"}
 						onClick={toggleMenu("views")}
@@ -212,8 +213,8 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					<button
 						type="button"
 						className="icon-btn"
-						aria-label="Hide panel"
-						title="Hide panel"
+						aria-label={t("Hide panel")}
+						title={t("Hide panel")}
 						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
 					>
 						<CloseIcon size={13} />
@@ -236,7 +237,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					x={menu.x}
 					y={menu.y}
 					align="right"
-					label={menu.kind === "views" ? "Show in panel" : "More"}
+					label={t(menu.kind === "views" ? "Show in panel" : "More")}
 					entries={menu.kind === "views" ? views : previewMenu(view.path, file)}
 					onClose={() => {
 						closed.current = { kind: menu.kind, at: Date.now() };
@@ -248,6 +249,6 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 	);
 }
 
-function count(n: number, noun: string): string {
-	return `${n} ${noun}${n === 1 ? "" : "s"}`;
+function fileCount(n: number): string {
+	return t(n === 1 ? "1 file" : "{n} files", { n });
 }

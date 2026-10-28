@@ -49,6 +49,7 @@ import type {
 	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
 import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
@@ -308,7 +309,7 @@ export class SessionHost {
 		if (!live) {
 			const unsaved = this.unsaved.get(path);
 			// pi would start a new, empty session at a path that is gone, and it would show under Code.
-			if (!unsaved && !existsSync(path)) throw new Error("This session no longer exists.");
+			if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
 			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
 			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
 			live = await this.start(app, manager.getCwd(), manager);
@@ -374,11 +375,11 @@ export class SessionHost {
 	 */
 	async editMessage(path: string, index: number, text: string): Promise<void> {
 		const live = this.require(path);
-		if (live.running) throw new Error("Stop the run before editing an earlier message.");
+		if (live.running) throw new Error(t("Stop the run before editing an earlier message."));
 		const entry = this.userEntry(live, index);
 		const original = attachmentsOf(entry.message.content);
 		const attached = original.prefix || original.images.length ? original : undefined;
-		if (!text.trim() && !attached) throw new Error("Write a message to send.");
+		if (!text.trim() && !attached) throw new Error(t("Write a message to send."));
 		const result = await live.session.navigateTree(entry.id);
 		if (result.cancelled) return;
 		live.tracker = new RunTracker(live.session.messages, this.thumbnail);
@@ -400,7 +401,7 @@ export class SessionHost {
 			const result = await runner.emit({ type: "session_before_fork", entryId: entry.id, position: "before" });
 			if (result?.cancel) return undefined;
 		}
-		if (!existsSync(path)) throw new Error("This session has not been saved yet. Send a message before forking it.");
+		if (!existsSync(path)) throw new Error(t("This session has not been saved yet. Send a message before forking it."));
 		// A second manager on the same file, as pi's own fork does, so the live session is left alone.
 		const source = SessionManager.open(path);
 		let manager = source;
@@ -427,7 +428,7 @@ export class SessionHost {
 			.filter((entry): entry is UserEntry => entry.type === "message" && entry.message.role === "user");
 		const entry = wanted ? entries[entries.length - 1 - wanted.later] : undefined;
 		if (!entry || splitAttachments(entry.message.content).prompt !== wanted?.prompt) {
-			throw new Error("That message is no longer in this session.");
+			throw new Error(t("That message is no longer in this session."));
 		}
 		return entry;
 	}
@@ -442,19 +443,19 @@ export class SessionHost {
 		const [, name = "", args = ""] = /^\/(\S*)\s*([\s\S]*)$/.exec(text) ?? [];
 		const fail = (error: unknown) => this.notice(error instanceof Error ? error.message : String(error), "error");
 		if (name === "compact") {
-			if (live.running) throw new Error("Wait for the run to finish, or stop it, before compacting.");
-			this.notice("Compacting the conversation…", "info");
+			if (live.running) throw new Error(t("Wait for the run to finish, or stop it, before compacting."));
+			this.notice(t("Compacting the conversation…"), "info");
 			void session
 				.compact(args.trim() || undefined)
 				.then(() => {
 					this.emitStatus(live);
-					this.notice("Conversation compacted", "info");
+					this.notice(t("Conversation compacted"), "info");
 				})
 				.catch(fail);
 			return;
 		}
 		if (name === "name") {
-			if (!args.trim()) throw new Error("Give the session a name: /name <title>");
+			if (!args.trim()) throw new Error(t("Give the session a name: /name <title>"));
 			session.setSessionName(args.trim());
 			return;
 		}
@@ -521,7 +522,7 @@ export class SessionHost {
 		const { session } = this.require(path);
 		const slash = modelKey.indexOf("/");
 		const model = this.modelRuntime.getModel(modelKey.slice(0, slash), modelKey.slice(slash + 1));
-		if (!model) throw new Error(`Unknown model ${modelKey}`);
+		if (!model) throw new Error(t("Unknown model {model}", { model: modelKey }));
 		if (session.model?.provider !== model.provider || session.model?.id !== model.id) await session.setModel(model);
 		session.setThinkingLevel(thinkingLevel as Parameters<AgentSession["setThinkingLevel"]>[0]);
 		this.emitStatus(this.require(path));
@@ -535,7 +536,7 @@ export class SessionHost {
 
 	async revertChanges(path: string, files?: string[]): Promise<FileChange[]> {
 		const live = this.require(path);
-		if (live.running) throw new Error("Stop the run before reverting its changes.");
+		if (live.running) throw new Error(t("Stop the run before reverting its changes."));
 		await live.changes.revert(files);
 		return this.emitChanges(live);
 	}
@@ -543,14 +544,14 @@ export class SessionHost {
 	/** A transcript image of this session, by the id the transcript gave it. */
 	image(path: string, id: string): { data: string; mimeType: string } {
 		const image = this.require(path).tracker.image(id);
-		if (!image) throw new Error("That image is no longer in this session.");
+		if (!image) throw new Error(t("That image is no longer in this session."));
 		return image;
 	}
 
 	async readChangedFile(path: string, file: string): Promise<string> {
 		const live = this.require(path);
 		// Only files this session changed, so the renderer cannot read arbitrary paths.
-		if (!live.changes.has(file)) throw new Error("This session did not change that file.");
+		if (!live.changes.has(file)) throw new Error(t("This session did not change that file."));
 		return existsSync(file) ? readFile(file, "utf8") : "";
 	}
 
@@ -567,12 +568,12 @@ export class SessionHost {
 		const live = this.require(path);
 		const absolute = isAbsolute(file) ? file : resolve(live.cwd, file);
 		const real = await realpath(absolute).catch(() => {
-			throw new Error(`There's no file at ${file}.`);
+			throw new Error(t("There's no file at {path}.", { path: file }));
 		});
 		const project = isChat(live.cwd) ? undefined : await realpath(live.cwd).catch(() => undefined);
 		if (project && isInside(project, real)) return { file: real, root: project, rel: relative(project, real).split(sep).join("/") };
 		if (live.changes.has(absolute) || live.changes.has(real)) return { file: real, root: dirname(real), rel: real };
-		throw new Error("Only files in this session's project can be previewed.");
+		throw new Error(t("Only files in this session's project can be previewed."));
 	}
 
 	reviewFile(path: string, file: string): Promise<FileReview> {
@@ -587,7 +588,7 @@ export class SessionHost {
 		expect: { del: string; ins: string },
 	): Promise<FileReview> {
 		const live = this.require(path);
-		if (live.running && action === "reject") throw new Error("Stop the run before rejecting changes.");
+		if (live.running && action === "reject") throw new Error(t("Stop the run before rejecting changes."));
 		const review = await live.changes.resolve(file, id, action, expect);
 		await this.emitChanges(live);
 		return review;
@@ -619,7 +620,7 @@ export class SessionHost {
 		const listed = git?.files.find((f) => f.rel === file.rel && f.area === file.area);
 		if (!git || !listed) {
 			this.scheduleGit(live);
-			throw new Error("That file has no changes any more.");
+			throw new Error(t("That file has no changes any more."));
 		}
 		return readGitDiff(git.root, listed);
 	}
@@ -656,7 +657,7 @@ export class SessionHost {
 	async deleteSessions(paths: string[], trash: (path: string) => Promise<void>): Promise<string[]> {
 		for (const path of paths) {
 			const live = this.live.get(path);
-			if (live?.running) throw new Error(`"${this.titleFor(live)}" is still running. Stop it before deleting.`);
+			if (live?.running) throw new Error(t("“{title}” is still running. Stop it before deleting.", { title: this.titleFor(live) }));
 		}
 		const deleted: string[] = [];
 		for (const path of paths) {
@@ -768,14 +769,14 @@ export class SessionHost {
 			// pi reports only the command and its exit code; npm and git print the reason to the console.
 			const message = error instanceof Error ? error.message : String(error);
 			const tool = /\bspawn (npm|git)\b.*ENOENT/i.exec(message)?.[1] ?? (/ENOENT/.test(message) ? /^(npm|git)\b/.exec(message)?.[1] : undefined);
-			if (tool) throw new Error(`Installing ${source} needs ${tool}, and it isn't installed or isn't on your PATH.`);
-			if (/^npm install /.test(message)) throw new Error(`npm couldn't install ${source.replace(/^npm:/, "")}. Check the package name and your network connection.`);
-			if (/^git clone /.test(message)) throw new Error(`git couldn't clone ${source.replace(/^git:/, "")}. Check the address and that you can access the repository.`);
+			if (tool) throw new Error(t("Installing {source} needs {tool}, and it isn't installed or isn't on your PATH.", { source, tool }));
+			if (/^npm install /.test(message)) throw new Error(t("npm couldn't install {name}. Check the package name and your network connection.", { name: source.replace(/^npm:/, "") }));
+			if (/^git clone /.test(message)) throw new Error(t("git couldn't clone {name}. Check the address and that you can access the repository.", { name: source.replace(/^git:/, "") }));
 			throw error;
 		}
 		await settingsManager.flush();
 		const [failed] = settingsManager.drainErrors();
-		if (failed) throw new Error(`Installed, but pi's settings could not be saved: ${failed.error.message}`);
+		if (failed) throw new Error(t("Installed, but pi's settings could not be saved: {error}", { error: failed.error.message }));
 	}
 
 	/** What a new session in this app would load, with every extension pi finds, on or off. */
@@ -1164,7 +1165,7 @@ export class SessionHost {
 
 	private require(path: string): Live {
 		const live = this.live.get(path);
-		if (!live) throw new Error("This session is not open.");
+		if (!live) throw new Error(t("This session is not open."));
 		return live;
 	}
 

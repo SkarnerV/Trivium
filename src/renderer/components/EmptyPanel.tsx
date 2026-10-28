@@ -3,6 +3,7 @@ import { CloseIcon, FileIcon, PenIcon } from "../icons.tsx";
 import type { PanelKind } from "../panels.ts";
 import { setState } from "../store.ts";
 import { Resizer } from "./Resizer.tsx";
+import { t } from "../i18n.tsx";
 
 const COPY: Record<PanelKind, { title: string; heading: string; text: string }> = {
 	changes: {
@@ -26,15 +27,15 @@ const COPY: Record<PanelKind, { title: string; heading: string; text: string }> 
 export function EmptyPanel({ view, kind }: { view: SessionView; kind: PanelKind }) {
 	const copy = COPY[kind];
 	return (
-		<aside className="side-panel" aria-label={copy.title}>
+		<aside className="side-panel" aria-label={t(copy.title)}>
 			<Resizer target="panel" />
 			<div className="side-head">
-				<h2 className="side-title">{copy.title}</h2>
+				<h2 className="side-title">{t(copy.title)}</h2>
 				<button
 					type="button"
 					className="icon-btn"
-					aria-label={`Hide ${copy.title.toLowerCase()}`}
-					title={`Hide ${copy.title.toLowerCase()}`}
+					aria-label={t("Hide panel")}
+					title={t("Hide panel")}
 					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
 				>
 					<CloseIcon size={13} />
@@ -51,8 +52,8 @@ export function EmptyBody({ kind }: { kind: PanelKind }) {
 	return (
 		<div className="side-body panel-empty">
 			<span className="panel-empty-icon">{kind === "changes" ? <FileIcon size={18} /> : <PenIcon size={18} />}</span>
-			<h3>{copy.heading}</h3>
-			<p>{copy.text}</p>
+			<h3>{t(copy.heading)}</h3>
+			<p>{t(copy.text)}</p>
 		</div>
 	);
 }

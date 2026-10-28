@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { ModelOption } from "../../shared/protocol.ts";
 import { useStore } from "../store.ts";
 import { Dropdown, type DropdownOption, menuPlacement, OptionList } from "./Dropdown.tsx";
+import { t } from "../i18n.tsx";
 
 const EFFORT_LABELS: Record<string, string> = {
 	off: "No thinking",
@@ -24,7 +25,8 @@ const EFFORT_SHORT: Record<string, string> = {
 	max: "Max",
 };
 
-const effortLabel = (level: string) => EFFORT_LABELS[level] ?? level;
+const effortLabel = (level: string) => (EFFORT_LABELS[level] ? t(EFFORT_LABELS[level]) : level);
+const effortShort = (level: string) => (EFFORT_SHORT[level] ? t(EFFORT_SHORT[level]) : effortLabel(level));
 
 function levelsOf(model: ModelOption | undefined): string[] {
 	return model?.reasoning && model.thinkingLevels.length ? model.thinkingLevels : [];
@@ -42,7 +44,7 @@ function modelOptions(models: ModelOption[], value: string | undefined, emptyLab
 	const known = models.some((m) => m.key === value);
 	return [
 		...(emptyLabel !== undefined ? [{ value: "", label: emptyLabel }] : []),
-		...(value && !known ? [{ value, label: `${value.split("/").pop()} (unavailable)` }] : []),
+		...(value && !known ? [{ value, label: t("{model} (unavailable)", { model: value.split("/").pop() ?? value }) }] : []),
 		...models.map((m) => ({ value: m.key, label: m.name, group: m.provider })),
 	];
 }
@@ -82,12 +84,12 @@ export function ModelSelect({
 	return (
 		<div className="model-select">
 			<Dropdown
-				label="Model"
+				label={t("Model")}
 				value={value ?? ""}
 				options={modelOptions(models, value, emptyLabel)}
 				variant={variant}
 				align={align}
-				placeholder={emptyLabel ?? "Choose a model"}
+				placeholder={emptyLabel ?? t("Choose a model")}
 				onChange={(key) => {
 					const next = models.find((m) => m.key === key);
 					onChange(key || undefined, levelFor(next, level));
@@ -95,7 +97,7 @@ export function ModelSelect({
 			/>
 			{levels.length > 0 && (
 				<Dropdown
-					label="Thinking effort"
+					label={t("Thinking effort")}
 					value={effort}
 					options={levels.map((l) => ({ value: l, label: effortLabel(l) }))}
 					variant={variant}
@@ -131,7 +133,7 @@ export function ModelMenu({
 	const root = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
 	const slider = useRef<HTMLInputElement>(null);
-	const name = model?.name ?? (value ? value.split("/").pop()! : "Choose a model");
+	const name = model?.name ?? (value ? value.split("/").pop()! : t("Choose a model"));
 
 	const show = () => {
 		setPlacement(menuPlacement(trigger.current));
@@ -174,8 +176,10 @@ export function ModelMenu({
 				className="dd-trigger"
 				aria-haspopup="dialog"
 				aria-expanded={open}
-				aria-label={`Model: ${name}${levels.length ? `, thinking: ${effortLabel(effort)}` : ""}`}
-				title="Model and thinking effort"
+				aria-label={
+					levels.length ? t("Model: {model}, thinking: {effort}", { model: name, effort: effortLabel(effort) }) : t("Model: {model}", { model: name })
+				}
+				title={t("Model and thinking effort")}
 				onClick={() => (open ? close() : show())}
 			>
 				<span className="dd-value">{name}</span>
@@ -184,7 +188,7 @@ export function ModelMenu({
 					<span className="mm-effort">
 						{levels.map((l) => (
 							<span key={l} className={l === effort ? undefined : "hidden"} aria-hidden={l !== effort}>
-								{EFFORT_SHORT[l] ?? effortLabel(l)}
+								{effortShort(l)}
 							</span>
 						))}
 					</span>
@@ -194,7 +198,7 @@ export function ModelMenu({
 				<div
 					className={`dd-menu mm-menu ${placement}`}
 					role="dialog"
-					aria-label="Model and thinking effort"
+					aria-label={t("Model and thinking effort")}
 					onKeyDown={(event) => {
 						if (event.key !== "Escape" || pane !== "effort") return;
 						event.preventDefault();
@@ -204,7 +208,7 @@ export function ModelMenu({
 					{pane === "effort" ? (
 						<div className="mm-effort-pane">
 							<div className="mm-level">{effortLabel(effort)}</div>
-							<button type="button" className="mm-model" title="Change model" onClick={() => setPane("models")}>
+							<button type="button" className="mm-model" title={t("Change model")} onClick={() => setPane("models")}>
 								{name}
 								<ChevronIcon />
 							</button>
@@ -221,7 +225,7 @@ export function ModelMenu({
 									max={last}
 									step={1}
 									value={index}
-									aria-label="Thinking effort"
+									aria-label={t("Thinking effort")}
 									aria-valuetext={effortLabel(effort)}
 									onChange={(event) => onChange(value!, levels[Number(event.target.value)]!)}
 								/>
@@ -236,13 +240,13 @@ export function ModelMenu({
 							{levels.length > 0 && (
 								<button type="button" className="mm-back" onClick={() => setPane("effort")}>
 									<ChevronIcon back />
-									Thinking effort
+									{t("Thinking effort")}
 								</button>
 							)}
 							<OptionList
 								value={value ?? ""}
 								options={modelOptions(models, value)}
-								label="Model"
+								label={t("Model")}
 								onChoose={(option) => chooseModel(option.value)}
 								onClose={(refocus) => (levels.length && refocus ? setPane("effort") : close(refocus))}
 							/>

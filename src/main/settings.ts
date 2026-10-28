@@ -6,6 +6,7 @@ import { APP_IDS } from "../shared/protocol.ts";
 const emptyApp = (): AppSettings => ({ disabled: [], added: [], removed: [] });
 
 const DEFAULTS: TriviumSettings = {
+	language: "system",
 	textSize: 1,
 	idleMinutes: 30,
 	notifyDone: true,

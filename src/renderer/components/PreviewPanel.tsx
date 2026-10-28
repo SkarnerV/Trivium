@@ -6,6 +6,7 @@ import { attempt, closePreview, pickPreview, reloadPreview, selectPreview, setPr
 import type { MenuEntry } from "./ContextMenu.tsx";
 import { parseTable } from "../preview.ts";
 import { Markdown } from "./Markdown.tsx";
+import { t } from "../i18n.tsx";
 
 /** Pages and Markdown have a rendered view and their source to switch between. */
 export function hasSource(file: ReaderFile): boolean {
@@ -15,13 +16,13 @@ export function hasSource(file: ReaderFile): boolean {
 /** The open files, as tabs in the panel's head. */
 export function PreviewTabs({ path, files, active }: { path: string; files: ReaderFile[]; active: string | undefined }) {
 	return (
-		<div className="preview-tabs" role="tablist" aria-label="Open files">
+		<div className="preview-tabs" role="tablist" aria-label={t("Open files")}>
 			{files.map((file) => (
 				<div key={file.id} className="preview-tab" aria-current={file.id === active} title={file.rel}>
 					<button type="button" role="tab" aria-selected={file.id === active} className="preview-tab-name" onClick={() => selectPreview(path, file.id)}>
 						{file.name}
 					</button>
-					<button type="button" className="preview-tab-close" aria-label={`Close ${file.name}`} title="Close" onClick={() => closePreview(path, file.id)}>
+					<button type="button" className="preview-tab-close" aria-label={t("Close {name}", { name: file.name })} title={t("Close")} onClick={() => closePreview(path, file.id)}>
 						<CloseIcon size={10} width={2.4} />
 					</button>
 				</div>
@@ -35,24 +36,24 @@ export function previewMenu(path: string, file: ReaderFile | undefined): MenuEnt
 	const entries: MenuEntry[] = [];
 	if (file?.kind === "web") {
 		entries.push(
-			{ label: "Open in browser", icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openExternal(file.path)) },
-			{ label: "Copy address", icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
-			{ label: "Reload", icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
+			{ label: t("Open in browser"), icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openExternal(file.path)) },
+			{ label: t("Copy address"), icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
+			{ label: t("Reload"), icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
 			"separator",
 		);
 	} else if (file) {
 		entries.push(
-			{ label: "Open in VS Code", icon: <CodeIcon size={14} />, onSelect: () => void attempt(() => trivium.openInEditor(file.path)) },
-			{ label: "Open with default app", icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openFile(file.path)) },
-			{ label: "Copy path", icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
-			{ label: "Reload", icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
+			{ label: t("Open in VS Code"), icon: <CodeIcon size={14} />, onSelect: () => void attempt(() => trivium.openInEditor(file.path)) },
+			{ label: t("Open with default app"), icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openFile(file.path)) },
+			{ label: t("Copy path"), icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
+			{ label: t("Reload"), icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
 		);
 		if (file.kind === "html" && file.scripts) {
-			entries.push({ label: "Turn scripts off", icon: <ShieldIcon size={14} />, onSelect: () => void setPreviewScripts(file.id, false) });
+			entries.push({ label: t("Turn scripts off"), icon: <ShieldIcon size={14} />, onSelect: () => void setPreviewScripts(file.id, false) });
 		}
 		entries.push("separator");
 	}
-	entries.push({ label: "Choose a file to preview", icon: <FileIcon size={14} />, onSelect: () => void pickPreview(path) });
+	entries.push({ label: t("Choose a file to preview"), icon: <FileIcon size={14} />, onSelect: () => void pickPreview(path) });
 	return entries;
 }
 
@@ -64,10 +65,10 @@ export function PreviewBody({ path, file, source }: { path: string; file: Reader
 				<span className="panel-empty-icon">
 					<EyeIcon size={18} />
 				</span>
-				<h3>Preview a file</h3>
-				<p>Click a file path in the conversation, or the eye on a changed file. HTML, Markdown, images, PDFs and text open here.</p>
+				<h3>{t("Preview a file")}</h3>
+				<p>{t("Click a file path in the conversation, or the eye on a changed file. HTML, Markdown, images, PDFs and text open here.")}</p>
 				<button type="button" className="btn" onClick={() => void pickPreview(path)}>
-					Choose a file
+					{t("Choose a file")}
 				</button>
 			</div>
 		);
@@ -77,14 +78,14 @@ export function PreviewBody({ path, file, source }: { path: string; file: Reader
 			{file.kind === "html" && !file.scripts && !source && (
 				<div className="preview-strip" role="status">
 					<ShieldIcon size={14} />
-					<span>Scripts are off for this page.</span>
+					<span>{t("Scripts are off for this page.")}</span>
 					<button type="button" className="btn" onClick={() => void setPreviewScripts(file.id, true)}>
-						Run scripts
+						{t("Run scripts")}
 					</button>
 				</div>
 			)}
 			<FileView file={file} source={source} />
-			{file.truncated && <p className="preview-note">Showing the start of this {fileSize(file.size)} file. Open it to read the rest.</p>}
+			{file.truncated && <p className="preview-note">{t("Showing the start of this {size} file. Open it to read the rest.", { size: fileSize(file.size) })}</p>}
 		</div>
 	);
 }
@@ -138,12 +139,15 @@ function FileView({ file, source }: { file: ReaderFile; source: boolean }) {
 					<span className="panel-empty-icon">
 						<FileIcon size={18} />
 					</span>
-					<h3>Can't preview this file</h3>
+					<h3>{t("Can't preview this file")}</h3>
 					<p>
-						{fileSize(file.size)}, changed {relativeTime(file.mtime) === "now" ? "just now" : `${relativeTime(file.mtime)} ago`}.
+						{t("{size}, changed {when}.", {
+							size: fileSize(file.size),
+							when: Date.now() - file.mtime < 60_000 ? t("just now") : t("{time} ago", { time: relativeTime(file.mtime) }),
+						})}
 					</p>
 					<button type="button" className="btn" onClick={() => void attempt(() => trivium.openFile(file.path))}>
-						Open with default app
+						{t("Open with default app")}
 					</button>
 				</div>
 			);
@@ -214,8 +218,10 @@ function TableView({ text, tabs }: { text: string; tabs: boolean }) {
 				</tbody>
 			</table>
 			<p className="preview-note">
-				{more ? `Showing the first ${body.length.toLocaleString()} rows` : `${body.length.toLocaleString()} ${body.length === 1 ? "row" : "rows"}`} ·{" "}
-				{columns} {columns === 1 ? "column" : "columns"}
+				{more
+					? t("Showing the first {n} rows", { n: body.length.toLocaleString() })
+					: t(body.length === 1 ? "{n} row" : "{n} rows", { n: body.length.toLocaleString() })}{" "}
+				· {t(columns === 1 ? "{n} column" : "{n} columns", { n: columns })}
 			</p>
 		</div>
 	);

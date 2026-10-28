@@ -7,6 +7,7 @@ import { askConfirm, attempt, setState, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { transition } from "../transition.ts";
+import { t } from "../i18n.tsx";
 
 type Change = Extract<ReviewSegment, { kind: "change" }>;
 
@@ -15,10 +16,10 @@ function paragraphs(text: string): number {
 }
 
 function describe(change: Change): string {
-	if (!change.del.trim()) return paragraphs(change.ins) > 1 ? "Added a section" : "Added a paragraph";
-	if (!change.ins.trim()) return paragraphs(change.del) > 1 ? "Removed a section" : "Removed a paragraph";
+	if (!change.del.trim()) return t(paragraphs(change.ins) > 1 ? "Added a section" : "Added a paragraph");
+	if (!change.ins.trim()) return t(paragraphs(change.del) > 1 ? "Removed a section" : "Removed a paragraph");
 	const count = Math.max(paragraphs(change.del), paragraphs(change.ins));
-	return count > 1 ? `Rewrote ${count} paragraphs` : "Rewrote a paragraph";
+	return count > 1 ? t("Rewrote {n} paragraphs", { n: count }) : t("Rewrote a paragraph");
 }
 
 /** The change as running text: removed words struck through, added words underlined. */
@@ -78,9 +79,9 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 	const resolveAll = async (action: "accept" | "reject") => {
 		if (action === "reject") {
 			const ok = await askConfirm({
-				title: "Reject every change?",
-				message: `${baseName(file.rel)} goes back to how it was before this session changed it.`,
-				confirmLabel: "Reject all",
+				title: t("Reject every change?"),
+				message: t("{file} goes back to how it was before this session changed it.", { file: baseName(file.rel) }),
+				confirmLabel: t("Reject all"),
 			});
 			if (!ok) return;
 		}
@@ -94,31 +95,31 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 
 	const pending = shown?.pending ?? 0;
 	return (
-		<aside className="side-panel review-panel" aria-label="Document review">
+		<aside className="side-panel review-panel" aria-label={t("Document review")}>
 			<Resizer target="panel" />
 			<div className="side-head">
 				<h2 className="mono">{baseName(file.rel)}</h2>
-				{pending > 0 && <span className="pending-pill">{pending === 1 ? "1 change" : `${pending} changes`} to review</span>}
+				{pending > 0 && <span className="pending-pill">{t(pending === 1 ? "1 change to review" : "{n} changes to review", { n: pending })}</span>}
 				<div className="side-actions">
 					<button type="button" className="btn" disabled={busy || view.running} onClick={() => void resolveAll("reject")}>
-						Reject all
+						{t("Reject all")}
 					</button>
 					<button type="button" className="btn primary" disabled={busy} onClick={() => void resolveAll("accept")}>
-						Accept all
+						{t("Accept all")}
 					</button>
 				</div>
 				<button
 					type="button"
 					className="icon-btn"
-					aria-label="Hide review"
-					title="Hide review"
+					aria-label={t("Hide review")}
+					title={t("Hide review")}
 					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
 				>
 					<CloseIcon size={13} />
 				</button>
 			</div>
 			{files.length > 1 && (
-				<div className="chips" role="tablist" aria-label="Changed documents">
+				<div className="chips" role="tablist" aria-label={t("Changed documents")}>
 					{files.map((f) => (
 						<button key={f.path} type="button" role="tab" className="chip" aria-selected={f === file} title={f.rel} onClick={() => transition("tab", () => setSelected(f.path))}>
 							{baseName(f.rel)}
@@ -140,20 +141,20 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 										type="button"
 										className="btn"
 										disabled={busy || view.running}
-										aria-label={`Reject: ${describe(segment)}`}
-										title={view.running ? "Stop the run before rejecting" : undefined}
+										aria-label={t("Reject: {change}", { change: describe(segment) })}
+										title={view.running ? t("Stop the run before rejecting") : undefined}
 										onClick={() => void resolve(segment, "reject")}
 									>
-										Reject
+										{t("Reject")}
 									</button>
 									<button
 										type="button"
 										className="btn primary"
 										disabled={busy}
-										aria-label={`Accept: ${describe(segment)}`}
+										aria-label={t("Accept: {change}", { change: describe(segment) })}
 										onClick={() => void resolve(segment, "accept")}
 									>
-										Accept
+										{t("Accept")}
 									</button>
 								</div>
 							</div>

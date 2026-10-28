@@ -1,5 +1,7 @@
 // Types shared by the main process, the preload bridge and the renderer.
 
+import type { Language } from "./i18n.ts";
+
 export type AppId = "code" | "research" | "write";
 
 export const APP_IDS: readonly AppId[] = ["code", "research", "write"];
@@ -408,6 +410,8 @@ export interface AppSettings {
 }
 
 export interface TriviumSettings {
+	/** The interface's language; "system" follows the operating system's. */
+	language: Language;
 	/** Window zoom factor, 1 = 100%. */
 	textSize: number;
 	/** Minutes before an idle, unviewed session is unloaded. 0 keeps sessions loaded. */

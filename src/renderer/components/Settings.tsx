@@ -46,11 +46,14 @@ import {
 	refreshModels,
 	type SettingsSection,
 	setState,
+	showSettings,
 	trivium,
 	updateSettings,
 	useStore,
 } from "../store.ts";
 import { SECTION_COLORS, THEMES } from "../theme.ts";
+import { t, tx } from "../i18n.tsx";
+import { getLocale, type Language, LOCALE_NAMES, LOCALES } from "../../shared/i18n.ts";
 import { AddExtensionDialog } from "./AddExtensionDialog.tsx";
 import { ConnectorDialog } from "./ConnectorDialog.tsx";
 import { CustomProviderDialog } from "./CustomProviderDialog.tsx";
@@ -157,18 +160,30 @@ function General() {
 					</span>
 				}
 			>
-				<button type="button" className="s-icon-btn" aria-label={`Open ${label} in Finder`} title="Open in Finder" onClick={() => openFolder(path)}>
+				<button type="button" className="s-icon-btn" aria-label={t("Open {name} in Finder", { name: label })} title={t("Open in Finder")} onClick={() => openFolder(path)}>
 					<FolderIcon size={15} />
 				</button>
 			</Item>
 		);
 	return (
 		<>
-			<PageHeader icon={<SlidersIcon size={18} />} tone="accent" title="General" subtitle="How Trivium looks, keeps sessions and gets your attention." />
-			<Group title="Appearance">
-				<Item label="Text size" hint="Scales the whole window">
+			<PageHeader icon={<SlidersIcon size={18} />} tone="accent" title={t("General")} subtitle={t("How Trivium looks, keeps sessions and gets your attention.")} />
+			<Group title={t("Appearance")}>
+				<Item label={t("Language")} hint={t("System follows your computer's language")}>
 					<Dropdown
-						label="Text size"
+						label={t("Language")}
+						value={settings.language ?? "system"}
+						options={[
+							{ value: "system", label: t("System") },
+							...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
+						]}
+						align="right"
+						onChange={(value) => void updateSettings({ language: value as Language })}
+					/>
+				</Item>
+				<Item label={t("Text size")} hint={t("Scales the whole window")}>
+					<Dropdown
+						label={t("Text size")}
 						value={String(settings.textSize)}
 						options={[0.9, 1, 1.1, 1.25].map((size) => ({ value: String(size), label: `${Math.round(size * 100)}%` }))}
 						align="right"
@@ -176,38 +191,38 @@ function General() {
 					/>
 				</Item>
 			</Group>
-			<Group title="Sessions">
-				<Item label="Unload idle sessions" hint="Frees memory. An unloaded session reloads from disk when you open it.">
+			<Group title={t("Sessions")}>
+				<Item label={t("Unload idle sessions")} hint={t("Frees memory. An unloaded session reloads from disk when you open it.")}>
 					<Dropdown
-						label="Unload idle sessions after"
+						label={t("Unload idle sessions after")}
 						value={String(settings.idleMinutes)}
 						options={[
-							{ value: "10", label: "After 10 minutes" },
-							{ value: "30", label: "After 30 minutes" },
-							{ value: "120", label: "After 2 hours" },
-							{ value: "0", label: "Never" },
+							{ value: "10", label: t("After 10 minutes") },
+							{ value: "30", label: t("After 30 minutes") },
+							{ value: "120", label: t("After 2 hours") },
+							{ value: "0", label: t("Never") },
 						]}
 						align="right"
 						onChange={(value) => void updateSettings({ idleMinutes: Number(value) })}
 					/>
 				</Item>
 			</Group>
-			<Group title="Notifications" description="Only while Trivium is in the background.">
-				<Item label="A run finishes">
-					<Switch on={settings.notifyDone} label="Notify when a run finishes" onChange={(on) => void updateSettings({ notifyDone: on })} />
+			<Group title={t("Notifications")} description={t("Only while Trivium is in the background.")}>
+				<Item label={t("A run finishes")}>
+					<Switch on={settings.notifyDone} label={t("Notify when a run finishes")} onChange={(on) => void updateSettings({ notifyDone: on })} />
 				</Item>
-				<Item label="A session needs your answer" hint="A question or an approval from an extension">
+				<Item label={t("A session needs your answer")} hint={t("A question or an approval from an extension")}>
 					<Switch
 						on={settings.notifyWaiting}
-						label="Notify when a session is waiting"
+						label={t("Notify when a session is waiting")}
 						onChange={(on) => void updateSettings({ notifyWaiting: on })}
 					/>
 				</Item>
 			</Group>
-			<Group title="Storage" description="Sessions, logins and settings are pi's own, shared with the pi CLI.">
-				{folder("Agent folder", info?.agentDir)}
-				{folder("Session files", info?.sessionsDir)}
-				{folder("Trivium data", info?.triviumDir)}
+			<Group title={t("Storage")} description={t("Sessions, logins and settings are pi's own, shared with the pi CLI.")}>
+				{folder(t("Agent folder"), info?.agentDir)}
+				{folder(t("Session files"), info?.sessionsDir)}
+				{folder(t("Trivium data"), info?.triviumDir)}
 			</Group>
 		</>
 	);
@@ -228,7 +243,7 @@ function ProviderTile({ id, name, on }: { id: string; name: string; on: boolean 
 }
 
 const loginLabel = (type: "api_key" | "oauth", configured: boolean) =>
-	type === "oauth" ? (configured ? "Log in again" : "Log in") : configured ? "Replace key" : "Add API key";
+	t(type === "oauth" ? (configured ? "Log in again" : "Log in") : configured ? "Replace key" : "Add API key");
 
 function ProviderRow({
 	provider,
@@ -251,14 +266,14 @@ function ProviderRow({
 					<span className="s-hint">
 						<span className="s-ok-dot" />
 						{provider.how}
-						{provider.models ? ` · ${provider.models} models` : ""}
+						{provider.models ? ` · ${t("{n} models", { n: provider.models })}` : ""}
 					</span>
 				)}
 			</div>
 			<div className="s-row-control">
 				{provider.configured && provider.preset && (
 					<button type="button" className="s-btn" onClick={onModels}>
-						Models
+						{t("Models")}
 					</button>
 				)}
 				{provider.logins.map((option) => (
@@ -274,7 +289,7 @@ function ProviderRow({
 				))}
 				{provider.canLogout && (
 					<button type="button" className="s-btn" onClick={onLogout}>
-						Log out
+						{t("Log out")}
 					</button>
 				)}
 			</div>
@@ -307,12 +322,12 @@ function CustomProviderRow({ provider, onEdit }: { provider: CustomProvider; onE
 					<span className="mono s-path" title={provider.baseUrl}>
 						{host}
 					</span>
-					· {API_NAMES[provider.api]} · {provider.models.length} {provider.models.length === 1 ? "model" : "models"}
+					· {t(API_NAMES[provider.api])} · {t(provider.models.length === 1 ? "{n} model" : "{n} models", { n: provider.models.length })}
 				</span>
 			</div>
 			<div className="s-row-control">
 				<button type="button" className="s-btn" onClick={onEdit}>
-					Edit
+					{t("Edit")}
 				</button>
 			</div>
 		</div>
@@ -376,19 +391,17 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 			<PageHeader
 				icon={<KeyIcon size={18} />}
 				tone="accent"
-				title="Models and logins"
-				subtitle={
-					<>
-						Shared with the pi CLI through <span className="mono">{info ? shortPath(info.agentDir) : "~/.pi/agent"}</span>
-					</>
-				}
+				title={t("Models and logins")}
+				subtitle={tx("Shared with the pi CLI through {path}", {
+					path: <span className="mono">{info ? shortPath(info.agentDir) : "~/.pi/agent"}</span>,
+				})}
 			/>
-			<Group title="Default model">
-				<Item label="New sessions" hint="Used when a mode has no model of its own">
+			<Group title={t("Default model")}>
+				<Item label={t("New sessions")} hint={t("Used when a mode has no model of its own")}>
 					<ModelSelect
 						value={info?.defaultModel}
 						level={info?.defaultThinkingLevel}
-						emptyLabel="Not set"
+						emptyLabel={t("Not set")}
 						onChange={async (key, level) => {
 							if (!key) return;
 							await attempt(() => trivium.setDefaultModel(key, level));
@@ -397,47 +410,47 @@ function Models({ providers, reload }: { providers: ProviderInfo[]; reload: () =
 					/>
 				</Item>
 			</Group>
-			<Group title={`Connected${connected.length ? ` · ${connected.length}` : ""}`}>
+			<Group title={`${t("Connected")}${connected.length ? ` · ${connected.length}` : ""}`}>
 				{connected.length ? (
 					connected.map(row)
 				) : (
-					<div className="s-empty">No provider is connected yet. Add one below to start a session.</div>
+					<div className="s-empty">{t("No provider is connected yet. Add one below to start a session.")}</div>
 				)}
 			</Group>
 			<Group
-				title="Custom endpoints"
-				description="Local servers, proxies and anything else that speaks an API pi knows."
+				title={t("Custom endpoints")}
+				description={t("Local servers, proxies and anything else that speaks an API pi knows.")}
 				aside={
 					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
 						<PlusIcon size={12} width={2.6} />
-						Add
+						{t("Add")}
 					</button>
 				}
 			>
 				{custom.length ? (
 					custom.map((provider) => <CustomProviderRow key={provider.id} provider={provider} onEdit={() => setEditing(provider)} />)
 				) : (
-					<div className="s-empty">None yet. Add Ollama, LM Studio, vLLM or a proxy, and Trivium can fetch its models.</div>
+					<div className="s-empty">{t("None yet. Add Ollama, LM Studio, vLLM or a proxy, and Trivium can fetch its models.")}</div>
 				)}
 			</Group>
 			<Group
-				title="Add a provider"
+				title={t("Add a provider")}
 				aside={
 					<label className="s-search">
 						<SearchIcon size={13} />
-						<span className="sr-only">Search providers</span>
-						<input value={query} placeholder="Search providers" onChange={(event) => setQuery(event.target.value)} />
+						<span className="sr-only">{t("Search providers")}</span>
+						<input value={query} placeholder={t("Search providers")} onChange={(event) => setQuery(event.target.value)} />
 					</label>
 				}
 				footer={
 					!query && others.length > PROVIDERS_SHOWN ? (
 						<button type="button" className="s-link" onClick={() => setShowAll(!showAll)}>
-							{showAll ? "Show fewer" : `Show all ${others.length} providers`}
+							{showAll ? t("Show fewer") : t("Show all {n} providers", { n: others.length })}
 						</button>
 					) : undefined
 				}
 			>
-				{visible.length ? visible.map(row) : <div className="s-empty">No provider matches “{query}”.</div>}
+				{visible.length ? visible.map(row) : <div className="s-empty">{t("No provider matches “{query}”.", { query })}</div>}
 			</Group>
 			{login && <LoginDialog />}
 			{presetId && (
@@ -475,7 +488,7 @@ const CONNECTOR_STATES: Record<NonNullable<ConnectorInfo["state"]>, { label: str
 	disabled: { label: "Off", tone: "" },
 };
 
-const EXPOSURE_OPTIONS: DropdownOption[] = EXPOSURES.map(({ value, label }) => ({ value, label }));
+const exposureOptions = (): DropdownOption[] => EXPOSURES.map(({ value, label }) => ({ value, label: t(label) }));
 
 /** The command a local server runs, or the address of a remote one. */
 function serverAddress(server: ConnectorInfo): string {
@@ -513,21 +526,21 @@ function ConnectorRow({
 	const state = server.state && CONNECTOR_STATES[server.state];
 	const off = server.tools.filter((tool) => tool.exposure === "hidden").length;
 	const counts = server.tools.length
-		? `${server.tools.length} ${server.tools.length === 1 ? "tool" : "tools"}${off ? ` · ${off} off` : ""}`
-		: "Details";
+		? `${t(server.tools.length === 1 ? "{n} tool" : "{n} tools", { n: server.tools.length })}${off ? ` · ${t("{n} off", { n: off })}` : ""}`
+		: t("Details");
 	const address = serverAddress(server);
 	return (
 		<div className={`s-row s-ext${server.enabled ? "" : " off"}`}>
 			<div className="s-row-text">
 				<div className="s-ext-title">
 					<span className="s-label">{server.name}</span>
-					<span className="s-tag" title={server.transport === "stdio" ? "Runs on this computer" : "Reached over HTTP"}>
-						{server.transport === "stdio" ? "Local" : "Remote"}
+					<span className="s-tag" title={t(server.transport === "stdio" ? "Runs on this computer" : "Reached over HTTP")}>
+						{t(server.transport === "stdio" ? "Local" : "Remote")}
 					</span>
 					{server.enabled && checking && !state ? (
-						<span className="s-tag">Checking…</span>
+						<span className="s-tag">{t("Checking…")}</span>
 					) : (
-						state && server.enabled && <span className={`s-tag ${state.tone}`}>{state.label}</span>
+						state && server.enabled && <span className={`s-tag ${state.tone}`}>{t(state.label)}</span>
 					)}
 				</div>
 				<span className="s-ext-desc">
@@ -545,13 +558,13 @@ function ConnectorRow({
 					<div className="cn-details">
 						<div className="cn-reach">
 							<div className="cn-reach-text">
-								<span className="cn-head">Tools reach the agent</span>
-								<span>{EXPOSURES.find((entry) => entry.value === server.exposure)?.hint}</span>
+								<span className="cn-head">{t("Tools reach the agent")}</span>
+								<span>{t(EXPOSURES.find((entry) => entry.value === server.exposure)?.hint ?? "")}</span>
 							</div>
 							<Dropdown
-								label={`How ${server.name}'s tools reach the agent`}
+								label={t("How {name}'s tools reach the agent", { name: server.name })}
 								value={server.exposure}
-								options={EXPOSURE_OPTIONS}
+								options={exposureOptions()}
 								align="right"
 								onChange={(value) => onExposure(value as McpExposure)}
 							/>
@@ -562,9 +575,9 @@ function ConnectorRow({
 									<div key={tool.name} className={`cn-tool${tool.exposure === "hidden" ? " off" : ""}`}>
 										<span className="mono">{tool.name}</span>
 										<Dropdown
-											label={`How ${tool.name} reaches the agent`}
+											label={t("How {name} reaches the agent", { name: tool.name })}
 											value={tool.exposure}
-											options={EXPOSURE_OPTIONS}
+											options={exposureOptions()}
 											align="right"
 											variant="ghost"
 											onChange={(value) => onToolExposure(tool.name, value as McpExposure)}
@@ -574,32 +587,34 @@ function ConnectorRow({
 							</div>
 						) : (
 							<p className="cn-none">
-								{!server.enabled
-									? "Turn it on to see its tools."
-									: server.state === "connected"
-										? "This server offers no tools."
-										: server.state
-											? "Its tools show once it connects."
-											: "Check connections to see its tools."}
+								{t(
+									!server.enabled
+										? "Turn it on to see its tools."
+										: server.state === "connected"
+											? "This server offers no tools."
+											: server.state
+												? "Its tools show once it connects."
+												: "Check connections to see its tools.",
+								)}
 							</p>
 						)}
 						<dl className="s-ext-details cn-facts">
 							<div>
-								<dt>{server.transport === "stdio" ? "Runs" : "URL"}</dt>
+								<dt>{t(server.transport === "stdio" ? "Runs" : "URL")}</dt>
 								<dd className="mono s-path" title={server.transport === "stdio" ? address : server.url}>
 									{server.transport === "stdio" ? address : server.url}
 								</dd>
 							</div>
 							{server.resources && (
 								<div>
-									<dt>Resources</dt>
-									<dd>Readable through pi's resource tools</dd>
+									<dt>{t("Resources")}</dt>
+									<dd>{t("Readable through pi's resource tools")}</dd>
 								</div>
 							)}
 						</dl>
 						{server.oauth && server.state === "connected" && (
 							<button type="button" className="s-link cn-signout" onClick={onSignOut}>
-								Sign out
+								{t("Sign out")}
 							</button>
 						)}
 					</div>
@@ -609,13 +624,13 @@ function ConnectorRow({
 			<div className="s-row-control">
 				{server.enabled && server.state === "needs-auth" && (
 					<button type="button" className="s-btn accent" disabled={signingIn} onClick={onSignIn}>
-						{signingIn ? "Waiting for browser…" : "Sign in"}
+						{t(signingIn ? "Waiting for browser…" : "Sign in")}
 					</button>
 				)}
 				<button type="button" className="s-btn s-ext-remove" onClick={onEdit}>
-					Edit
+					{t("Edit")}
 				</button>
-				<Switch on={server.enabled} label={`Connect to ${server.name}`} onChange={onToggle} />
+				<Switch on={server.enabled} label={t("Connect to {name}", { name: server.name })} onChange={onToggle} />
 			</div>
 		</div>
 	);
@@ -669,7 +684,7 @@ function Connectors({ onCount }: { onCount: (count: number) => void }) {
 	const reload = async () => {
 		const reloaded = await Promise.all(APP_IDS.map((id) => attempt(() => trivium.reloadApp(id))));
 		const count = reloaded.reduce((total, paths) => total + (paths?.length ?? 0), 0);
-		notify(count ? `Reloaded ${count} idle ${count === 1 ? "session" : "sessions"}` : "No idle sessions to reload", "info");
+		notify(count ? t(count === 1 ? "Reloaded {n} idle session" : "Reloaded {n} idle sessions", { n: count }) : t("No idle sessions to reload"), "info");
 		setTouched(false);
 	};
 
@@ -684,17 +699,14 @@ function Connectors({ onCount }: { onCount: (count: number) => void }) {
 			<PageHeader
 				icon={<PlugIcon size={18} />}
 				tone="accent"
-				title="Connectors"
-				subtitle={
-					<>
-						MCP servers that give the agent tools. Shared with the pi CLI through{" "}
-						<span className="mono">{view ? shortPath(view.path) : "~/.pi/agent/mcp.json"}</span>
-					</>
-				}
+				title={t("Connectors")}
+				subtitle={tx("MCP servers that give the agent tools. Shared with the pi CLI through {path}", {
+					path: <span className="mono">{view ? shortPath(view.path) : "~/.pi/agent/mcp.json"}</span>,
+				})}
 				actions={
 					servers.length > 0 && (
 						<button type="button" className="s-btn soft" disabled={checking} onClick={() => void check()}>
-							{checking ? "Checking…" : "Check connections"}
+							{t(checking ? "Checking…" : "Check connections")}
 						</button>
 					)
 				}
@@ -702,61 +714,43 @@ function Connectors({ onCount }: { onCount: (count: number) => void }) {
 
 			{view && servers.length > 0 && (
 				<div className="s-stats">
-					<span>
-						<strong>{on.length}</strong> of {servers.length} servers on
-					</span>
-					{view.checked && (
-						<span>
-							<strong>{connected.length}</strong> connected
-						</span>
-					)}
-					{view.checked && (
-						<span>
-							<strong>{tools}</strong> {tools === 1 ? "tool" : "tools"} available
-						</span>
-					)}
-					{waiting > 0 && (
-						<span>
-							<strong>{waiting}</strong> {waiting === 1 ? "needs" : "need"} sign-in
-						</span>
-					)}
-					{failing > 0 && (
-						<span>
-							<strong>{failing}</strong> can't connect
-						</span>
-					)}
+					<span>{tx("{on} of {total} servers on", { on: <strong>{on.length}</strong>, total: servers.length })}</span>
+					{view.checked && <span>{tx("{n} connected", { n: <strong>{connected.length}</strong> })}</span>}
+					{view.checked && <span>{tx(tools === 1 ? "{n} tool available" : "{n} tools available", { n: <strong>{tools}</strong> })}</span>}
+					{waiting > 0 && <span>{tx(waiting === 1 ? "{n} needs sign-in" : "{n} need sign-in", { n: <strong>{waiting}</strong> })}</span>}
+					{failing > 0 && <span>{tx("{n} can't connect", { n: <strong>{failing}</strong> })}</span>}
 				</div>
 			)}
 
 			{touched && (
 				<div className="s-notice">
-					<span>Open sessions keep the servers and tools they started with. Changes apply the next time a session loads.</span>
-					<button type="button" className="s-btn" onClick={() => void reload()} title="Running sessions keep their setup until they finish">
-						Reload idle sessions
+					<span>{t("Open sessions keep the servers and tools they started with. Changes apply the next time a session loads.")}</span>
+					<button type="button" className="s-btn" onClick={() => void reload()} title={t("Running sessions keep their setup until they finish")}>
+						{t("Reload idle sessions")}
 					</button>
 				</div>
 			)}
 
 			<Group
-				title="MCP servers"
-				description="Each server's tools are named mcp__server__tool. Expand a server to choose how its tools reach the agent."
+				title={t("MCP servers")}
+				description={t("Each server's tools are named mcp__server__tool. Expand a server to choose how its tools reach the agent.")}
 				aside={
 					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
 						<PlusIcon size={12} width={2.6} />
-						Add
+						{t("Add")}
 					</button>
 				}
-				footer={
-					<>
-						A project's own servers in <span className="mono">.pi/mcp.json</span> load in its sessions once you trust the project, and
-						replace a server here with the same name.
-					</>
-				}
+				footer={tx(
+					"A project's own servers in {file} load in its sessions once you trust the project, and replace a server here with the same name.",
+					{ file: <span className="mono">.pi/mcp.json</span> },
+				)}
 			>
-				{!view && <div className="s-empty">Loading…</div>}
+				{!view && <div className="s-empty">{t("Loading…")}</div>}
 				{view && !servers.length && (
 					<div className="s-empty">
-						No MCP servers yet. Add one, or paste the <span className="mono">mcpServers</span> block from Claude, Cursor or VS Code.
+						{tx("No MCP servers yet. Add one, or paste the {key} block from Claude, Cursor or VS Code.", {
+							key: <span className="mono">mcpServers</span>,
+						})}
 					</div>
 				)}
 				{servers.map((server) => (
@@ -776,7 +770,7 @@ function Connectors({ onCount }: { onCount: (count: number) => void }) {
 			</Group>
 
 			{view && view.errors.length > 0 && (
-				<Group title="Skipped entries" description="pi leaves these out until they're fixed.">
+				<Group title={t("Skipped entries")} description={t("pi leaves these out until they're fixed.")}>
 					<div className="s-row">
 						<pre className="s-error mono cn-error">{view.errors.join("\n")}</pre>
 					</div>
@@ -819,9 +813,9 @@ const SOURCE_HINT: Record<ExtensionSource, string> = {
 
 /** What an extension registers, by kind, as pi names them: "tool x", "/x" and "on x". */
 const REGISTER_KINDS = [
-	{ label: "Tools", one: "tool", many: "tools", match: (item: string) => item.startsWith("tool ") },
-	{ label: "Commands", one: "command", many: "commands", match: (item: string) => item.startsWith("/") },
-	{ label: "Hooks", one: "hook", many: "hooks", match: (item: string) => item.startsWith("on ") },
+	{ label: "Tools", one: "{n} tool", many: "{n} tools", match: (item: string) => item.startsWith("tool ") },
+	{ label: "Commands", one: "{n} command", many: "{n} commands", match: (item: string) => item.startsWith("/") },
+	{ label: "Hooks", one: "{n} hook", many: "{n} hooks", match: (item: string) => item.startsWith("on ") },
 ];
 
 function ExtensionRow({
@@ -841,27 +835,27 @@ function ExtensionRow({
 	const kinds = REGISTER_KINDS.map((kind) => ({ ...kind, items: extension.registers.filter(kind.match) })).filter(
 		(kind) => kind.items.length,
 	);
-	const counts = kinds.map((kind) => `${kind.items.length} ${kind.items.length === 1 ? kind.one : kind.many}`).join(" · ");
+	const counts = kinds.map((kind) => t(kind.items.length === 1 ? kind.one : kind.many, { n: kind.items.length })).join(" · ");
 	return (
 		<div className={`s-row s-ext${extension.on ? "" : " off"}`}>
 			<div className="s-row-text">
 				<div className="s-ext-title">
 					<span className="s-label">{extension.name}</span>
-					<span className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={SOURCE_HINT[extension.source]}>
-						{extension.source === "App" ? "Mode" : extension.source}
+					<span className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={t(SOURCE_HINT[extension.source])}>
+						{t(extension.source === "App" ? "Mode" : extension.source)}
 					</span>
-					{failed && <span className="s-tag error">Failed to load</span>}
+					{failed && <span className="s-tag error">{t("Failed to load")}</span>}
 				</div>
 				{summary && <span className="s-ext-desc">{summary}</span>}
 				<button type="button" className="s-ext-more" aria-expanded={open} onClick={() => setOpen(!open)}>
-					{counts || "Details"}
+					{counts || t("Details")}
 					<Chevron open={open} size={10} />
 				</button>
 				{open && (
 					<dl className="s-ext-details">
 						{kinds.map((kind) => (
 							<div key={kind.label}>
-								<dt>{kind.label}</dt>
+								<dt>{t(kind.label)}</dt>
 								<dd className="s-chips">
 									{kind.items.map((item) => (
 										<span key={item} className="s-chip mono">
@@ -872,7 +866,7 @@ function ExtensionRow({
 							</div>
 						))}
 						<div>
-							<dt>From</dt>
+							<dt>{t("From")}</dt>
 							<dd className="mono s-path" title={extension.path}>
 								{extension.display}
 							</dd>
@@ -888,11 +882,11 @@ function ExtensionRow({
 			</div>
 			<div className="s-row-control">
 				{onRemove && (
-					<button type="button" className="s-btn s-ext-remove" title={`Remove ${extension.builtIn} from this mode`} onClick={onRemove}>
-						Remove
+					<button type="button" className="s-btn s-ext-remove" title={t("Remove {name} from this mode", { name: extension.builtIn ?? "" })} onClick={onRemove}>
+						{t("Remove")}
 					</button>
 				)}
-				<Switch on={extension.on} label={`Load ${extension.name}`} onChange={onToggle} />
+				<Switch on={extension.on} label={t("Load {name}", { name: extension.name })} onChange={onToggle} />
 			</div>
 		</div>
 	);
@@ -901,36 +895,33 @@ function ExtensionRow({
 /** pi-permission-system's level, written to its own config file, which the pi CLI shares. */
 function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSettings; onChange: (level: string) => void }) {
 	const level = PERMISSION_LEVELS.find((entry) => entry.id === permissions.level);
-	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: entry.label }));
-	if (!level) options.push({ value: "custom", label: "Your own rules" });
+	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: t(entry.label) }));
+	if (!level) options.push({ value: "custom", label: t("Your own rules") });
 	return (
 		<Group
-			title="Permissions"
-			description="What pi-permission-system asks you about before it runs. .env files are always blocked."
-			footer={
-				<>
-					Saved in <span className="mono">{shortPath(permissions.path)}</span>, which the pi CLI also uses. Changes apply when a
-					session loads.
-				</>
-			}
+			title={t("Permissions")}
+			description={t("What pi-permission-system asks you about before it runs. .env files are always blocked.")}
+			footer={tx("Saved in {path}, which the pi CLI also uses. Changes apply when a session loads.", {
+				path: <span className="mono">{shortPath(permissions.path)}</span>,
+			})}
 		>
 			<Item
-				label="Mode"
-				hint={
+				label={t("Mode")}
+				hint={t(
 					level?.hint ??
-					(permissions.unreadable
-						? "The config has comments or isn't plain JSON, so Trivium leaves it to you."
-						: "The config has rules of its own. Choosing a level replaces them.")
-				}
+						(permissions.unreadable
+							? "The config has comments or isn't plain JSON, so Trivium leaves it to you."
+							: "The config has rules of its own. Choosing a level replaces them."),
+				)}
 			>
 				{permissions.unreadable ? (
 					<button type="button" className="s-btn soft" onClick={() => openFolder(permissions.path.replace(/[\\/][^\\/]+$/, ""))}>
 						<FolderIcon size={14} />
-						Open folder
+						{t("Open folder")}
 					</button>
 				) : (
 					<Dropdown
-						label="Permission mode"
+						label={t("Permission mode")}
 						value={level?.id ?? "custom"}
 						options={options}
 						align="right"
@@ -984,7 +975,7 @@ function AppPage({ app }: { app: AppId }) {
 	const added = async (next: AppDetails) => {
 		setDetails(next);
 		setTouched(true);
-		setState({ settings: await trivium.getSettings() });
+		showSettings(await trivium.getSettings());
 	};
 	const reload = async () => {
 		await attempt(() => trivium.reloadApp(app));
@@ -999,13 +990,13 @@ function AppPage({ app }: { app: AppId }) {
 			<PageHeader
 				icon={<AppIcon app={app} size={18} />}
 				tone="accent"
-				title={theme.name}
-				subtitle={APP_SUMMARY[app]}
+				title={t(theme.name)}
+				subtitle={t(APP_SUMMARY[app])}
 				actions={
 					details && (
 						<button type="button" className="s-btn soft" onClick={() => openFolder(details.extensionDir)}>
 							<FolderIcon size={14} />
-							Open folder
+							{t("Open folder")}
 						</button>
 					)
 				}
@@ -1013,19 +1004,11 @@ function AppPage({ app }: { app: AppId }) {
 
 			{details && (
 				<div className="s-stats">
-					<span>
-						<strong>{onCount}</strong> of {extensions.length} extensions on
-					</span>
-					<span>
-						<strong>{details.tools.length}</strong> tools
-					</span>
-					<span>
-						<strong>{details.skills}</strong> skills
-					</span>
-					<span>
-						<strong>{details.prompts}</strong> prompts
-					</span>
-					<span>{details.running ? <><strong>{details.running}</strong> running</> : "Nothing running"}</span>
+					<span>{tx("{on} of {total} extensions on", { on: <strong>{onCount}</strong>, total: extensions.length })}</span>
+					<span>{tx("{n} tools", { n: <strong>{details.tools.length}</strong> })}</span>
+					<span>{tx("{n} skills", { n: <strong>{details.skills}</strong> })}</span>
+					<span>{tx("{n} prompts", { n: <strong>{details.prompts}</strong> })}</span>
+					<span>{details.running ? tx("{n} running", { n: <strong>{details.running}</strong> }) : t("Nothing running")}</span>
 				</div>
 			)}
 
@@ -1033,12 +1016,15 @@ function AppPage({ app }: { app: AppId }) {
 				<div className="s-notice">
 					<span>
 						{details?.loaded
-							? `${details.loaded} open ${theme.name} ${details.loaded === 1 ? "session still uses" : "sessions still use"} the previous setup.`
-							: `Changes apply the next time a ${theme.name} session loads.`}
+							? t(details.loaded === 1 ? "{n} open {mode} session still uses the previous setup." : "{n} open {mode} sessions still use the previous setup.", {
+									n: details.loaded,
+									mode: t(theme.name),
+								})
+							: t("Changes apply the next time a {mode} session loads.", { mode: t(theme.name) })}
 					</span>
 					{Boolean(details?.loaded) && (
-						<button type="button" className="s-btn" onClick={() => void reload()} title="Running sessions keep their setup until they finish">
-							Reload idle sessions
+						<button type="button" className="s-btn" onClick={() => void reload()} title={t("Running sessions keep their setup until they finish")}>
+							{t("Reload idle sessions")}
 						</button>
 					)}
 				</div>
@@ -1057,37 +1043,35 @@ function AppPage({ app }: { app: AppId }) {
 			)}
 
 			<Group
-				title="Extensions"
-				description="pi's own extensions load first, then this mode's folder. Turn off anything this mode should skip."
+				title={t("Extensions")}
+				description={t("pi's own extensions load first, then this mode's folder. Turn off anything this mode should skip.")}
 				aside={
 					<button type="button" className="s-btn accent" onClick={() => setAdding(true)}>
 						<PlusIcon size={12} width={2.6} />
-						Add
+						{t("Add")}
 					</button>
 				}
 				footer={
-					details && (
-						<>
-							Project extensions come from <span className="mono">{shortPath(details.projectDir)}</span>, this mode's most
-							recent project. Changes apply when a session loads.
-						</>
-					)
+					details &&
+					tx("Project extensions come from {path}, this mode's most recent project. Changes apply when a session loads.", {
+						path: <span className="mono">{shortPath(details.projectDir)}</span>,
+					})
 				}
 			>
-				{!details && <div className="s-empty">Loading…</div>}
+				{!details && <div className="s-empty">{t("Loading…")}</div>}
 				{details && !extensions.length && (
 					<div className="s-empty">
-						No extensions yet. Install a pi package, or put <span className="mono">.ts</span> files in this mode's folder.
+						{tx("No extensions yet. Install a pi package, or put {ext} files in this mode's folder.", { ext: <span className="mono">.ts</span> })}
 					</div>
 				)}
 				{extensions.map((extension) => (
 					<ExtensionRow
 						key={extension.path}
 						extension={extension}
-						summary={
-							RECOMMENDED[app].find((item) => item.name === (extension.builtIn ?? packageName(extension.display)))?.adds ??
-							extension.description
-						}
+						summary={(() => {
+							const adds = RECOMMENDED[app].find((item) => item.name === (extension.builtIn ?? packageName(extension.display)))?.adds;
+							return adds ? t(adds) : extension.description;
+						})()}
 						onToggle={() => void toggle(extension)}
 						onRemove={extension.builtIn ? () => void setRemoved(extension.builtIn!, true) : undefined}
 					/>
@@ -1104,19 +1088,19 @@ function AppPage({ app }: { app: AppId }) {
 				/>
 			)}
 
-			<Group title="Model">
-				<Item label={`New ${theme.name} sessions`} hint="Open sessions keep the model they use">
+			<Group title={t("Model")}>
+				<Item label={t("New {mode} sessions", { mode: t(theme.name) })} hint={t("Open sessions keep the model they use")}>
 					<ModelSelect
 						value={appSettings.model}
 						level={appSettings.thinkingLevel}
-						emptyLabel="pi's default"
+						emptyLabel={t("pi's default")}
 						onChange={(key, level) => void saveApp({ model: key, thinkingLevel: key ? level : undefined })}
 					/>
 				</Item>
 			</Group>
 
 			{details && (
-				<Group title="Tools" description="What the agent can call in this mode. Extensions can add more.">
+				<Group title={t("Tools")} description={t("What the agent can call in this mode. Extensions can add more.")}>
 					<div className="s-row">
 						<div className="s-chips big">
 							{details.tools.map((tool) => (
@@ -1130,7 +1114,7 @@ function AppPage({ app }: { app: AppId }) {
 			)}
 
 			{details?.systemPrompt && (
-				<Group title="Instructions" description="Added to pi's system prompt for every session in this mode.">
+				<Group title={t("Instructions")} description={t("Added to pi's system prompt for every session in this mode.")}>
 					<pre className="s-prompt">{details.systemPrompt}</pre>
 				</Group>
 			)}
@@ -1206,7 +1190,7 @@ function Keys({ keys }: { keys: string[][] }) {
 			{keys.map((combo, index) =>
 				combo.length === 1 && combo[0] === "–" ? (
 					<span key={index} className="s-keys-sep">
-						to
+						{t("to")}
 					</span>
 				) : (
 					<span key={index} className="s-combo">
@@ -1223,11 +1207,11 @@ function Keys({ keys }: { keys: string[][] }) {
 function Shortcuts() {
 	return (
 		<>
-			<PageHeader icon={<KeyboardIcon size={18} />} tone="accent" title="Keyboard shortcuts" subtitle="Everything Trivium does from the keyboard." />
+			<PageHeader icon={<KeyboardIcon size={18} />} tone="accent" title={t("Keyboard shortcuts")} subtitle={t("Everything Trivium does from the keyboard.")} />
 			{SHORTCUTS.map(([title, description, rows]) => (
-				<Group key={title} title={title} description={description}>
+				<Group key={title} title={t(title)} description={description && t(description)}>
 					{rows.map(([label, keys, hint]) => (
-						<Item key={label} label={label} hint={hint}>
+						<Item key={label} label={t(label)} hint={hint && t(hint)}>
 							<Keys keys={keys} />
 						</Item>
 					))}
@@ -1246,39 +1230,46 @@ function UpdateItem() {
 	let hint: string;
 	let action: ReactNode = (
 		<button type="button" className="s-btn soft" disabled={update.state === "checking"} onClick={() => void attempt(() => trivium.checkForUpdates())}>
-			{update.state === "checking" ? "Checking…" : "Check now"}
+			{t(update.state === "checking" ? "Checking…" : "Check now")}
 		</button>
 	);
 	switch (update.state) {
 		case "checking":
-			hint = "Asking GitHub for the latest release…";
+			hint = t("Asking GitHub for the latest release…");
 			break;
 		case "current": {
 			const ago = relativeTime(update.checkedAt, now);
-			hint = `You have the latest version · checked ${ago === "now" ? "just now" : /^\d/.test(ago) ? `${ago} ago` : ago}`;
+			hint = t("You have the latest version · checked {when}", {
+				when: now - update.checkedAt < 60_000 ? t("just now") : /^\d/.test(ago) ? t("{time} ago", { time: ago }) : ago,
+			});
 			break;
 		}
-		case "available":
-			hint = update.release.installable ? `Trivium ${update.release.version} is available` : `Trivium ${update.release.version} is available. ${update.release.reason}`;
+		case "available": {
+			const available = t("Trivium {version} is available", { version: update.release.version });
+			hint = update.release.installable ? available : `${available}. ${update.release.reason}`;
 			action = (
 				<button type="button" className="s-btn accent" onClick={() => void installUpdate()}>
-					{update.release.installable ? "Update and restart" : "Download"}
+					{t(update.release.installable ? "Update and restart" : "Download")}
 				</button>
 			);
 			break;
+		}
 		case "downloading":
-			hint = `Downloading ${update.release.version} · ${Math.floor((update.received / (update.total || 1)) * 100)}%`;
+			hint = t("Downloading {version} · {percent}%", {
+				version: update.release.version,
+				percent: Math.floor((update.received / (update.total || 1)) * 100),
+			});
 			action = null;
 			break;
 		case "installing":
-			hint = `Installing ${update.release.version}. Trivium restarts when it's done.`;
+			hint = t("Installing {version}. Trivium restarts when it's done.", { version: update.release.version });
 			action = null;
 			break;
 		case "ready":
-			hint = `${update.release.version} is ready to install`;
+			hint = t("{version} is ready to install", { version: update.release.version });
 			action = (
 				<button type="button" className="s-btn accent" onClick={() => void installUpdate()}>
-					Restart now
+					{t("Restart now")}
 				</button>
 			);
 			break;
@@ -1287,20 +1278,20 @@ function UpdateItem() {
 			if (update.release) {
 				action = (
 					<button type="button" className="s-btn soft" onClick={() => void installUpdate()}>
-						Try again
+						{t("Try again")}
 					</button>
 				);
 			}
 			break;
 		default:
-			hint = "Trivium looks for new releases on GitHub";
+			hint = t("Trivium looks for new releases on GitHub");
 	}
 	const release = "release" in update ? update.release : undefined;
 	return (
-		<Item label="Status" hint={hint}>
+		<Item label={t("Status")} hint={hint}>
 			{release && (
 				<a className="s-btn soft" href={release.url} target="_blank" rel="noreferrer">
-					What's new
+					{t("What's new")}
 				</a>
 			)}
 			{action}
@@ -1320,10 +1311,10 @@ function About() {
 				icon={<TriviumIcon size={30} />}
 				tone="logo"
 				title="Trivium"
-				subtitle="A desktop workspace for coding, research and writing, built on pi."
+				subtitle={t("A desktop workspace for coding, research and writing, built on pi.")}
 			/>
 			{info && (
-				<Group title="Versions">
+				<Group title={t("Versions")}>
 					<Item label="Trivium">
 						<span className="mono s-value">{info.version}</span>
 					</Item>
@@ -1338,21 +1329,21 @@ function About() {
 					</Item>
 				</Group>
 			)}
-			<Group title="Updates">
+			<Group title={t("Updates")}>
 				<UpdateItem />
 				{settings && (
-					<Item label="Check automatically" hint="At startup and every few hours">
-						<Switch on={settings.checkUpdates} label="Check for updates automatically" onChange={(on) => void updateSettings({ checkUpdates: on })} />
+					<Item label={t("Check automatically")} hint={t("At startup and every few hours")}>
+						<Switch on={settings.checkUpdates} label={t("Check for updates automatically")} onChange={(on) => void updateSettings({ checkUpdates: on })} />
 					</Item>
 				)}
 			</Group>
-			<Group title="Project">
-				<Item label="Source code" hint="Issues and pull requests are welcome">
+			<Group title={t("Project")}>
+				<Item label={t("Source code")} hint={t("Issues and pull requests are welcome")}>
 					<a className="s-btn soft" href="https://github.com/SkarnerV/Trivium" target="_blank" rel="noreferrer">
 						GitHub
 					</a>
 				</Item>
-				<Item label="License" hint="Plugins you write are yours to license">
+				<Item label={t("License")} hint={t("Plugins you write are yours to license")}>
 					<span className="s-value">MIT</span>
 				</Item>
 			</Group>
@@ -1373,7 +1364,7 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
 		<div className="seg" role="tablist" aria-label={label}>
 			{options.map((option) => (
 				<button key={option.value} type="button" role="tab" aria-selected={value === option.value} onClick={() => onChange(option.value)}>
-					{option.label}
+					{t(option.label)}
 				</button>
 			))}
 		</div>
@@ -1388,7 +1379,7 @@ function money(dollars: number): string {
 
 function dayLabel(day: string): string {
 	const [year, month, date] = day.split("-").map(Number);
-	return new Date(year, month - 1, date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+	return new Date(year, month - 1, date).toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
 }
 
 /** A cost, or why there is none: replies through a plan login, or a model pi has no price for. */
@@ -1396,13 +1387,13 @@ function Cost({ dollars, providers, plans }: { dollars: number; providers: strin
 	if (dollars > 0) return <span className="u-num">{money(dollars)}</span>;
 	if (providers.every((provider) => plans.includes(provider))) {
 		return (
-			<span className="u-num u-quiet" title="Logged in through a subscription, so these replies have no price">
-				Plan
+			<span className="u-num u-quiet" title={t("Logged in through a subscription, so these replies have no price")}>
+				{t("Plan")}
 			</span>
 		);
 	}
 	return (
-		<span className="u-num u-quiet" title="pi has no price for this model">
+		<span className="u-num u-quiet" title={t("pi has no price for this model")}>
 			—
 		</span>
 	);
@@ -1414,18 +1405,21 @@ function Speed({ tally }: { tally: Tally }) {
 	const speed = speedOf(tally);
 	return (
 		<span className="u-speed" tabIndex={0}>
-			{tally.responses.toLocaleString()} {tally.responses === 1 ? "response" : "responses"}
+			{t(tally.responses === 1 ? "{n} response" : "{n} responses", { n: tally.responses.toLocaleString() })}
 			<span className="u-speed-card" role="tooltip">
-				<span>Time to first token</span>
+				<span>{t("Time to first token")}</span>
 				<b>{firstToken === undefined ? "—" : duration(firstToken)}</b>
-				<span>Output speed</span>
+				<span>{t("Output speed")}</span>
 				<b>{speed === undefined ? "—" : `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} tk/s`}</b>
 				<small>
 					{firstToken === undefined
-						? "First tokens are timed on new replies."
+						? t("First tokens are timed on new replies.")
 						: tally.firstTokens === tally.responses
-							? "Averaged over every response."
-							: `First token timed on ${tally.firstTokens.toLocaleString()} of ${tally.responses.toLocaleString()} responses.`}
+							? t("Averaged over every response.")
+							: t("First token timed on {timed} of {total} responses.", {
+									timed: tally.firstTokens.toLocaleString(),
+									total: tally.responses.toLocaleString(),
+								})}
 				</small>
 			</span>
 		</span>
@@ -1435,7 +1429,7 @@ function Speed({ tally }: { tally: Tally }) {
 function Stat({ label, value, note }: { label: string; value: string; note: string }) {
 	return (
 		<div className="u-stat">
-			<span className="u-stat-label">{label}</span>
+			<span className="u-stat-label">{t(label)}</span>
 			<span className="u-stat-value">{value}</span>
 			<span className="u-stat-note">{note}</span>
 		</div>
@@ -1463,10 +1457,10 @@ function UsageChart({ bars, metric }: { bars: UsageBar[]; metric: "tokens" | "co
 						<span className="u-readout-when">{when(shown)}</span>
 						{metric === "cost"
 							? money(shown.tally.cost)
-							: PARTS.map((part) => `${tokens(part.value(shown.tally))} ${part.label.toLowerCase()}`).join(" · ")}
+							: PARTS.map((part) => t(`{n} ${part.label.toLowerCase()}`, { n: tokens(part.value(shown.tally)) })).join(" · ")}
 					</>
 				) : (
-					<span className="u-quiet">Point at a bar for its numbers</span>
+					<span className="u-quiet">{t("Point at a bar for its numbers")}</span>
 				)}
 			</div>
 			<div className="u-chart" onMouseLeave={() => setHover(undefined)}>
@@ -1475,7 +1469,7 @@ function UsageChart({ bars, metric }: { bars: UsageBar[]; metric: "tokens" | "co
 						key={bar.from}
 						className={`u-bar${hover === index ? " on" : ""}`}
 						onMouseEnter={() => setHover(index)}
-						aria-label={`${when(bar)}: ${metric === "cost" ? money(bar.tally.cost) : `${tokens(tokensOf(bar.tally))} tokens`}`}
+						aria-label={`${when(bar)}: ${metric === "cost" ? money(bar.tally.cost) : t("{n} tokens", { n: tokens(tokensOf(bar.tally)) })}`}
 					>
 						{max > 0 &&
 							(metric === "cost" ? (
@@ -1488,14 +1482,14 @@ function UsageChart({ bars, metric }: { bars: UsageBar[]; metric: "tokens" | "co
 			</div>
 			<div className="u-axis">
 				<span>{dayLabel(bars[0].from)}</span>
-				<span>Today</span>
+				<span>{t("Today")}</span>
 			</div>
 		</div>
 	);
 }
 
 /** Short weekday names, Sunday first, in the user's language. */
-const WEEKDAYS = Array.from({ length: 7 }, (_, index) => new Date(2026, 0, 4 + index).toLocaleDateString(undefined, { weekday: "short" }));
+const weekdays = () => Array.from({ length: 7 }, (_, index) => new Date(2026, 0, 4 + index).toLocaleDateString(getLocale(), { weekday: "short" }));
 
 function UsageCalendar({ report }: { report: UsageReport }) {
 	const { weeks, active, streak } = useMemo(() => calendar(report), [report]);
@@ -1508,15 +1502,15 @@ function UsageCalendar({ report }: { report: UsageReport }) {
 		if (!first || (previous && previous.slice(0, 7) === first.slice(0, 7)) || index - named < 3) return "";
 		named = index;
 		const [year, month] = first.split("-").map(Number);
-		return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short" });
+		return new Date(year, month - 1, 1).toLocaleDateString(getLocale(), { month: "short" });
 	});
 	return (
 		<section className="s-group">
 			<div className="s-group-head">
-				<h3>Last 12 months</h3>
+				<h3>{t("Last 12 months")}</h3>
 				<span className="u-columns">
-					{active} active {active === 1 ? "day" : "days"}
-					{streak > 1 && ` · ${streak}-day streak`}
+					{t(active === 1 ? "{n} active day" : "{n} active days", { n: active })}
+					{streak > 1 && ` · ${t("{n}-day streak", { n: streak })}`}
 				</span>
 			</div>
 			<div className="s-card u-cal-card">
@@ -1525,11 +1519,11 @@ function UsageCalendar({ report }: { report: UsageReport }) {
 						<>
 							<span className="u-readout-when">{dayLabel(hover.day)}</span>
 							{hover.tally.responses
-								? `${tokens(tokensOf(hover.tally))} tokens · ${money(hover.tally.cost)} · ${hover.tally.responses} ${hover.tally.responses === 1 ? "response" : "responses"}`
-								: "No replies"}
+								? `${t("{n} tokens", { n: tokens(tokensOf(hover.tally)) })} · ${money(hover.tally.cost)} · ${t(hover.tally.responses === 1 ? "{n} response" : "{n} responses", { n: hover.tally.responses })}`
+								: t("No replies")}
 						</>
 					) : (
-						<span className="u-quiet">Point at a day for its numbers</span>
+						<span className="u-quiet">{t("Point at a day for its numbers")}</span>
 					)}
 				</div>
 				<div className="u-cal" style={{ gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))` }} onMouseLeave={() => setHover(undefined)}>
@@ -1539,7 +1533,7 @@ function UsageCalendar({ report }: { report: UsageReport }) {
 							{month}
 						</span>
 					))}
-					{WEEKDAYS.map((weekday, row) => (
+					{weekdays().map((weekday, row) => (
 						<Fragment key={weekday}>
 							<span className="u-cal-weekday">{row % 2 ? weekday : ""}</span>
 							{weeks.map((week, column) => {
@@ -1549,7 +1543,7 @@ function UsageCalendar({ report }: { report: UsageReport }) {
 										key={day.day}
 										className={`u-cal-day l${day.level}${hover?.day === day.day ? " on" : ""}`}
 										onMouseEnter={() => setHover(day)}
-										aria-label={`${dayLabel(day.day)}: ${tokens(tokensOf(day.tally))} tokens`}
+										aria-label={`${dayLabel(day.day)}: ${t("{n} tokens", { n: tokens(tokensOf(day.tally)) })}`}
 									/>
 								) : (
 									<span key={`e${column}`} />
@@ -1559,11 +1553,11 @@ function UsageCalendar({ report }: { report: UsageReport }) {
 					))}
 				</div>
 				<div className="u-cal-legend">
-					Less
+					{t("Less")}
 					{([0, 1, 2, 3, 4] as const).map((level) => (
 						<i key={level} className={`u-cal-day l${level}`} />
 					))}
-					More
+					{t("More")}
 				</div>
 			</div>
 		</section>
@@ -1582,16 +1576,16 @@ function Usage() {
 		<PageHeader
 			icon={<ChartIcon size={18} />}
 			tone="accent"
-			title="Usage"
-			subtitle="Tokens and estimated cost, counted from your sessions on this computer."
-			actions={<Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />}
+			title={t("Usage")}
+			subtitle={t("Tokens and estimated cost, counted from your sessions on this computer.")}
+			actions={<Segmented label={t("Time range")} value={range} options={RANGES} onChange={setRange} />}
 		/>
 	);
 	if (!report || !summary) {
 		return (
 			<>
 				{header}
-				<div className="s-card s-empty">Counting…</div>
+				<div className="s-card s-empty">{t("Counting…")}</div>
 			</>
 		);
 	}
@@ -1613,41 +1607,41 @@ function Usage() {
 					value={tokens(all)}
 					note={
 						range === "all"
-							? `since ${dayLabel(summary.from)}`
+							? t("since {date}", { date: dayLabel(summary.from) })
 							: change === undefined
-								? `none the ${range} days before`
-								: `${change > 0 ? "+" : ""}${change}% on the ${range} days before`
+								? t("none the {n} days before", { n: range })
+								: t("{change}% on the {n} days before", { change: `${change > 0 ? "+" : ""}${change}`, n: range })
 					}
 				/>
-				<Stat label="Estimated cost" value={money(total.cost)} note={unpriced ? "plus replies through a plan" : "from pi's price list"} />
-				<Stat label="From cache" value={share === undefined ? "—" : `${Math.round(share * 100)}%`} note="of input tokens" />
+				<Stat label="Estimated cost" value={money(total.cost)} note={t(unpriced ? "plus replies through a plan" : "from pi's price list")} />
+				<Stat label="From cache" value={share === undefined ? "—" : `${Math.round(share * 100)}%`} note={t("of input tokens")} />
 				<Stat
 					label="Responses"
 					value={total.responses.toLocaleString()}
-					note={`in ${summary.sessions} ${summary.sessions === 1 ? "session" : "sessions"}`}
+					note={t(summary.sessions === 1 ? "in {n} session" : "in {n} sessions", { n: summary.sessions })}
 				/>
 			</div>
 			{report.sessions.length > 0 && <UsageCalendar report={report} />}
 			{all === 0 ? (
-				<div className="s-card s-empty">No replies in this time. Usage shows once a session gets an answer.</div>
+				<div className="s-card s-empty">{t("No replies in this time. Usage shows once a session gets an answer.")}</div>
 			) : (
 				<>
 					<section className="s-group">
 						<div className="s-group-head">
-							<h3>{summary.bars[0].from === summary.bars[0].to ? "Each day" : "Each week"}</h3>
+							<h3>{t(summary.bars[0].from === summary.bars[0].to ? "Each day" : "Each week")}</h3>
 							<div className="u-chart-controls">
 								{metric === "tokens" && (
 									<span className="u-legend">
 										{PARTS.map((part) => (
 											<span key={part.key}>
 												<i className={`u-swatch ${part.key}`} />
-												{part.label}
+												{t(part.label)}
 											</span>
 										))}
 									</span>
 								)}
 								<Segmented
-									label="Chart shows"
+									label={t("Chart shows")}
 									value={metric}
 									options={[
 										{ value: "tokens", label: "Tokens" },
@@ -1659,11 +1653,11 @@ function Usage() {
 						</div>
 						<UsageChart bars={summary.bars} metric={metric} />
 					</section>
-					<Group title="By mode">
+					<Group title={t("By mode")}>
 						{summary.apps.map(({ app, tally }) => (
 							<div key={app} className="s-row u-row">
 								<span className="u-dot" style={{ background: THEMES[app].accent }} />
-								<span className="u-name">{THEMES[app].name}</span>
+								<span className="u-name">{t(THEMES[app].name)}</span>
 								<span className="u-meter">
 									<span style={{ width: `${(tokensOf(tally) / top) * 100}%`, background: THEMES[app].accent }} />
 								</span>
@@ -1673,12 +1667,12 @@ function Usage() {
 						))}
 					</Group>
 					<Group
-						title="By model"
+						title={t("By model")}
 						aside={
 							<span className="u-columns">
-								<span>Input</span>
-								<span>Output</span>
-								<span>Cost</span>
+								<span>{t("Input")}</span>
+								<span>{t("Output")}</span>
+								<span>{t("Cost")}</span>
 							</span>
 						}
 					>
@@ -1696,7 +1690,7 @@ function Usage() {
 							</div>
 						))}
 					</Group>
-					<Group title="Biggest sessions">
+					<Group title={t("Biggest sessions")}>
 						{summary.top.map(({ session, last, tally }) => (
 							<button
 								key={session.path}
@@ -1711,7 +1705,7 @@ function Usage() {
 								<div className="s-row-text">
 									<span className="s-label u-title">{session.title}</span>
 									<span className="s-hint">
-										<span className="mono s-path">{session.chat ? "Chat" : shortPath(session.cwd)}</span>· {dayLabel(last)}
+										<span className="mono s-path">{session.chat ? t("Chat") : shortPath(session.cwd)}</span>· {dayLabel(last)}
 									</span>
 								</div>
 								<span className="u-num">{tokens(tokensOf(tally))}</span>
@@ -1723,8 +1717,9 @@ function Usage() {
 				</>
 			)}
 			<p className="s-foot">
-				Costs are estimates from pi's price list. Models used through a plan login, like a ChatGPT or GLM Coding Plan, show tokens only. Subagents count toward
-				the session that started them, and deleted sessions no longer count.
+				{t(
+					"Costs are estimates from pi's price list. Models used through a plan login, like a ChatGPT or GLM Coding Plan, show tokens only. Subagents count toward the session that started them, and deleted sessions no longer count.",
+				)}
 			</p>
 		</>
 	);
@@ -1777,45 +1772,48 @@ export function SettingsPage() {
 	);
 	return (
 		<>
-			<nav className="set-nav drag" aria-label="Settings sections">
+			<nav className="set-nav drag" aria-label={t("Settings sections")}>
 				<button type="button" className="back" onClick={closeSettings}>
 					<BackIcon />
-					Back to {THEMES[app].name}
+					{t("Back to {mode}", { mode: t(THEMES[app].name) })}
 				</button>
-				<h1>Settings</h1>
-				{item("general", "General", <SlidersIcon />, SECTION_COLORS.general.accent)}
+				<h1>{t("Settings")}</h1>
+				{item("general", t("General"), <SlidersIcon />, SECTION_COLORS.general.accent)}
 				{item(
 					"models",
-					"Models and logins",
+					t("Models and logins"),
 					<KeyIcon />,
 					SECTION_COLORS.models.accent,
-					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">Set up</span>,
+					connected ? <span className="s-nav-meta">{connected}</span> : <span className="s-nav-meta warn">{t("Set up")}</span>,
 				)}
 				{item(
 					"connectors",
-					"Connectors",
+					t("Connectors"),
 					<PlugIcon />,
 					SECTION_COLORS.connectors.accent,
 					servers ? <span className="s-nav-meta">{servers}</span> : undefined,
 				)}
-				{item("usage", "Usage", <ChartIcon />, SECTION_COLORS.usage.accent)}
-				{item("shortcuts", "Keyboard shortcuts", <KeyboardIcon />, SECTION_COLORS.shortcuts.accent)}
-				<div className="set-nav-head">Modes</div>
+				{item("usage", t("Usage"), <ChartIcon />, SECTION_COLORS.usage.accent)}
+				{item("shortcuts", t("Keyboard shortcuts"), <KeyboardIcon />, SECTION_COLORS.shortcuts.accent)}
+				<div className="set-nav-head">{t("Modes")}</div>
 				{APP_IDS.map((id) =>
 					item(
 						id,
-						THEMES[id].name,
+						t(THEMES[id].name),
 						<AppIcon app={id} size={13} />,
 						THEMES[id].accent,
 						errors[id] ? (
-							<span className="s-nav-meta error" title={`${errors[id]} extension failed to load`}>
-								{errors[id]} {errors[id] === 1 ? "error" : "errors"}
+							<span
+								className="s-nav-meta error"
+								title={t(errors[id] === 1 ? "{n} extension failed to load" : "{n} extensions failed to load", { n: errors[id] })}
+							>
+								{t(errors[id] === 1 ? "{n} error" : "{n} errors", { n: errors[id] })}
 							</span>
 						) : undefined,
 					),
 				)}
 				<span style={{ flex: 1 }} />
-				{item("about", "About", <InfoIcon />, SECTION_COLORS.about.accent)}
+				{item("about", t("About"), <InfoIcon />, SECTION_COLORS.about.accent)}
 			</nav>
 			<div className="workspace">
 				<main className="card set-card">

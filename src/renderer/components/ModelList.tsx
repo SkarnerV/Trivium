@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
 import type { CustomModel } from "../../shared/protocol.ts";
 import { Chevron, DownloadIcon, PlusIcon, SearchIcon } from "../icons.tsx";
 import { notify } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 /** pi's defaults for a model that doesn't give its own. */
 const DEFAULT_CONTEXT = 128000;
@@ -71,11 +72,11 @@ function ModelRow({
 	// A catalog model left blank keeps the catalog's value, which isn't known here.
 	const fallback = (count: number) => (row.builtIn ? undefined : count);
 	const facts = [
-		tokens(row.contextWindow ?? fallback(DEFAULT_CONTEXT)) && `${tokens(row.contextWindow ?? DEFAULT_CONTEXT)} context`,
-		tokens(row.maxTokens ?? fallback(DEFAULT_OUTPUT)) && `${tokens(row.maxTokens ?? DEFAULT_OUTPUT)} output`,
-		row.images && "Vision",
-		row.reasoning && "Thinking",
-		row.edited && !row.reset && "Changed",
+		tokens(row.contextWindow ?? fallback(DEFAULT_CONTEXT)) && t("{context} context", { context: tokens(row.contextWindow ?? DEFAULT_CONTEXT) }),
+		tokens(row.maxTokens ?? fallback(DEFAULT_OUTPUT)) && t("{n} output", { n: tokens(row.maxTokens ?? DEFAULT_OUTPUT) }),
+		row.images && t("Vision"),
+		row.reasoning && t("Thinking"),
+		row.edited && !row.reset && t("Changed"),
 	].filter(Boolean);
 	return (
 		<li className={`cm-model${row.on ? " on" : ""}${open ? " open" : ""}`}>
@@ -84,10 +85,10 @@ function ModelRow({
 					type="button"
 					role="checkbox"
 					aria-checked={row.on}
-					aria-label={`Use ${row.id}`}
+					aria-label={t("Use {model}", { model: row.id })}
 					className="cm-check"
 					disabled={row.builtIn}
-					title={row.builtIn ? "Part of the provider's catalog, so always offered" : undefined}
+					title={row.builtIn ? t("Part of the provider's catalog, so always offered") : undefined}
 					onClick={() => onChange({ on: !row.on })}
 				>
 					<span className="cm-box" />
@@ -102,32 +103,32 @@ function ModelRow({
 						{facts.join(" · ")}
 					</span>
 				</button>
-				<button type="button" className="s-icon-btn" aria-label={open ? "Hide details" : "Edit details"} onClick={onToggleOpen}>
+				<button type="button" className="s-icon-btn" aria-label={t(open ? "Hide details" : "Edit details")} onClick={onToggleOpen}>
 					<Chevron open={open} size={11} />
 				</button>
 			</div>
 			{open && (
 				<div className="cm-model-body">
 					<label className="cm-field wide">
-						<span>Display name</span>
+						<span>{t("Display name")}</span>
 						<input className="cm-input" value={row.name ?? ""} placeholder={row.id} onChange={(event) => onChange({ name: event.target.value || undefined })} />
 					</label>
-					<NumberField label="Context window" value={row.contextWindow} placeholder={row.builtIn ? "Catalog value" : String(DEFAULT_CONTEXT)} onChange={(contextWindow) => onChange({ contextWindow })} />
-					<NumberField label="Max output tokens" value={row.maxTokens} placeholder={row.builtIn ? "Catalog value" : String(DEFAULT_OUTPUT)} onChange={(maxTokens) => onChange({ maxTokens })} />
+					<NumberField label={t("Context window")} value={row.contextWindow} placeholder={row.builtIn ? t("Catalog value") : String(DEFAULT_CONTEXT)} onChange={(contextWindow) => onChange({ contextWindow })} />
+					<NumberField label={t("Max output tokens")} value={row.maxTokens} placeholder={row.builtIn ? t("Catalog value") : String(DEFAULT_OUTPUT)} onChange={(maxTokens) => onChange({ maxTokens })} />
 					<div className="cm-checks">
-						<Check on={row.images} label="Reads images" onChange={(images) => onChange({ images })} />
-						<Check on={row.reasoning} label="Thinks" onChange={(reasoning) => onChange({ reasoning })} />
+						<Check on={row.images} label={t("Reads images")} onChange={(images) => onChange({ images })} />
+						<Check on={row.reasoning} label={t("Thinks")} onChange={(reasoning) => onChange({ reasoning })} />
 						{onRemove && (
 							<button type="button" className="s-link cm-remove-model" onClick={onRemove}>
-								Remove
+								{t("Remove")}
 							</button>
 						)}
 						{row.builtIn && row.edited && !row.reset && (
-							<button type="button" className="s-link cm-reset-model" title="Drop the changes in models.json" onClick={() => onChange({ reset: true })}>
-								Use pi's values
+							<button type="button" className="s-link cm-reset-model" title={t("Drop the changes in models.json")} onClick={() => onChange({ reset: true })}>
+								{t("Use pi's values")}
 							</button>
 						)}
-						{row.reset && <span className="cm-reset-note">pi's values return on save</span>}
+						{row.reset && <span className="cm-reset-note">{t("pi's values return on save")}</span>}
 					</div>
 				</div>
 			)}
@@ -184,7 +185,12 @@ export function ModelList({
 			const pick = rows.length === 0 && models.length <= 12;
 			setRows((current) => [...current, ...added.map((model) => ({ ...model, on: pick }))]);
 			setFetched((current) => new Set([...current, ...added.map((model) => model.id)]));
-			notify(added.length ? `Found ${models.length} models, ${added.length} new` : `Found ${models.length} models, all listed already`, "info");
+			notify(
+				added.length
+					? t("Found {n} models, {added} new", { n: models.length, added: added.length })
+					: t("Found {n} models, all listed already", { n: models.length }),
+				"info",
+			);
 		} catch (thrown) {
 			setFetchError(messageOf(thrown));
 		} finally {
@@ -205,19 +211,20 @@ export function ModelList({
 		<section className="cm-models" aria-labelledby="cm-models-title">
 			<div className="cm-models-head">
 				<h3 id="cm-models-title">
-					Models{rows.length ? <span className="cm-count"> · {chosen.length} of {rows.length} on</span> : null}
+					{t("Models")}
+					{rows.length ? <span className="cm-count"> · {t("{on} of {total} on", { on: chosen.length, total: rows.length })}</span> : null}
 				</h3>
 				{rows.length > 8 && (
 					<label className="s-search">
 						<SearchIcon size={13} />
-						<span className="sr-only">Search models</span>
-						<input value={query} placeholder="Search models" onChange={(event) => setQuery(event.target.value)} />
+						<span className="sr-only">{t("Search models")}</span>
+						<input value={query} placeholder={t("Search models")} onChange={(event) => setQuery(event.target.value)} />
 					</label>
 				)}
 				{fetchModels && (
 					<button type="button" className="s-btn soft" disabled={fetching} onClick={() => void fetchList()}>
 						<DownloadIcon size={13} />
-						{fetching ? "Fetching…" : rows.length ? "Fetch again" : "Fetch models"}
+						{t(fetching ? "Fetching…" : rows.length ? "Fetch again" : "Fetch models")}
 					</button>
 				)}
 			</div>
@@ -227,10 +234,10 @@ export function ModelList({
 					{switchable.length > 1 && (
 						<div className="cm-bulk">
 							<button type="button" className="s-link" onClick={() => turnShown(true)}>
-								{query ? "Turn on all shown" : "Turn all on"}
+								{t(query ? "Turn on all shown" : "Turn all on")}
 							</button>
 							<button type="button" className="s-link" onClick={() => turnShown(false)}>
-								{query ? "Turn off all shown" : "Turn all off"}
+								{t(query ? "Turn off all shown" : "Turn all off")}
 							</button>
 						</div>
 					)}
@@ -249,7 +256,7 @@ export function ModelList({
 								}
 							/>
 						))}
-						{!shown.length && <li className="s-empty">No model matches “{query}”.</li>}
+						{!shown.length && <li className="s-empty">{t("No model matches “{query}”.", { query })}</li>}
 					</ul>
 				</>
 			) : (
@@ -266,7 +273,7 @@ export function ModelList({
 				/>
 				<button type="button" className="s-btn" disabled={!manual.trim()} onClick={addManual}>
 					<PlusIcon size={11} width={2.6} />
-					Add
+					{t("Add")}
 				</button>
 			</span>
 		</section>

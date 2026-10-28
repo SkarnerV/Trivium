@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AttachmentInfo } from "../../shared/protocol.ts";
 import { CloseIcon, FileIcon } from "../icons.tsx";
 import { attempt, trivium } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 function readAsBase64(file: File): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -100,12 +101,12 @@ export function AttachmentChips({
 						<span className="ellipsis">{item.name}</span>
 						<span className="attach-size">{formatSize(item.size)}</span>
 					</span>
-					<button type="button" className="attach-remove" aria-label={`Remove ${item.name}`} onClick={() => onRemove(item.id)}>
+					<button type="button" className="attach-remove" aria-label={t("Remove {name}", { name: item.name })} onClick={() => onRemove(item.id)}>
 						<CloseIcon size={10} />
 					</button>
 				</div>
 			))}
-			{pending > 0 && <div className="attach-chip loading">Preparing…</div>}
+			{pending > 0 && <div className="attach-chip loading">{t("Preparing…")}</div>}
 			{warning && <div className="attach-warning">{warning}</div>}
 		</div>
 	);

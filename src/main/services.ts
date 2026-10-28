@@ -6,6 +6,7 @@ import { constants as osConstants } from "node:os";
 import { basename, join } from "node:path";
 import { type BashOperations, getShellConfig } from "@earendil-works/pi-coding-agent";
 import type { ServiceInfo } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 /**
  * Every agent command runs with this variable set to an id of its own. Processes inherit it, so the ones a
@@ -505,7 +506,11 @@ export class ServiceTracker {
 		await this.stopAll([service]);
 		if (this.services.has(id)) {
 			const left = this.services.get(id)!.processes.map((row) => `${row.name} (${row.pid})`).join(", ");
-			throw new Error(`Couldn't stop ${left}. Try again, or end it from ${process.platform === "darwin" ? "Activity Monitor" : "Task Manager"}.`);
+			throw new Error(
+				t(process.platform === "darwin" ? "Couldn't stop {name}. Try again, or end it from Activity Monitor." : "Couldn't stop {name}. Try again, or end it from Task Manager.", {
+					name: left,
+				}),
+			);
 		}
 	}
 

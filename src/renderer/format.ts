@@ -1,3 +1,5 @@
+import { getLocale, t } from "../shared/i18n.ts";
+
 export function duration(ms: number | undefined): string {
 	if (ms === undefined || ms < 0) return "";
 	if (ms < 100) return "<0.1s";
@@ -12,15 +14,15 @@ export function duration(ms: number | undefined): string {
 
 export function relativeTime(timestamp: number, now = Date.now()): string {
 	const minutes = Math.floor((now - timestamp) / 60_000);
-	if (minutes < 1) return "now";
+	if (minutes < 1) return t("now");
 	if (minutes < 60) return `${minutes}m`;
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) return `${hours}h`;
 	const date = new Date(timestamp);
 	const days = Math.floor(hours / 24);
-	if (days < 2) return "Yesterday";
-	if (days < 7) return date.toLocaleDateString(undefined, { weekday: "short" });
-	return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+	if (days < 2) return t("Yesterday");
+	if (days < 7) return date.toLocaleDateString(getLocale(), { weekday: "short" });
+	return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
 }
 
 export function tokens(count: number): string {

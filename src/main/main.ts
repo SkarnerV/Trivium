@@ -23,6 +23,7 @@ import type {
 	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
+import { resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { ConnectorStore } from "./connectors.ts";
@@ -72,6 +73,11 @@ protocol.registerSchemesAsPrivileged([{ scheme: READER_SCHEME, privileges: { sta
 mkdirSync(triviumDir, { recursive: true });
 const settings = new SettingsStore(join(triviumDir, "settings.json"));
 
+/** Menus, dialogs and notifications from this process speak the language the window does. */
+function applyLanguage(): void {
+	setLocale(resolveLocale(settings.get().language, app.getPreferredSystemLanguages()));
+}
+
 function send(event: HostEvent): void {
 	if (window && !window.isDestroyed()) window.webContents.send("trivium:event", event);
 }
@@ -81,7 +87,7 @@ function alert(kind: "done" | "waiting", path: string, body: string): void {
 	const prefs = settings.get();
 	if ((kind === "done" ? !prefs.notifyDone : !prefs.notifyWaiting) || !Notification.isSupported()) return;
 	if (window?.isFocused()) return;
-	const notification = new Notification({ title: kind === "done" ? "Run finished" : "Waiting for your answer", body });
+	const notification = new Notification({ title: t(kind === "done" ? "Run finished" : "Waiting for your answer"), body });
 	notification.on("click", () => {
 		window?.show();
 		window?.focus();
@@ -211,7 +217,7 @@ function registerIpc(): void {
 		if (ids?.length) attachments.drop(ids);
 	});
 	handle("trivium:pickAttachments", async () => {
-		const result = await dialog.showOpenDialog(window!, { title: "Attach files", properties: ["openFile", "multiSelections"] });
+		const result = await dialog.showOpenDialog(window!, { title: t("Attach files"), properties: ["openFile", "multiSelections"] });
 		return result.canceled ? [] : attachments.fromPaths(result.filePaths);
 	});
 	handle("trivium:attachPaths", (paths: string[]) => attachments.fromPaths(paths));
@@ -232,12 +238,16 @@ function registerIpc(): void {
 	handle("trivium:updateSettings", async (patch: Partial<TriviumSettings>) => {
 		const next = await settings.update(patch);
 		if (patch.textSize) window?.webContents.setZoomFactor(next.textSize);
+		if (patch.language) {
+			applyLanguage();
+			setMenu();
+		}
 		return next;
 	});
 	handle("trivium:appDetails", (id: AppId) => host.describeApp(id));
 	handle("trivium:addExtension", async (id: AppId) => {
 		const result = await dialog.showOpenDialog(window!, {
-			title: "Add an extension",
+			title: t("Add an extension"),
 			properties: ["openFile", "openDirectory"],
 			filters: [{ name: "Extensions", extensions: ["ts", "js", "mjs"] }],
 		});
@@ -262,7 +272,7 @@ function registerIpc(): void {
 	handle("trivium:exportSession", async (path: string) => {
 		const info = host.exportInfo(path);
 		const result = await dialog.showSaveDialog(window!, {
-			title: "Export session",
+			title: t("Export session"),
 			defaultPath: join(app.getPath("downloads"), `${exportFileName(info.title)}.md`),
 			filters: [
 				{ name: "Markdown", extensions: ["md"] },
@@ -372,7 +382,7 @@ function registerIpc(): void {
 		return reader.open(target.file, target.root, target.rel);
 	});
 	handle("trivium:pickReaderFile", async (path: string) => {
-		const result = await dialog.showOpenDialog(window!, { title: "Preview a file", defaultPath: host.cwdOf(path), properties: ["openFile"] });
+		const result = await dialog.showOpenDialog(window!, { title: t("Preview a file"), defaultPath: host.cwdOf(path), properties: ["openFile"] });
 		const file = result.filePaths[0];
 		if (result.canceled || !file) return undefined;
 		// A file the user picked may come from anywhere; its page loads only from its own folder.
@@ -388,7 +398,7 @@ function registerIpc(): void {
 	});
 	handle("trivium:saveImage", async (path: string, id: string, name: string) => {
 		const image = host.image(path, id);
-		const result = await dialog.showSaveDialog(window!, { title: "Save image", defaultPath: join(app.getPath("downloads"), basename(name)) });
+		const result = await dialog.showSaveDialog(window!, { title: t("Save image"), defaultPath: join(app.getPath("downloads"), basename(name)) });
 		if (result.canceled || !result.filePath) return false;
 		await writeFile(result.filePath, Buffer.from(image.data, "base64"));
 		return true;
@@ -516,7 +526,20 @@ function createWindow(): void {
 	});
 }
 
+/** Electron names the role menus in the system's language; the one Trivium names follows the setting. */
+function setMenu(): void {
+	Menu.setApplicationMenu(
+		Menu.buildFromTemplate([
+			{ role: "appMenu" },
+			{ role: "editMenu" },
+			{ label: t("View"), submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
+			{ role: "windowMenu" },
+		]),
+	);
+}
+
 app.whenReady().then(async () => {
+	applyLanguage();
 	if (process.platform === "win32") {
 		try {
 			const portableLauncher = app.isPackaged ? process.env.PORTABLE_EXECUTABLE_FILE : undefined;
@@ -534,14 +557,7 @@ app.whenReady().then(async () => {
 			console.error("Could not refresh Windows application branding:", error);
 		}
 	}
-	Menu.setApplicationMenu(
-		Menu.buildFromTemplate([
-			{ role: "appMenu" },
-			{ role: "editMenu" },
-			{ label: "View", submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
-			{ role: "windowMenu" },
-		]),
-	);
+	setMenu();
 	await host.init();
 	// Services a crash left running show again in their sessions.
 	void services.init().catch((error: unknown) => console.error("Could not check for services left running:", error));
@@ -570,11 +586,11 @@ async function confirmStop(): Promise<boolean> {
 	const count = services.count();
 	const options = {
 		type: "question" as const,
-		buttons: ["Stop and quit", "Cancel"],
+		buttons: [t("Stop and quit"), t("Cancel")],
 		defaultId: 0,
 		cancelId: 1,
-		message: count === 1 ? "A service started by Trivium is still running" : `${count} services started by Trivium are still running`,
-		detail: "Quitting stops them, such as dev servers and watchers your sessions started. To keep one, run it yourself outside Trivium.",
+		message: count === 1 ? t("A service started by Trivium is still running") : t("{n} services started by Trivium are still running", { n: count }),
+		detail: t("Quitting stops them, such as dev servers and watchers your sessions started. To keep one, run it yourself outside Trivium."),
 	};
 	const { response } = window && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
 	if (response !== 0) return false;

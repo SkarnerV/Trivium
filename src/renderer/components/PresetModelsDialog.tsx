@@ -3,6 +3,7 @@ import type { CustomModel, PresetModelField, PresetProvider, PresetProviderChang
 import { CloseIcon } from "../icons.tsx";
 import { notify, trivium } from "../store.ts";
 import { ModelList, messageOf, type Row } from "./ModelList.tsx";
+import { t, tx } from "../i18n.tsx";
 
 const FIELDS: PresetModelField[] = ["name", "contextWindow", "maxTokens", "images", "reasoning"];
 
@@ -58,7 +59,7 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 		setSaving(true);
 		try {
 			await trivium.savePresetProvider(preset.id, { baseUrl: baseUrl.trim(), edits, added });
-			notify(`Saved ${preset.name}'s models`, "info");
+			notify(t("Saved {name}'s models", { name: preset.name }), "info");
 			onSaved();
 			onClose();
 		} catch (thrown) {
@@ -77,21 +78,23 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 		>
 			<div className="modal cm" role="dialog" aria-modal="true" aria-labelledby="cm-title" style={{ width: 640 }}>
 				<div className="modal-head">
-					<h2 id="cm-title">{name} models</h2>
-					<button type="button" className="icon-btn" aria-label="Close" disabled={saving} onClick={onClose}>
+					<h2 id="cm-title">{t("{name} models", { name })}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} disabled={saving} onClick={onClose}>
 						<CloseIcon size={15} width={2} />
 					</button>
 				</div>
 				<p className="add-ext-intro">
-					Change what pi knows of {name}'s models, or add ones its catalog doesn't list yet. Saved in pi's{" "}
-					<span className="mono">models.json</span>, so the pi CLI sees the same.
+					{tx("Change what pi knows of {name}'s models, or add ones its catalog doesn't list yet. Saved in pi's {file}, so the pi CLI sees the same.", {
+						name,
+						file: <span className="mono">models.json</span>,
+					})}
 				</p>
 
 				{preset && (
 					<>
 						<div className="cm-grid">
 							<label className="cm-field wide">
-								<span>Base URL</span>
+								<span>{t("Base URL")}</span>
 								<input
 									className="cm-input mono"
 									value={baseUrl}
@@ -99,15 +102,17 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 									spellCheck={false}
 									onChange={(event) => setBaseUrl(event.target.value)}
 								/>
-								<span className="cm-help">Leave empty for {name}'s own. A proxy's URL here applies to every model, and the login stays as it is.</span>
+								<span className="cm-help">
+									{t("Leave empty for {name}'s own. A proxy's URL here applies to every model, and the login stays as it is.", { name })}
+								</span>
 							</label>
 						</div>
 						<ModelList
 							rows={rows}
 							setRows={setRows}
 							fetchModels={preset.api ? () => trivium.fetchPresetModels(preset.id, baseUrl) : undefined}
-							manualPlaceholder="Add a model by ID"
-							emptyText={`${name} lists no models yet. Add one by its ID.`}
+							manualPlaceholder={t("Add a model by ID")}
+							emptyText={t("{name} lists no models yet. Add one by its ID.", { name })}
 						/>
 					</>
 				)}
@@ -116,10 +121,10 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 				<div className="modal-foot">
 					<span className="btn-row">
 						<button type="button" className="btn ghost" disabled={saving} onClick={onClose}>
-							Cancel
+							{t("Cancel")}
 						</button>
 						<button type="button" className="btn primary" disabled={saving || !preset} onClick={() => void save()}>
-							{saving ? "Saving…" : "Save"}
+							{t(saving ? "Saving…" : "Save")}
 						</button>
 					</span>
 				</div>

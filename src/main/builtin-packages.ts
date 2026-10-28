@@ -6,6 +6,7 @@ import type { LoadExtensionsResult, PackageSource } from "@earendil-works/pi-cod
 import { packageName } from "../shared/packages.ts";
 import { DEFAULT_PERMISSION_LEVEL, PERMISSION_LEVELS, permissionLevelOf, withPermissionLevel } from "../shared/permissions.ts";
 import type { AppId, PermissionSettings } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 import { builtInPackages } from "../shared/recommended.ts";
 
 const require = createRequire(import.meta.url);
@@ -109,7 +110,7 @@ export async function writePermissionLevel(agentDir: string, id: string): Promis
 		try {
 			config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 		} catch {
-			throw new Error(`${path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.`);
+			throw new Error(t("{path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.", { path }));
 		}
 	}
 	await mkdir(dirname(path), { recursive: true });

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { diffLines as lineParts, structuredPatch } from "diff";
 import type { DiffLine, FileChange, FileReview, ReviewSegment } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 /** Files bigger than this are listed without a diff. */
 const MAX_DIFF_BYTES = 512 * 1024;
@@ -148,7 +149,7 @@ export class ChangeTracker {
 
 	private async segments(path: string): Promise<{ segments: ReviewSegment[]; after: string | null }> {
 		await this.loaded;
-		if (!this.baselines.has(path)) throw new Error("This session did not change that file.");
+		if (!this.baselines.has(path)) throw new Error(t("This session did not change that file."));
 		const before = this.baselines.get(path) ?? "";
 		const after = await readOrNull(path);
 		const segments: ReviewSegment[] = [];
@@ -176,7 +177,7 @@ export class ChangeTracker {
 		const { segments, after } = await this.segments(path);
 		const change = segments.find((segment) => segment.kind === "change" && segment.id === id);
 		if (!change || change.kind !== "change" || change.del !== expect.del || change.ins !== expect.ins) {
-			throw new Error("The file changed since you opened it. Review it again.");
+			throw new Error(t("The file changed since you opened it. Review it again."));
 		}
 		const build = (pick: (segment: Extract<ReviewSegment, { kind: "change" }>) => string) =>
 			segments.map((segment) => (segment.kind === "same" ? segment.text : pick(segment))).join("");

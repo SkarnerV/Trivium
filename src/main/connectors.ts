@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { LoadedMcpConfig, McpServerConfig, McpServerEntry } from "@earendil-works/pi-coding-agent";
 import { SERVER_NAME } from "../shared/connectors.ts";
+import { t } from "../shared/i18n.ts";
 import type { ConnectorInfo, ConnectorInput, ConnectorsView, McpExposure } from "../shared/protocol.ts";
 
 type Json = Record<string, unknown>;
@@ -87,14 +88,14 @@ export function parseImport(json: string, name?: string): Json {
 		try {
 			parsed = JSON.parse(`{${text.replace(/,\s*$/, "")}}`);
 		} catch {
-			throw new Error(`That isn't valid JSON: ${messageOf(error)}`);
+			throw new Error(t("That isn't valid JSON: {error}", { error: messageOf(error) }));
 		}
 	}
-	if (!isRecord(parsed)) throw new Error("Paste a JSON object: an mcpServers block, or one server's entry.");
+	if (!isRecord(parsed)) throw new Error(t("Paste a JSON object: an mcpServers block, or one server's entry."));
 	if (isRecord(parsed.mcpServers)) return parsed.mcpServers;
 	if (isRecord(parsed.servers)) return parsed.servers;
 	if ("command" in parsed || "url" in parsed || "type" in parsed) {
-		if (!name) throw new Error("That is one server's entry. Give it a name.");
+		if (!name) throw new Error(t("That is one server's entry. Give it a name."));
 		return { [name]: parsed };
 	}
 	return parsed;
@@ -175,7 +176,7 @@ export class ConnectorStore {
 			log: (line) => output.push(line),
 			error: (line) => problems.push(line),
 		});
-		if (!output.length) throw new Error(problems.join("\n") || "pi couldn't check the MCP servers.");
+		if (!output.length) throw new Error(problems.join("\n") || t("pi couldn't check the MCP servers."));
 		const report = JSON.parse(output.join("\n")) as { servers: ListedServer[] };
 		this.listed = new Map(report.servers.map((server) => [server.name, server]));
 		this.checked = Date.now();
@@ -185,10 +186,10 @@ export class ConnectorStore {
 	async save(input: ConnectorInput, previousName?: string): Promise<ConnectorsView> {
 		const name = input.name.trim();
 		if (input.transport === "stdio" ? !input.command.trim() : !input.url.trim()) {
-			throw new Error(input.transport === "stdio" ? "Enter the command that starts the server." : "Enter the server's URL.");
+			throw new Error(t(input.transport === "stdio" ? "Enter the command that starts the server." : "Enter the server's URL."));
 		}
 		const raw = rawServers(this.path);
-		if (name !== previousName && raw[name] !== undefined) throw new Error(`A server called “${name}” exists already.`);
+		if (name !== previousName && raw[name] !== undefined) throw new Error(t("A server called “{name}” exists already.", { name }));
 		const entry = entryFor(input, previousName && isRecord(raw[previousName]) ? raw[previousName] : {});
 		await this.write({ [name]: entry });
 		if (previousName && previousName !== name) {
@@ -201,10 +202,13 @@ export class ConnectorStore {
 	async import(json: string, name?: string): Promise<{ view: ConnectorsView; added: string[] }> {
 		const entries = parseImport(json, name?.trim() || undefined);
 		const added = Object.keys(entries);
-		if (!added.length) throw new Error("There are no servers in that JSON.");
+		if (!added.length) throw new Error(t("There are no servers in that JSON."));
 		const raw = rawServers(this.path);
 		const taken = added.filter((entry) => raw[entry] !== undefined);
-		if (taken.length) throw new Error(`${taken.map((entry) => `“${entry}”`).join(", ")} ${taken.length === 1 ? "exists" : "exist"} already. Rename or remove ${taken.length === 1 ? "it" : "them"} first.`);
+		if (taken.length) {
+			const names = taken.map((entry) => t("“{title}”", { title: entry })).join(t(", "));
+			throw new Error(t(taken.length === 1 ? "{names} exists already. Rename or remove it first." : "{names} exist already. Rename or remove them first.", { names }));
+		}
 		await this.write(entries);
 		return { view: await this.view(), added };
 	}
@@ -235,12 +239,12 @@ export class ConnectorStore {
 	}
 
 	async signIn(name: string): Promise<ConnectorsView> {
-		await this.run(["login", name], `Signing in to ${name} didn't finish.`);
+		await this.run(["login", name], t("Signing in to {name} didn't finish.", { name }));
 		return this.check();
 	}
 
 	async signOut(name: string): Promise<ConnectorsView> {
-		await this.run(["logout", name], `Signing out of ${name} failed.`);
+		await this.run(["logout", name], t("Signing out of {name} failed.", { name }));
 		return this.check();
 	}
 

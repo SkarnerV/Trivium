@@ -7,6 +7,7 @@ import type { Api, Model, Provider } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CustomApi, CustomModel, CustomProvider, PresetProvider, PresetProviderChanges } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 type Json = Record<string, unknown>;
 
@@ -41,7 +42,7 @@ function readConfig(path: string): Json {
 	try {
 		return obj(JSON.parse(readFileSync(path, "utf8")));
 	} catch {
-		throw new Error(`${path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.`);
+		throw new Error(t("{path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.", { path }));
 	}
 }
 
@@ -83,7 +84,7 @@ export function readCustomProviders(agentDir: string): CustomProvider[] {
 
 function validate(provider: CustomProvider): void {
 	if (!/^[a-z0-9][a-z0-9._-]*$/i.test(provider.id)) throw new Error("The ID can use letters, digits, dots, dashes and underscores.");
-	if (isBuiltIn(provider.id)) throw new Error(`“${provider.id}” is one of pi's own providers. Choose another ID.`);
+	if (isBuiltIn(provider.id)) throw new Error(t("“{id}” is one of pi's own providers. Choose another ID.", { id: provider.id }));
 	if (!CUSTOM_APIS.includes(provider.api)) throw new Error(`Unknown API: ${provider.api}`);
 	validateUrl(provider.baseUrl);
 	validateModels(provider.models);
@@ -94,16 +95,16 @@ function validateUrl(baseUrl: string): void {
 	try {
 		url = new URL(baseUrl);
 	} catch {
-		throw new Error("The base URL isn't a valid URL.");
+		throw new Error(t("The base URL isn't a valid URL."));
 	}
-	if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("The base URL must start with http:// or https://.");
+	if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(t("The base URL must start with http:// or https://."));
 }
 
 function validateModels(models: CustomModel[]): void {
 	const seen = new Set<string>();
 	for (const model of models) {
-		if (!model.id.trim()) throw new Error("Every model needs an ID.");
-		if (seen.has(model.id)) throw new Error(`${model.id} is listed twice.`);
+		if (!model.id.trim()) throw new Error(t("Every model needs an ID."));
+		if (seen.has(model.id)) throw new Error(t("{id} is listed twice.", { id: model.id }));
 		seen.add(model.id);
 	}
 }
@@ -138,7 +139,7 @@ export async function saveCustomProvider(agentDir: string, provider: CustomProvi
 	const path = modelsPath(agentDir);
 	const config = readConfig(path);
 	const providers = { ...obj(config.providers) };
-	if (provider.id !== previousId && provider.id in providers) throw new Error(`models.json already has a provider called “${provider.id}”.`);
+	if (provider.id !== previousId && provider.id in providers) throw new Error(t("models.json already has a provider called “{id}”.", { id: provider.id }));
 	const previous = obj(providers[previousId ?? provider.id]);
 	if (previousId) delete providers[previousId];
 	const previousModels = modelsById(previous.models);
@@ -185,7 +186,7 @@ function mainApi(models: readonly Model<Api>[]): string | undefined {
 export function readPresetProvider(agentDir: string, runtime: ModelRuntime, id: string): PresetProvider & { mainApi?: string } {
 	const base = catalogProvider(id);
 	const provider = runtime.getProvider(id);
-	if (!base || !provider) throw new Error(`${id} isn't one of pi's own providers.`);
+	if (!base || !provider) throw new Error(t("{id} isn't one of pi's own providers.", { id }));
 	const entry = obj(obj(readConfig(modelsPath(agentDir)).providers)[id]);
 	const added = modelsById(entry.models);
 	const overrides = obj(entry.modelOverrides);
@@ -210,9 +211,9 @@ export function readPresetProvider(agentDir: string, runtime: ModelRuntime, id: 
 /** Asks a built-in provider which models it serves, with the credentials pi resolves for it. */
 export async function fetchPresetModels(agentDir: string, runtime: ModelRuntime, id: string, baseUrl: string): Promise<CustomModel[]> {
 	const preset = readPresetProvider(agentDir, runtime, id);
-	if (!preset.api) throw new Error(`Trivium can't ask ${preset.name} for its models. Add them by ID instead.`);
+	if (!preset.api) throw new Error(t("Trivium can't ask {name} for its models. Add them by ID instead.", { name: preset.name }));
 	const result = await runtime.getAuth(id);
-	if (!result) throw new Error(`Log in to ${preset.name} first.`);
+	if (!result) throw new Error(t("Log in to {name} first.", { name: preset.name }));
 	const headers = Object.fromEntries(
 		Object.entries(result.auth.headers ?? {}).filter((header): header is [string, string] => header[1] !== null),
 	);
@@ -233,7 +234,7 @@ export async function savePresetProvider(agentDir: string, runtime: ModelRuntime
 	validateModels(changes.added);
 	const catalogIds = new Set(preset.builtIn.map((model) => model.id));
 	const taken = changes.added.find((model) => catalogIds.has(model.id));
-	if (taken) throw new Error(`${taken.id} is one of ${preset.name}'s own models already.`);
+	if (taken) throw new Error(t("{id} is one of {name}'s own models already.", { id: taken.id, name: preset.name }));
 
 	const path = modelsPath(agentDir);
 	const config = readConfig(path);
@@ -422,7 +423,7 @@ export async function fetchModels(
 	try {
 		new URL(endpoint.baseUrl);
 	} catch {
-		throw new Error("Enter the endpoint's base URL first.");
+		throw new Error(t("Enter the endpoint's base URL first."));
 	}
 	const key = auth ? auth.key : await resolveKey(endpoint.apiKey);
 	const request = listRequest(endpoint.api, endpoint.baseUrl, key);
@@ -433,10 +434,10 @@ export async function fetchModels(
 		body = await getJson(url, { headers });
 	} catch (error) {
 		const message = error instanceof Error ? (error.name === "TimeoutError" ? "no answer in 15 seconds" : error.message) : String(error);
-		throw new Error(`Couldn't list models from ${url}: ${message}`);
+		throw new Error(t("Couldn't list models from {url}: {error}", { url, error: message }));
 	}
 	const models = parseListing(endpoint.api, body);
-	if (!models.length) throw new Error(`${url} answered, but listed no models.`);
+	if (!models.length) throw new Error(t("{url} answered, but listed no models.", { url }));
 	// Only a local server has the APIs beside /v1 that describe its models.
 	return !auth && (endpoint.api === "openai-completions" || endpoint.api === "openai-responses")
 		? describeLocal(endpoint.baseUrl, models, headers)

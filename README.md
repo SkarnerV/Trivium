@@ -1,5 +1,7 @@
 <div align="center">
 
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+
 # Trivium
 
 **One desktop workspace for coding, research and writing, powered by the pi agent.**
@@ -137,6 +139,7 @@ login show "Plan" instead of a cost.
 - **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes. Each provider shows its logo.
 - **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. Built-in providers get the same model list, for a proxy base URL, per-model overrides or models added by ID. It all goes to pi's `models.json`, so the pi CLI offers them too.
 - **Sessions that manage themselves.** Idle sessions unload after a while and reload from disk when you open them.
+- **Your language.** The interface comes in English, 简体中文 and 日本語. It follows your computer's language unless you pick one in **Settings → General**.
 
 ## Quick start
 
@@ -193,6 +196,8 @@ windows before restarting so the old taskbar group can exit.
 | `/` | Commands, with suggestions; `tab` completes |
 | `esc` | Stop the run, dismiss a question, close a dialog |
 
+On Windows, `⌘` is `Ctrl` and `⌥` is `Alt`.
+
 ## How it works
 
 ```mermaid
@@ -229,7 +234,7 @@ flowchart LR
 |---|---|
 | `~/.pi/agent/` | pi's settings, logins, models and sessions, shared with the pi CLI |
 | `~/.trivium/apps/<app>/extensions/` | Extensions loaded only for that mode |
-| `~/.trivium/settings.json` | Text size, idle unloading, notifications, per-mode models and extension switches |
+| `~/.trivium/settings.json` | Language, text size, idle unloading, notifications, per-mode models and extension switches |
 | `~/.trivium/session-apps.json` | Which mode each session belongs to; sessions from elsewhere show under Code |
 | `~/.trivium/changes/` | File contents from before the agent's changes, until you keep or revert |
 | `~/.trivium/chats/` | The working folder for sessions started with No project |
@@ -298,9 +303,12 @@ src/
   main/       Electron main process: session host, run and change tracking, settings, logins
   preload/    The window.trivium bridge
   renderer/   React UI
-  shared/     Types shared across the IPC boundary
+  shared/     Types shared across the IPC boundary, and the translations
 dev/          The scripted development model
 ```
+
+The interface's translations live in `src/shared/locales/`, keyed by the English text. Code shows text
+with `t("English text")`, and `npm test` checks that every text has a translation in each language.
 
 ## Roadmap
 
@@ -315,6 +323,7 @@ dev/          The scripted development model
 - [x] Connectors page for MCP servers
 - [x] Code: Git view, branch summary and file Preview
 - [x] Edit, fork and copy messages; chats without a project; pinned projects and sessions
+- [x] English, Simplified Chinese and Japanese interface
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`
 - [ ] Dark theme
 - [ ] Signed builds for macOS, Windows and Linux

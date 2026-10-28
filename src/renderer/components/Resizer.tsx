@@ -1,5 +1,6 @@
 import type { KeyboardEvent, PointerEvent } from "react";
 import { setState, useStore } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 480;
@@ -77,7 +78,7 @@ export function Resizer({ target }: { target: Target }) {
 			className={`resizer resizer-${target}`}
 			role="separator"
 			aria-orientation="vertical"
-			aria-label={target === "sidebar" ? "Resize sidebar" : "Resize panel"}
+			aria-label={t(target === "sidebar" ? "Resize sidebar" : "Resize panel")}
 			aria-valuenow={width}
 			tabIndex={0}
 			onPointerDown={onPointerDown}

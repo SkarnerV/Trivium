@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AuthPrompt, AuthEvent } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { LoginEvent, ProviderInfo } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 type AuthLike = {
 	apiKey?: { name: string; login?: unknown };
@@ -35,8 +36,8 @@ export function listProviders(runtime: ModelRuntime, custom: Set<string> = new S
 		const status = runtime.getProviderAuthStatus(provider.id);
 		const oauth = runtime.isUsingOAuth(provider.id);
 		const logins: ProviderInfo["logins"] = [];
-		if (auth.oauth) logins.push({ type: "oauth", label: auth.oauth.loginLabel ?? `Log in with ${auth.oauth.name}` });
-		if (auth.apiKey?.login) logins.push({ type: "api_key", label: "Enter API key" });
+		if (auth.oauth) logins.push({ type: "oauth", label: auth.oauth.loginLabel ?? t("Log in with {name}", { name: auth.oauth.name }) });
+		if (auth.apiKey?.login) logins.push({ type: "api_key", label: t("Enter API key") });
 		return {
 			id: provider.id,
 			name: provider.name,
@@ -124,7 +125,7 @@ export class LoginFlow {
 	private notify(event: AuthEvent): void {
 		if (event.type === "auth_url") {
 			this.openUrl(event.url);
-			this.emit({ type: "info", message: event.instructions ?? "Continue in your browser.", url: event.url });
+			this.emit({ type: "info", message: event.instructions ?? t("Continue in your browser."), url: event.url });
 		} else if (event.type === "device_code") {
 			this.emit({ type: "device_code", code: event.userCode, url: event.verificationUri });
 		} else if (event.type === "info") {

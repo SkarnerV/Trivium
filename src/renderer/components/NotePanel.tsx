@@ -6,6 +6,7 @@ import { attempt, setState, startSession, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { transition } from "../transition.ts";
+import { t } from "../i18n.tsx";
 
 const isNote = (change: FileChange) => /\.(md|markdown|mdx|txt)$/i.test(change.path) && change.status !== "deleted";
 
@@ -61,34 +62,34 @@ export function NotePanel({ view }: { view: SessionView }) {
 	if (!note) return null;
 
 	const openInWrite = async () => {
-		await startSession({ app: "write", cwd: view.cwd }, `Revise ${note.rel}: `);
+		await startSession({ app: "write", cwd: view.cwd }, t("Revise {file}: ", { file: note.rel }));
 	};
 
 	return (
-		<aside className="side-panel note-panel" aria-label="Note preview">
+		<aside className="side-panel note-panel" aria-label={t("Note preview")}>
 			<Resizer target="panel" />
 			<div className="side-head">
 				<h2 className="mono">{baseName(note.rel)}</h2>
-				<div className="seg" role="tablist" aria-label="Note view">
+				<div className="seg" role="tablist" aria-label={t("Note view")}>
 					<button type="button" role="tab" aria-selected={tab === "preview"} onClick={() => transition("tab", () => setTab("preview"))}>
-						Preview
+						{t("Preview")}
 					</button>
 					<button type="button" role="tab" aria-selected={tab === "sources"} onClick={() => transition("tab", () => setTab("sources"))}>
-						Sources {sources.length}
+						{t("Sources {n}", { n: sources.length })}
 					</button>
 				</div>
 				<button
 					type="button"
 					className="icon-btn"
-					aria-label="Hide note"
-					title="Hide note"
+					aria-label={t("Hide note")}
+					title={t("Hide note")}
 					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
 				>
 					<CloseIcon size={13} />
 				</button>
 			</div>
 			{notes.length > 1 && (
-				<div className="chips" role="tablist" aria-label="Notes">
+				<div className="chips" role="tablist" aria-label={t("Notes")}>
 					{notes.map((n) => (
 						<button key={n.path} type="button" role="tab" className="chip" aria-selected={n === note} title={n.rel} onClick={() => transition("tab", () => setSelected(n.path))}>
 							{baseName(n.rel)}
@@ -113,17 +114,17 @@ export function NotePanel({ view }: { view: SessionView }) {
 						))}
 					</ol>
 				) : (
-					<p className="side-empty">This note has no links yet. Ask the agent to cite its sources.</p>
+					<p className="side-empty">{t("This note has no links yet. Ask the agent to cite its sources.")}</p>
 				)}
 			</div>
 			<div className="side-foot">
 				<button type="button" className="btn primary" style={{ flex: 1 }} onClick={() => void openInWrite()}>
 					<PenIcon size={13} />
-					Open in Write
+					{t("Open in Write")}
 				</button>
-				<button type="button" className="btn" onClick={() => void attempt(() => trivium.openFile(note.path))} title="Open with its default app">
+				<button type="button" className="btn" onClick={() => void attempt(() => trivium.openFile(note.path))} title={t("Open with its default app")}>
 					<ExternalIcon size={13} />
-					Open file
+					{t("Open file")}
 				</button>
 			</div>
 		</aside>

@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { t } from "../i18n.tsx";
 
 export interface DropdownOption {
 	value: string;
@@ -101,7 +102,7 @@ export function OptionList({
 				<input
 					ref={search}
 					className="dd-search"
-					placeholder="Search…"
+					placeholder={t("Search…")}
 					value={query}
 					onChange={(event) => {
 						setQuery(event.target.value);
@@ -136,7 +137,7 @@ export function OptionList({
 						</div>
 					);
 				})}
-				{!visible.length && <div className="dd-empty">Nothing matches</div>}
+				{!visible.length && <div className="dd-empty">{t("Nothing matches")}</div>}
 			</div>
 		</div>
 	);
@@ -154,7 +155,7 @@ export function Dropdown({
 	label,
 	variant = "soft",
 	align = "left",
-	placeholder = "Choose…",
+	placeholder = t("Choose…"),
 	searchThreshold = 9,
 	icon,
 }: {

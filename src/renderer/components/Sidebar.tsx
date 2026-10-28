@@ -23,6 +23,7 @@ import {
 	useStore,
 } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { t } from "../i18n.tsx";
 import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { serviceCount } from "./ServicesPanel.tsx";
@@ -55,7 +56,7 @@ function groupByProject(
 		if (!group) {
 			group = {
 				cwd: session.cwd,
-				name: session.chat ? "Chats" : baseName(session.cwd) || "No project",
+				name: session.chat ? t("Chats") : baseName(session.cwd) || t("No project"),
 				chat: session.chat,
 				pinned: !!pinnedProjects[`${app}:${session.cwd}`],
 				sessions: [],
@@ -81,21 +82,28 @@ function menuPoint(event: MouseEvent<HTMLElement>): { x: number; y: number } {
 function confirmDelete(sessions: SessionSummary[], what: string, title?: string): void {
 	const running = sessions.filter((session) => session.running);
 	if (running.length) {
-		notify(`Stop "${running[0]!.title}" before deleting it.`, "warning");
+		notify(t("Stop “{title}” before deleting it.", { title: running[0]!.title }), "warning");
 		return;
 	}
 	// Deleting drops the undo point for changes nobody kept or reverted yet.
 	const views = getState().views;
 	const pending = sessions.reduce((sum, session) => sum + (views[session.path]?.changes.length ?? 0), 0);
 	const changesNote = pending
-		? ` ${pending === 1 ? "1 changed file stays as it is" : `${pending} changed files stay as they are`}, but can no longer be reverted from Trivium.`
+		? ` ${t(
+				pending === 1
+					? "1 changed file stays as it is, but can no longer be reverted from Trivium."
+					: "{n} changed files stay as they are, but can no longer be reverted from Trivium.",
+				{ n: pending },
+			)}`
 		: "";
 	const services = sessions.reduce((sum, session) => sum + (getState().services[session.path]?.length ?? 0), 0);
-	const servicesNote = services ? ` ${serviceCount(services)} left running ${services === 1 ? "stops" : "stop"} too.` : "";
+	const servicesNote = services
+		? ` ${t(services === 1 ? "{services} left running stops too." : "{services} left running stop too.", { services: serviceCount(services) })}`
+		: "";
 	void askConfirm({
-		title: title ?? (sessions.length === 1 ? "Delete this session?" : `Delete ${sessions.length} sessions?`),
-		message: `${what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.${changesNote}${servicesNote}`,
-		confirmLabel: sessions.length === 1 ? "Delete session" : `Delete ${sessions.length} sessions`,
+		title: title ?? (sessions.length === 1 ? t("Delete this session?") : t("Delete {n} sessions?", { n: sessions.length })),
+		message: `${t("{what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.", { what })}${changesNote}${servicesNote}`,
+		confirmLabel: sessions.length === 1 ? t("Delete session") : t("Delete {n} sessions", { n: sessions.length }),
 	}).then((ok) => {
 		if (ok) void deleteSessions(sessions.map((session) => session.path));
 	});
@@ -103,7 +111,7 @@ function confirmDelete(sessions: SessionSummary[], what: string, title?: string)
 
 async function exportSession(session: SessionSummary): Promise<void> {
 	const saved = await attempt(() => trivium.exportSession(session.path));
-	if (saved) notify(`Exported to ${saved}`, "info");
+	if (saved) notify(t("Exported to {path}", { path: saved }), "info");
 }
 
 async function copySessionId(session: SessionSummary): Promise<void> {
@@ -111,27 +119,27 @@ async function copySessionId(session: SessionSummary): Promise<void> {
 		await trivium.copyText(session.id);
 		return true;
 	});
-	if (copied) notify("Session ID copied", "info");
+	if (copied) notify(t("Session ID copied"), "info");
 }
 
 function sessionMenu(session: SessionSummary, pinned: boolean): MenuEntry[] {
 	return [
 		{
-			label: pinned ? "Unpin session" : "Pin session",
+			label: t(pinned ? "Unpin session" : "Pin session"),
 			icon: pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
 			onSelect: () => togglePin("pinnedSessions", session.path),
 		},
 		"separator",
-		{ label: "Export messages…", icon: <DownloadIcon size={14} />, onSelect: () => void exportSession(session) },
-		{ label: "Copy session ID", icon: <CopyIcon size={14} />, hint: session.id.slice(0, 8), onSelect: () => void copySessionId(session) },
+		{ label: t("Export messages…"), icon: <DownloadIcon size={14} />, onSelect: () => void exportSession(session) },
+		{ label: t("Copy session ID"), icon: <CopyIcon size={14} />, hint: session.id.slice(0, 8), onSelect: () => void copySessionId(session) },
 		"separator",
 		{
-			label: "Delete session",
+			label: t("Delete session"),
 			icon: <TrashIcon size={14} />,
 			danger: true,
 			disabled: session.running,
-			title: session.running ? "Stop the session before deleting it" : undefined,
-			onSelect: () => confirmDelete([session], `"${session.title}"`),
+			title: session.running ? t("Stop the session before deleting it") : undefined,
+			onSelect: () => confirmDelete([session], t("“{title}”", { title: session.title })),
 		},
 	];
 }
@@ -154,11 +162,13 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 			>
 				<span className="title ellipsis">{session.title}</span>
 				{pinned && (
-					<span className="pin-mark" aria-label="Pinned">
+					<span className="pin-mark" aria-label={t("Pinned")}>
 						<PinIcon size={11} />
 					</span>
 				)}
-				{services > 0 && <span className="service-dot" role="img" aria-label={serviceCount(services)} title={`${serviceCount(services)} running`} />}
+				{services > 0 && (
+					<span className="service-dot" role="img" aria-label={serviceCount(services)} title={t("{services} running", { services: serviceCount(services) })} />
+				)}
 				{session.running ? (
 					<span className="running-meta">
 						<span className="live-dot" />
@@ -166,7 +176,7 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 					</span>
 				) : (
 					<>
-						{session.unread && <span className="unread-dot" aria-label="Unread" />}
+						{session.unread && <span className="unread-dot" aria-label={t("Unread")} />}
 						<span className="session-meta">{relativeTime(session.modified, now)}</span>
 					</>
 				)}
@@ -175,9 +185,9 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 				<button
 					type="button"
 					className="row-action"
-					aria-label={`Delete ${session.title}`}
-					title="Delete session"
-					onClick={() => confirmDelete([session], `"${session.title}"`)}
+					aria-label={t("Delete {title}", { title: session.title })}
+					title={t("Delete session")}
+					onClick={() => confirmDelete([session], t("“{title}”", { title: session.title }))}
 				>
 					<TrashIcon />
 				</button>
@@ -190,23 +200,25 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 function deleteProject(app: AppId, group: ProjectGroup): void {
 	confirmDelete(
 		group.sessions,
-		group.sessions.length === 1
-			? `The ${THEMES[app].name} session in ${group.name}`
-			: `Every ${THEMES[app].name} session in ${group.name} (${group.sessions.length})`,
-		`Delete ${group.name} from ${THEMES[app].name}?`,
+		t(group.sessions.length === 1 ? "The {mode} session in {project}" : "Every {mode} session in {project} ({n})", {
+			mode: t(THEMES[app].name),
+			project: group.name,
+			n: group.sessions.length,
+		}),
+		t("Delete {project} from {mode}?", { project: group.name, mode: t(THEMES[app].name) }),
 	);
 }
 
 function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
 	return [
 		{
-			label: group.pinned ? "Unpin project" : "Pin project",
+			label: t(group.pinned ? "Unpin project" : "Pin project"),
 			icon: group.pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
 			onSelect: () => togglePin("pinnedProjects", `${app}:${group.cwd}`),
 		},
-		{ label: "New session", icon: <PlusIcon size={14} />, onSelect: () => void startSession({ app, cwd: group.cwd }) },
+		{ label: t("New session"), icon: <PlusIcon size={14} />, onSelect: () => void startSession({ app, cwd: group.cwd }) },
 		"separator",
-		{ label: "Delete all sessions", icon: <TrashIcon size={14} />, danger: true, onSelect: () => deleteProject(app, group) },
+		{ label: t("Delete all sessions"), icon: <TrashIcon size={14} />, danger: true, onSelect: () => deleteProject(app, group) },
 	];
 }
 
@@ -230,7 +242,7 @@ function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGr
 					{group.chat ? <ChatIcon size={15} /> : folded ? <FolderIcon size={15} /> : <FolderOpenIcon size={15} />}
 					<span className="ellipsis">{group.name}</span>
 					{group.pinned && (
-						<span className="pin-mark" aria-label="Pinned">
+						<span className="pin-mark" aria-label={t("Pinned")}>
 							<PinIcon size={11} />
 						</span>
 					)}
@@ -239,8 +251,8 @@ function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGr
 				<button
 					type="button"
 					className="project-action"
-					aria-label={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
-					title={`Delete all ${THEMES[app].name} sessions in ${group.name}`}
+					aria-label={t("Delete all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
+					title={t("Delete all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
 					onClick={() => deleteProject(app, group)}
 				>
 					<TrashIcon size={12} />
@@ -248,8 +260,8 @@ function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGr
 				<button
 					type="button"
 					className="project-action"
-					aria-label={`New session in ${group.name}`}
-					title={`New session in ${group.name}`}
+					aria-label={t("New session in {project}", { project: group.name })}
+					title={t("New session in {project}", { project: group.name })}
 					onClick={() => void startSession({ app, cwd: group.cwd })}
 				>
 					<PlusIcon size={13} />
@@ -278,7 +290,7 @@ export function SessionGroups() {
 	const pinnedSessions = useStore((s) => s.pinnedSessions);
 	const groups = groupByProject(sessions, app, pinnedProjects, pinnedSessions);
 	if (!groups.length) {
-		return <p className="sb-empty">No {THEMES[app].name} sessions yet.</p>;
+		return <p className="sb-empty">{t("No {mode} sessions yet.", { mode: t(THEMES[app].name) })}</p>;
 	}
 	return (
 		<>
@@ -293,16 +305,16 @@ export function AppSwitcher() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
-		<nav className="switcher" aria-label="Modes">
+		<nav className="switcher" aria-label={t("Modes")}>
 			{APP_IDS.map((id) => {
 				const busy = id !== app && sessions.some((session) => session.app === id && session.running);
 				return (
 					<button
 						key={id}
 						type="button"
-						aria-label={THEMES[id].name}
+						aria-label={t(THEMES[id].name)}
 						aria-current={id === app ? "page" : undefined}
-						title={THEMES[id].name}
+						title={t(THEMES[id].name)}
 						onClick={() => switchApp(id)}
 					>
 						<AppIcon app={id} />
@@ -320,9 +332,9 @@ function SidebarToggle({ rail = false }: { rail?: boolean }) {
 		<button
 			type="button"
 			className={rail ? "rail-btn panel" : "icon-btn sidebar-toggle"}
-			aria-label={folded ? "Expand sidebar" : "Fold sidebar"}
+			aria-label={t(folded ? "Expand sidebar" : "Fold sidebar")}
 			aria-expanded={!folded}
-			title={folded ? "Sessions · click to keep open" : "Fold sidebar"}
+			title={t(folded ? "Sessions · click to keep open" : "Fold sidebar")}
 			onMouseEnter={() => {
 				if (!folded) return;
 				cancelPeekClose();
@@ -348,7 +360,7 @@ function ModeTitle({ app }: { app: AppId }) {
 			<span className="app-name-mark" aria-hidden="true">
 				<AppIcon app={app} size={14} />
 			</span>
-			<span className="ellipsis">{THEMES[app].name}</span>
+			<span className="ellipsis">{t(THEMES[app].name)}</span>
 		</span>
 	);
 }
@@ -356,7 +368,7 @@ function ModeTitle({ app }: { app: AppId }) {
 export function Sidebar() {
 	const app = useStore((s) => s.app);
 	return (
-		<nav className="sidebar" aria-label="Modes and sessions">
+		<nav className="sidebar" aria-label={t("Modes and sessions")}>
 			<Resizer target="sidebar" />
 			{/* On macOS the app switcher shares the title bar row with the window buttons. */}
 			{IS_MAC && (
@@ -372,25 +384,25 @@ export function Sidebar() {
 			<div className="sb-rows">
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "search" })}>
 					<SearchIcon />
-					<span className="label">Search</span>
+					<span className="label">{t("Search")}</span>
 				</button>
 				<button type="button" className="sb-row" onClick={() => setState({ overlay: "new" })}>
 					<PlusIcon />
-					<span className="label">New session</span>
+					<span className="label">{t("New session")}</span>
 				</button>
 				<button type="button" className="sb-row" onClick={openMemory}>
 					<MemoryIcon />
-					<span className="label">Memory</span>
+					<span className="label">{t("Memory")}</span>
 				</button>
 			</div>
-			<div className="sb-label" aria-hidden="true">Projects</div>
+			<div className="sb-label" aria-hidden="true">{t("Projects")}</div>
 			<div className="sb-sessions">
 				<SessionGroups />
 			</div>
 			<UpdateRow />
 			<button type="button" className="sb-row" onClick={() => openSettings()}>
 				<GearIcon />
-				<span className="label">Settings</span>
+				<span className="label">{t("Settings")}</span>
 			</button>
 		</nav>
 	);
@@ -401,20 +413,20 @@ function updateLabel(update: UpdateStatus): { title: string; detail: string; pro
 	switch (update.state) {
 		case "available":
 			return {
-				title: `Update to ${update.release.version}`,
-				detail: update.release.installable ? "Downloads and restarts Trivium" : "Opens the download page",
+				title: t("Update to {version}", { version: update.release.version }),
+				detail: t(update.release.installable ? "Downloads and restarts Trivium" : "Opens the download page"),
 				busy: false,
 			};
 		case "downloading": {
 			const progress = update.total ? update.received / update.total : 0;
-			return { title: `Downloading ${update.release.version}`, detail: `${Math.floor(progress * 100)}%`, progress, busy: true };
+			return { title: t("Downloading {version}", { version: update.release.version }), detail: `${Math.floor(progress * 100)}%`, progress, busy: true };
 		}
 		case "installing":
-			return { title: `Installing ${update.release.version}`, detail: "Trivium restarts when it's done", busy: true };
+			return { title: t("Installing {version}", { version: update.release.version }), detail: t("Trivium restarts when it's done"), busy: true };
 		case "ready":
-			return { title: "Restart to update", detail: `${update.release.version} is ready`, busy: false };
+			return { title: t("Restart to update"), detail: t("{version} is ready", { version: update.release.version }), busy: false };
 		case "error":
-			return update.release ? { title: "Update failed", detail: "Try again", busy: false } : undefined;
+			return update.release ? { title: t("Update failed"), detail: t("Try again"), busy: false } : undefined;
 		default:
 			return undefined;
 	}
@@ -470,7 +482,7 @@ export function Rail() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	return (
-		<nav className="rail drag" aria-label={IS_WINDOWS ? "Tools" : "Apps and tools"} onMouseLeave={schedulePeekClose}>
+		<nav className="rail drag" aria-label={t(IS_WINDOWS ? "Tools" : "Apps and tools")} onMouseLeave={schedulePeekClose}>
 			<SidebarToggle rail />
 			<span className="rail-sep" aria-hidden="true" />
 			{!IS_WINDOWS && (
@@ -482,9 +494,9 @@ export function Rail() {
 								key={id}
 								type="button"
 								className="rail-btn app"
-								aria-label={THEMES[id].name}
+								aria-label={t(THEMES[id].name)}
 								aria-current={id === app ? "page" : undefined}
-								title={THEMES[id].name}
+								title={t(THEMES[id].name)}
 								onClick={() => switchApp(id)}
 							>
 								<AppIcon app={id} size={16} />
@@ -495,18 +507,18 @@ export function Rail() {
 					<span className="rail-sep" aria-hidden="true" />
 				</>
 			)}
-			<button type="button" className="rail-btn" aria-label="Search" title="Search" onClick={() => setState({ overlay: "search" })}>
+			<button type="button" className="rail-btn" aria-label={t("Search")} title={t("Search")} onClick={() => setState({ overlay: "search" })}>
 				<SearchIcon size={17} />
 			</button>
-			<button type="button" className="rail-btn" aria-label="New session" title="New session" onClick={() => setState({ overlay: "new" })}>
+			<button type="button" className="rail-btn" aria-label={t("New session")} title={t("New session")} onClick={() => setState({ overlay: "new" })}>
 				<PlusIcon size={17} />
 			</button>
-			<button type="button" className="rail-btn" aria-label="Memory" title="Memory" onClick={openMemory}>
+			<button type="button" className="rail-btn" aria-label={t("Memory")} title={t("Memory")} onClick={openMemory}>
 				<MemoryIcon size={17} />
 			</button>
 			<span style={{ flex: 1 }} />
 			<UpdateRailButton />
-			<button type="button" className="rail-btn" aria-label="Settings" title="Settings" onClick={() => openSettings()}>
+			<button type="button" className="rail-btn" aria-label={t("Settings")} title={t("Settings")} onClick={() => openSettings()}>
 				<GearIcon size={17} />
 			</button>
 		</nav>
@@ -517,7 +529,7 @@ export function PeekPanel() {
 	const app = useStore((s) => s.app);
 	useEffect(() => () => cancelPeekClose(), []);
 	return (
-		<div className="peek" role="region" aria-label="Sessions" onMouseEnter={cancelPeekClose} onMouseLeave={schedulePeekClose}>
+		<div className="peek" role="region" aria-label={t("Sessions")} onMouseEnter={cancelPeekClose} onMouseLeave={schedulePeekClose}>
 			<div className="peek-title">
 				<ModeTitle app={app} />
 			</div>

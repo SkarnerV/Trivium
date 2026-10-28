@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { once } from "node:events";
 import { promisify } from "node:util";
 import type { ReleaseInfo, UpdateStatus } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 const run = promisify(execFile);
 
@@ -203,7 +204,7 @@ export class Updater {
 		if (existsSync(log)) {
 			const reason = (await readFile(log, "utf8").catch(() => "")).trim();
 			await rm(log, { force: true });
-			this.set({ state: "error", message: `The last update could not be installed${reason ? `: ${reason}` : "."}` });
+			this.set({ state: "error", message: reason ? t("The last update could not be installed: {reason}", { reason }) : t("The last update could not be installed.") });
 		}
 		const scheduled = () => {
 			if (this.options.enabled()) void this.check(false);
@@ -225,7 +226,9 @@ export class Updater {
 			const response = await this.options.fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
 				headers: { Accept: "application/vnd.github+json", "User-Agent": `Trivium/${this.options.version}` },
 			});
-			if (!response.ok) throw new Error(`GitHub answered ${response.status}${response.status === 403 ? " (rate limited, try again later)" : ""}.`);
+			if (!response.ok) {
+				throw new Error(response.status === 403 ? t("GitHub answered 403 (rate limited, try again later).") : t("GitHub answered {status}.", { status: response.status }));
+			}
 			const found = readRelease((await response.json()) as GitHubRelease, this.options.version, this.options.platform, this.options.arch);
 			if (!found) {
 				this.asset = undefined;
@@ -239,7 +242,7 @@ export class Updater {
 				console.error("Could not check for updates:", error);
 				return this.set(before);
 			}
-			return this.set({ state: "error", message: `Could not check for updates: ${messageOf(error)}` });
+			return this.set({ state: "error", message: t("Could not check for updates: {error}", { error: messageOf(error) }) });
 		}
 	}
 
@@ -248,9 +251,9 @@ export class Updater {
 		const status = this.status;
 		if (status.state === "ready" && this.pending) return this.restart(status.release);
 		const release = status.state === "available" || status.state === "error" ? status.release : undefined;
-		if (!release) throw new Error("There is no update to install.");
+		if (!release) throw new Error(t("There is no update to install."));
 		const asset = this.asset;
-		if (!release.installable || !asset) throw new Error(release.reason ?? "This update can't be installed from Trivium.");
+		if (!release.installable || !asset) throw new Error(release.reason ?? t("This update can't be installed from Trivium."));
 		try {
 			await mkdir(this.options.dir, { recursive: true });
 			const file = join(this.options.dir, asset.name);
@@ -259,7 +262,7 @@ export class Updater {
 			this.pending = this.options.platform === "win32" ? await this.stageWindows(file) : await this.stageMac(file);
 			await rm(file, { force: true });
 		} catch (error) {
-			this.set({ state: "error", message: `The update could not be installed: ${messageOf(error)}`, release });
+			this.set({ state: "error", message: t("The update could not be installed: {error}", { error: messageOf(error) }), release });
 			throw error;
 		}
 		this.set({ state: "ready", release });
@@ -285,11 +288,11 @@ export class Updater {
 	/** Why this copy can't replace itself, if it can't. */
 	private async blocker(asset: ReleaseAsset | undefined): Promise<string | undefined> {
 		const { platform, arch, packaged, portable, execPath } = this.options;
-		if (!packaged) return "Trivium is running from source. Pull the new version with git instead.";
-		if (portable) return "The portable EXE can't update itself. Download the ZIP instead.";
-		if (!asset) return `This release has no download for ${platform} ${arch}.`;
+		if (!packaged) return t("Trivium is running from source. Pull the new version with git instead.");
+		if (portable) return t("The portable EXE can't update itself. Download the ZIP instead.");
+		if (!asset) return t("This release has no download for {platform} {arch}.", { platform, arch });
 		const target = installTarget(platform, execPath);
-		if (!target || target.includes("/AppTranslocation/")) return "Move Trivium to your Applications folder to update it from here.";
+		if (!target || target.includes("/AppTranslocation/")) return t("Move Trivium to your Applications folder to update it from here.");
 		// The swap writes beside Trivium.app, and into Trivium's own folder on Windows.
 		const folder = platform === "darwin" ? dirname(target) : target;
 		const probe = join(folder, `.trivium-write-test-${process.pid}`);
@@ -297,14 +300,14 @@ export class Updater {
 			await writeFile(probe, "");
 			await rm(probe, { force: true });
 		} catch {
-			return `Trivium can't write to ${folder}. Download the new version and replace it yourself.`;
+			return t("Trivium can't write to {folder}. Download the new version and replace it yourself.", { folder });
 		}
 		return undefined;
 	}
 
 	private async download(asset: ReleaseAsset, file: string, release: ReleaseInfo): Promise<void> {
 		const response = await this.options.fetch(asset.url, { headers: { "User-Agent": `Trivium/${this.options.version}` } });
-		if (!response.ok || !response.body) throw new Error(`The download failed (${response.status}).`);
+		if (!response.ok || !response.body) throw new Error(t("The download failed ({status}).", { status: response.status }));
 		const total = Number(response.headers.get("content-length")) || asset.size;
 		const hash = createHash("sha256");
 		const out = createWriteStream(file);
@@ -329,9 +332,9 @@ export class Updater {
 			out.end();
 			await once(out, "close");
 		}
-		if (received !== asset.size) throw new Error(`The download is incomplete (${received} of ${asset.size} bytes).`);
+		if (received !== asset.size) throw new Error(t("The download is incomplete ({received} of {size} bytes).", { received, size: asset.size }));
 		const [algorithm, expected] = asset.digest?.split(":") ?? [];
-		if (algorithm === "sha256" && hash.digest("hex") !== expected) throw new Error("The download doesn't match the release's checksum.");
+		if (algorithm === "sha256" && hash.digest("hex") !== expected) throw new Error(t("The download doesn't match the release's checksum."));
 	}
 
 	/** Unpacks the ZIP inside Trivium's folder, so the script's moves stay on one drive. */
@@ -349,7 +352,7 @@ export class Updater {
 		}
 		const exe = basename(this.options.execPath);
 		const source = await folderWith(staging, exe);
-		if (!source) throw new Error(`The download has no ${exe}.`);
+		if (!source) throw new Error(t("The download has no {file}.", { file: exe }));
 		const script = join(this.options.dir, "install.ps1");
 		const log = join(this.options.dir, FAILURE_LOG);
 		// PowerShell 5 reads a script without a byte order mark as the system code page, which garbles non-ASCII paths.
@@ -369,7 +372,7 @@ export class Updater {
 		await run("hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount, dmg]);
 		try {
 			const bundle = (await readdir(mount)).find((name) => name.endsWith(".app"));
-			if (!bundle) throw new Error("The disk image has no app in it.");
+			if (!bundle) throw new Error(t("The disk image has no app in it."));
 			await rm(source, { recursive: true, force: true });
 			await run("ditto", [join(mount, bundle), source]);
 		} finally {

@@ -7,6 +7,7 @@ import { closeSettings, dismissNotice, getState, holdNotice, notify, openSetting
 import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { commandKey, IS_WINDOWS } from "../platform.ts";
+import { t } from "../i18n.tsx";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
@@ -27,7 +28,7 @@ function WindowTitleBar({ app, showAppSwitcher = false }: { app: AppId; showAppS
 		return trivium.onWindowMaximized(setMaximized);
 	}, []);
 	return (
-		<header className="window-titlebar drag" aria-label="Trivium window">
+		<header className="window-titlebar drag" aria-label={t("Trivium window")}>
 			<span className="window-mark" aria-hidden="true"><TriviumIcon app={app} size={18} /></span>
 			<span>Trivium</span>
 			{IS_WINDOWS && showAppSwitcher && (
@@ -37,18 +38,18 @@ function WindowTitleBar({ app, showAppSwitcher = false }: { app: AppId; showAppS
 			)}
 			{IS_WINDOWS && (
 				<div className="window-controls">
-					<button type="button" aria-label="Minimize" title="Minimize" onClick={() => void trivium.windowMinimize()}>
+					<button type="button" aria-label={t("Minimize")} title={t("Minimize")} onClick={() => void trivium.windowMinimize()}>
 						<MinusIcon size={13} />
 					</button>
 					<button
 						type="button"
-						aria-label={maximized ? "Restore" : "Maximize"}
-						title={maximized ? "Restore" : "Maximize"}
+						aria-label={t(maximized ? "Restore" : "Maximize")}
+						title={t(maximized ? "Restore" : "Maximize")}
 						onClick={() => void trivium.windowToggleMaximize()}
 					>
 						{maximized ? <RestoreIcon size={12} /> : <MaximizeIcon size={12} />}
 					</button>
-					<button type="button" className="close" aria-label="Close" title="Close" onClick={() => void trivium.windowClose()}>
+					<button type="button" className="close" aria-label={t("Close")} title={t("Close")} onClick={() => void trivium.windowClose()}>
 						<CloseIcon size={14} />
 					</button>
 				</div>
@@ -79,8 +80,8 @@ function Toast({ notice }: { notice: Notice }) {
 					type="button"
 					className="mini-btn"
 					aria-expanded={expanded}
-					aria-label={expanded ? "Show less" : "Show full message"}
-					title={expanded ? "Show less" : "Show full message"}
+					aria-label={t(expanded ? "Show less" : "Show full message")}
+					title={t(expanded ? "Show less" : "Show full message")}
 					onClick={() => {
 						holdNotice(notice.id);
 						setExpanded(!expanded);
@@ -89,7 +90,7 @@ function Toast({ notice }: { notice: Notice }) {
 					<Chevron open={expanded} down size={12} />
 				</button>
 			)}
-			<button type="button" className="mini-btn" aria-label="Dismiss" title="Dismiss" onClick={() => dismissNotice(notice.id)}>
+			<button type="button" className="mini-btn" aria-label={t("Dismiss")} title={t("Dismiss")} onClick={() => dismissNotice(notice.id)}>
 				<CloseIcon size={12} />
 			</button>
 		</div>
@@ -146,12 +147,14 @@ function useDialogAlerts() {
 			// A session not on screen yet asks in StartingSessionDialog instead.
 			if (dialog.sessionPath === selected[app] || !views[dialog.sessionPath]) continue;
 			const session = sessions.find((s) => s.path === dialog.sessionPath);
-			notify(`"${session?.title ?? "A session"}" is waiting for your answer`, "warning");
+			notify(session ? t("“{title}” is waiting for your answer", { title: session.title }) : t("A session is waiting for your answer"), "warning");
 		}
 	}, [dialogs.length]);
 }
 
 export function App() {
+	// Read so that every component renders again, in the new language, when it changes.
+	useStore((s) => s.locale);
 	const app = useStore((s) => s.app);
 	const folded = useStore((s) => s.folded);
 	const peek = useStore((s) => s.peek);

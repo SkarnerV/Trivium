@@ -5,6 +5,7 @@ import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIc
 import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
+import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
 import { BranchSummary, branchTitle } from "./BranchSummary.tsx";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
@@ -19,9 +20,9 @@ import { SubagentNoticeLine } from "./Subagents.tsx";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
 function fileKind(name: string, kind: "image" | "file"): string {
-	if (kind === "image") return "Image";
+	if (kind === "image") return t("Image");
 	const extension = /\.([a-z0-9]{1,8})$/i.exec(name)?.[1];
-	return extension ? `${extension.toUpperCase()} file` : "File";
+	return extension ? t("{ext} file", { ext: extension.toUpperCase() }) : t("File");
 }
 
 /** A usage limit or empty balance, said plainly, with the provider's own message a click away. */
@@ -37,7 +38,7 @@ function LimitCard({ limit }: { limit: LimitNotice }) {
 					</a>
 				)}
 				<details>
-					<summary>Provider's message</summary>
+					<summary>{t("Provider's message")}</summary>
 					<div className="limit-detail">{limit.detail}</div>
 				</details>
 			</div>
@@ -83,7 +84,7 @@ function MessageEditor({ initial, canSendEmpty, onCancel, onSend }: {
 				ref={ref}
 				rows={1}
 				value={text}
-				aria-label="Edit message"
+				aria-label={t("Edit message")}
 				onChange={(event) => setText(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -96,12 +97,12 @@ function MessageEditor({ initial, canSendEmpty, onCancel, onSend }: {
 				}}
 			/>
 			<div className="bubble-edit-foot">
-				<span className="bubble-edit-hint">Sending starts over from here. Files stay as they are.</span>
+				<span className="bubble-edit-hint">{t("Sending starts over from here. Files stay as they are.")}</span>
 				<button type="button" className="btn ghost" onClick={onCancel}>
-					Cancel
+					{t("Cancel")}
 				</button>
 				<button type="button" className="btn primary" disabled={!ready} onClick={() => void send()}>
-					Send
+					{t("Send")}
 				</button>
 			</div>
 		</div>
@@ -120,8 +121,8 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 		<button
 			type="button"
 			className="prompt-action"
-			aria-label={copied ? "Copied" : label}
-			title={copied ? "Copied" : "Copy"}
+			aria-label={copied ? t("Copied") : label}
+			title={t(copied ? "Copied" : "Copy")}
 			onClick={() => void attempt(() => trivium.copyText(text).then(() => true)).then((ok) => ok && setCopied(true))}
 		>
 			{copied ? <CheckIcon size={14} width={1.75} /> : <CopyIcon size={14} width={1.75} />}
@@ -133,12 +134,12 @@ function MessageActions({ run, view, index, onEdit }: { run: Run; view: SessionV
 	const text = run.prompt.trim();
 	return (
 		<div className="prompt-actions">
-			{text && <CopyButton text={text} label="Copy message" />}
+			{text && <CopyButton text={text} label={t("Copy message")} />}
 			<button
 				type="button"
 				className="prompt-action"
-				aria-label="Edit message"
-				title={view.running ? "Stop the run to edit an earlier message" : "Edit"}
+				aria-label={t("Edit message")}
+				title={t(view.running ? "Stop the run to edit an earlier message" : "Edit")}
 				disabled={view.running}
 				onClick={onEdit}
 			>
@@ -147,8 +148,8 @@ function MessageActions({ run, view, index, onEdit }: { run: Run; view: SessionV
 			<button
 				type="button"
 				className="prompt-action"
-				aria-label="Fork from here"
-				title="Fork into a new session from here"
+				aria-label={t("Fork from here")}
+				title={t("Fork into a new session from here")}
 				onClick={() => void forkFrom(view.path, index)}
 			>
 				<BranchIcon size={14} width={1.75} />
@@ -210,15 +211,22 @@ function ReplyStats({ run }: { run: Run }) {
 	const speed = reply.output && writing > 0 ? (reply.output * 1000) / writing : undefined;
 	const when = new Date(end ?? reply.at);
 	const today = when.toDateString() === new Date().toDateString();
-	const clock = when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+	const clock = when.toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" });
 	const parts = [
-		today ? clock : `${when.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${clock}`,
+		today ? clock : `${when.toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}, ${clock}`,
 		took !== undefined && `${duration(took)}`,
-		reply.firstTokenMs !== undefined && `first token ${duration(reply.firstTokenMs)}`,
+		reply.firstTokenMs !== undefined && t("first token {time}", { time: duration(reply.firstTokenMs) }),
 		speed !== undefined && `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} tk/s`,
 	].filter(Boolean);
 	return (
-		<span className="reply-stats" title={`Answered ${when.toLocaleString()}${took !== undefined ? `, ${duration(took)} after it was asked` : ""}`}>
+		<span
+			className="reply-stats"
+			title={
+				took !== undefined
+					? t("Answered {when}, {time} after it was asked", { when: when.toLocaleString(getLocale()), time: duration(took) })
+					: t("Answered {when}", { when: when.toLocaleString(getLocale()) })
+			}
+		>
 			{parts.join(" · ")}
 		</span>
 	);
@@ -239,7 +247,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 						{/* Copied as the markdown it was written in; offered once the reply is finished. */}
 						{!live && (
 							<div className="reply-actions">
-								<CopyButton text={run.answer.trim()} label="Copy response" />
+								<CopyButton text={run.answer.trim()} label={t("Copy response")} />
 								<ReplyStats run={run} />
 							</div>
 						)}
@@ -342,7 +350,10 @@ function ServicesButton({ view }: { view: SessionView }) {
 			type="button"
 			className="changes-toggle services-toggle"
 			aria-pressed={showing}
-			title={`${serviceCount(services.length)} running${ports.length ? ` on ${ports.join(", ")}` : ""}. Show them in the panel.`}
+			title={t(ports.length ? "{services} running on {ports}. Show them in the panel." : "{services} running. Show them in the panel.", {
+				services: serviceCount(services.length),
+				ports: ports.join(", "),
+			})}
 			onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: false }, panelTab: { ...s.panelTab, [view.path]: "services" } }))}
 		>
 			<span className="service-dot" aria-hidden="true" />
@@ -367,7 +378,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 			<header className="pane-head drag">
 				<div className="crumb">
 					<span className="project-name" title={view.cwd}>
-						{view.chat ? "Chats" : baseName(view.cwd)}
+						{view.chat ? t("Chats") : baseName(view.cwd)}
 					</span>
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
@@ -378,17 +389,17 @@ export function SessionPane({ view }: { view: SessionView }) {
 					type="button"
 					className="changes-toggle"
 					aria-pressed={open}
-					title={open ? "Hide panel" : "Show panel"}
+					title={t(open ? "Hide panel" : "Show panel")}
 					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
 				>
 					<PanelRightIcon size={15} />
 					{panelFor(app, view) === "changes" ? (
 						<>
-							<span>{view.changes.length === 1 ? "1 file" : `${view.changes.length} files`}</span>
+							<span>{t(view.changes.length === 1 ? "1 file" : "{n} files", { n: view.changes.length })}</span>
 							<ChangeCount changes={view.changes} />
 						</>
 					) : (
-						<span>{{ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)]}</span>
+						<span>{t({ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)])}</span>
 					)}
 				</button>
 			</header>
@@ -406,7 +417,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					</div>
 				</div>
 				{scroll.away && (
-					<button type="button" className="to-latest" onClick={scroll.toBottom} aria-label="Scroll to latest" title="Scroll to latest">
+					<button type="button" className="to-latest" onClick={scroll.toBottom} aria-label={t("Scroll to latest")} title={t("Scroll to latest")}>
 						{/* While the agent works, the dots say there is more coming below. */}
 						{view.running ? (
 							<span className="to-latest-dots">
@@ -435,10 +446,10 @@ export function EmptyPane() {
 				<span className="app-badge" style={{ width: 44, height: 44, borderRadius: 12 }}>
 					<AppIcon app={app} size={20} />
 				</span>
-				<h2>Start a {name} session</h2>
-				<p>Start a chat, or pick a project folder to work in. Sessions keep running when you switch modes.</p>
+				<h2>{t("Start a {mode} session", { mode: t(name) })}</h2>
+				<p>{t("Start a chat, or pick a project folder to work in. Sessions keep running when you switch modes.")}</p>
 				<button type="button" className="btn primary" onClick={() => setState({ overlay: "new" })}>
-					<PlusIcon size={14} /> New session
+					<PlusIcon size={14} /> {t("New session")}
 				</button>
 			</div>
 		</main>

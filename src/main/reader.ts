@@ -3,6 +3,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { ReaderFile, ReaderKind } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
 
 /** The scheme the Preview panel's frames load files from, one token per open file. */
 export const READER_SCHEME = "trivium-file";
@@ -232,13 +233,13 @@ export class ReaderStore {
 
 	private require(id: string): Entry {
 		const entry = this.entries.get(id);
-		if (!entry) throw new Error("That file is no longer open.");
+		if (!entry) throw new Error(t("That file is no longer open."));
 		return entry;
 	}
 
 	private async describe(entry: Entry): Promise<ReaderFile> {
 		const info = await stat(entry.file).catch(() => undefined);
-		if (!info?.isFile()) throw new Error(`${entry.rel} is gone.`);
+		if (!info?.isFile()) throw new Error(t("{file} is gone.", { file: entry.rel }));
 		const head = await readHead(entry.file, Math.min(info.size, SNIFF_BYTES));
 		const kind = readerKind(entry.file, head);
 		const base: ReaderFile = {

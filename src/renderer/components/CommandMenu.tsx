@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CompletionItem, SlashCommand } from "../../shared/protocol.ts";
 import { trivium } from "../store.ts";
+import { t } from "../i18n.tsx";
 
 /** One row of the menu: a command, or a suggested argument for one. */
 interface MenuItem {
@@ -101,7 +102,7 @@ export function useCommandMenu(path: string, text: string, setText: (text: strin
 					label: `/${c.name}`,
 					hint: c.argumentHint,
 					description: c.description,
-					tag: TAGS[c.source],
+					tag: t(TAGS[c.source]),
 					insert: `/${c.name} `,
 					exact: c.name === parsed.name,
 				}));
@@ -158,9 +159,9 @@ export function CommandMenu({
 		list.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
 	}, [active]);
 	return (
-		<div className="cmd-menu" role="listbox" aria-label={argsMode ? "Suggestions" : "Commands"}>
+		<div className="cmd-menu" role="listbox" aria-label={t(argsMode ? "Suggestions" : "Commands")}>
 			<div className="cmd-head">
-				<span>{argsMode ? "Suggestions" : "Commands"}</span>
+				<span>{t(argsMode ? "Suggestions" : "Commands")}</span>
 			</div>
 			<div className="cmd-list" ref={list}>
 				{items.map((item, index) => (

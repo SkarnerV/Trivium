@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
-import { activeBuiltIns, ensurePermissionConfig, packageDir, readPermissions, writePermissionLevel } from "../src/main/builtin-packages.ts";
+import type { Extension, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
+import { activeBuiltIns, dropClashingBuiltIns, ensurePermissionConfig, packageDir, readPermissions, writePermissionLevel } from "../src/main/builtin-packages.ts";
 import { DEFAULT_PERMISSION_LEVEL, PERMISSION_LEVELS, permissionLevelOf } from "../src/shared/permissions.ts";
 import { APP_IDS } from "../src/shared/protocol.ts";
 import { builtInPackages } from "../src/shared/recommended.ts";
@@ -34,6 +35,30 @@ test("removed packages and ones installed through pi don't load from Trivium", (
 	const installed = ["npm:pi-subagents@0.80.0", { source: "npm:@narumitw/pi-plan-mode" }];
 	assert.deepEqual(activeBuiltIns("code", ["@gotgenes/pi-permission-system"], installed, find).map((entry) => entry.name), ["@pify/memory"]);
 	assert.deepEqual(activeBuiltIns("write", [], [], () => undefined), []);
+});
+
+test("a shipped package gives way to the user's own extension with the same tools", () => {
+	const shipped = join(tmpdir(), "shipped", "@pify", "memory");
+	const pify = join(shipped, "extensions", "index.ts");
+	const theirs = join(tmpdir(), "user", "pi-memory", "index.ts");
+	const plan = join(tmpdir(), "shipped", "plan", "index.ts");
+	const extension = (path: string, tools: string[]) =>
+		({ path, resolvedPath: path, tools: new Map(tools.map((tool) => [tool, {}])), flags: new Map() }) as unknown as Extension;
+	const loaded = (): LoadExtensionsResult => ({
+		extensions: [extension(theirs, ["memory_write", "memory_read"]), extension(pify, ["memory_write", "memory_read", "memory_search"]), extension(plan, ["plan"])],
+		errors: [
+			{ path: pify, error: `Tool "memory_write" conflicts with ${theirs}` },
+			{ path: pify, error: `Tool "memory_read" conflicts with ${theirs}` },
+			{ path: "/broken.ts", error: "Failed to load" },
+		],
+		runtime: { pendingProviderRegistrations: [{ extensionPath: pify }] } as unknown as LoadExtensionsResult["runtime"],
+	});
+	const result = dropClashingBuiltIns(loaded(), [shipped, dirname(plan)]);
+	assert.deepEqual(result.extensions.map((entry) => entry.path), [theirs, plan]);
+	assert.deepEqual(result.errors, [{ path: "/broken.ts", error: "Failed to load" }]);
+	assert.deepEqual(result.runtime.pendingProviderRegistrations, []);
+	// With their copy off in this app, the shipped one loads again.
+	assert.deepEqual(dropClashingBuiltIns(loaded(), [shipped], new Set([theirs])).extensions.length, 3);
 });
 
 test("the starting permission policy is written once and never over the user's own", () => {

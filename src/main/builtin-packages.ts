@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import type { PackageSource } from "@earendil-works/pi-coding-agent";
+import { dirname, join, sep } from "node:path";
+import type { LoadExtensionsResult, PackageSource } from "@earendil-works/pi-coding-agent";
 import { packageName } from "../shared/packages.ts";
 import { DEFAULT_PERMISSION_LEVEL, PERMISSION_LEVELS, permissionLevelOf, withPermissionLevel } from "../shared/permissions.ts";
 import type { AppId, PermissionSettings } from "../shared/protocol.ts";
@@ -34,6 +34,37 @@ export function activeBuiltIns(app: AppId, removed: string[], installed: Package
 		const dir = skip.has(name) ? undefined : find(name);
 		return dir ? [{ name, dir }] : [];
 	});
+}
+
+/**
+ * Drops a shipped package that registers a tool another extension also registers, with the conflicts pi reported
+ * for it. The user's own copy wins, as in activeBuiltIns, and covers one whose package name differs: pi-memory,
+ * which Trivium shipped before, and @pify/memory both register memory_write.
+ */
+export function dropClashingBuiltIns(result: LoadExtensionsResult, builtInDirs: string[], off = new Set<string>()): LoadExtensionsResult {
+	const isBuiltIn = (path: string) => builtInDirs.some((dir) => path.startsWith(dir + sep));
+	const theirs = new Set(
+		result.extensions
+			.filter((extension) => !isBuiltIn(extension.resolvedPath) && !off.has(extension.resolvedPath))
+			.flatMap((extension) => [...extension.tools.keys()]),
+	);
+	const clashing = result.extensions.filter(
+		(extension) => isBuiltIn(extension.resolvedPath) && [...extension.tools.keys()].some((tool) => theirs.has(tool)),
+	);
+	if (clashing.length === 0) return result;
+	const dropped = new Set(clashing.flatMap((extension) => [extension.path, extension.resolvedPath]));
+	// Providers an extension registered while loading are queued separately; drop those too.
+	result.runtime.pendingProviderRegistrations = result.runtime.pendingProviderRegistrations.filter(
+		(registration) => !dropped.has(registration.extensionPath),
+	);
+	return {
+		...result,
+		extensions: result.extensions.filter((extension) => !dropped.has(extension.path)),
+		// pi reports a conflict on the later of the two, naming the earlier.
+		errors: result.errors.filter(
+			(error) => !/^(Tool|Flag) ".+" conflicts with /.test(error.error) || ![...dropped].some((path) => error.path === path || error.error.endsWith(` ${path}`)),
+		),
+	};
 }
 
 export const PERMISSION_PACKAGE = "@gotgenes/pi-permission-system";

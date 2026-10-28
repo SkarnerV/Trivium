@@ -48,7 +48,7 @@ import type {
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
-import { activeBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
+import { activeBuiltIns, dropClashingBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitDiff, readGitStatus } from "./git.ts";
@@ -885,23 +885,23 @@ export class SessionHost {
 			additionalExtensionPaths: extensions,
 			appendSystemPromptOverride: appendPrompt ? (base) => [...base, appendPrompt] : undefined,
 			extensionFactories: [...builtinExtensions(), ...(options.factories ?? [])],
-			// Extensions turned off for this app still load from pi's discovery; drop them here.
-			extensionsOverride:
-				options.keepDisabled || disabled.size === 0
-					? undefined
-					: (base) => {
-							const off = base.extensions.filter((extension) => disabled.has(extension.resolvedPath));
-							const offPaths = new Set(off.flatMap((extension) => [extension.path, extension.resolvedPath]));
-							// Providers an extension registered while loading are queued separately; drop those too.
-							base.runtime.pendingProviderRegistrations = base.runtime.pendingProviderRegistrations.filter(
-								(registration) => !offPaths.has(registration.extensionPath),
-							);
-							return {
-								...base,
-								extensions: base.extensions.filter((extension) => !offPaths.has(extension.resolvedPath)),
-								errors: base.errors.filter((error) => !disabled.has(error.path)),
-							};
-						},
+			extensionsOverride: (loaded) => {
+				// A shipped package gives way to the user's own extension with the same tools, unless that one is off here.
+				const base = dropClashingBuiltIns(loaded, builtIns.map((entry) => entry.dir), disabled);
+				if (options.keepDisabled || disabled.size === 0) return base;
+				// Extensions turned off for this app still load from pi's discovery; drop them here.
+				const off = base.extensions.filter((extension) => disabled.has(extension.resolvedPath));
+				const offPaths = new Set(off.flatMap((extension) => [extension.path, extension.resolvedPath]));
+				// Providers an extension registered while loading are queued separately; drop those too.
+				base.runtime.pendingProviderRegistrations = base.runtime.pendingProviderRegistrations.filter(
+					(registration) => !offPaths.has(registration.extensionPath),
+				);
+				return {
+					...base,
+					extensions: base.extensions.filter((extension) => !offPaths.has(extension.resolvedPath)),
+					errors: base.errors.filter((error) => !disabled.has(error.path)),
+				};
+			},
 		});
 	}
 

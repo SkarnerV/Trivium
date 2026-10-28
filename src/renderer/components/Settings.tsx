@@ -912,7 +912,7 @@ function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSe
 			}
 		>
 			<Item
-				label="Ask before"
+				label="Mode"
 				hint={
 					level?.hint ??
 					(permissions.unreadable
@@ -927,7 +927,7 @@ function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSe
 					</button>
 				) : (
 					<Dropdown
-						label="Ask before"
+						label="Permission mode"
 						value={level?.id ?? "custom"}
 						options={options}
 						align="right"

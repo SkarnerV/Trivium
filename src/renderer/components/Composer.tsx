@@ -111,7 +111,7 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 	};
 	return (
 		<Dropdown
-			label="Ask before"
+			label="Permission mode"
 			value={known ? permissions.level : "custom"}
 			options={options}
 			variant="ghost"

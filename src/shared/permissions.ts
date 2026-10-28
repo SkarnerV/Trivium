@@ -17,9 +17,15 @@ const ENV_BLOCKED = { "*": "allow", "*.env": "deny", "*.env.*": "deny", "*.env.e
 
 export const PERMISSION_LEVELS: PermissionLevel[] = [
 	{
-		id: "risky",
-		label: "Risky commands",
-		hint: "Asks before rm -rf, sudo, git push and folders outside the project",
+		id: "ask",
+		label: "Always ask",
+		hint: "Asks before each shell command, each file it edits or writes, and folders outside the project",
+		permission: { "*": "allow", path: ENV_BLOCKED, bash: "ask", edit: "ask", write: "ask", external_directory: "ask" },
+	},
+	{
+		id: "auto",
+		label: "Approve for me",
+		hint: "Runs most things itself; asks before rm -rf, sudo, git push and folders outside the project",
 		permission: {
 			"*": "allow",
 			path: ENV_BLOCKED,
@@ -28,26 +34,14 @@ export const PERMISSION_LEVELS: PermissionLevel[] = [
 		},
 	},
 	{
-		id: "commands",
-		label: "Every command",
-		hint: "Asks before each shell command and folders outside the project",
-		permission: { "*": "allow", path: ENV_BLOCKED, bash: "ask", external_directory: "ask" },
-	},
-	{
-		id: "changes",
-		label: "Every command and edit",
-		hint: "Also asks before each file it edits or writes",
-		permission: { "*": "allow", path: ENV_BLOCKED, bash: "ask", edit: "ask", write: "ask", external_directory: "ask" },
-	},
-	{
-		id: "never",
-		label: "Nothing",
+		id: "bypass",
+		label: "Bypass permissions",
 		hint: "Runs everything without asking; .env files stay blocked",
 		permission: { "*": "allow", path: ENV_BLOCKED, external_directory: "allow" },
 	},
 ];
 
-export const DEFAULT_PERMISSION_LEVEL = PERMISSION_LEVELS[0]!;
+export const DEFAULT_PERMISSION_LEVEL = PERMISSION_LEVELS.find((level) => level.id === "auto")!;
 
 /** Key order doesn't change a rule set's meaning, except within a surface, where the last match wins. */
 function sameRules(a: unknown, b: unknown): boolean {

@@ -10,6 +10,7 @@ const DEFAULTS: TriviumSettings = {
 	idleMinutes: 30,
 	notifyDone: true,
 	notifyWaiting: true,
+	checkUpdates: true,
 	apps: { code: emptyApp(), research: emptyApp(), write: emptyApp() },
 };
 

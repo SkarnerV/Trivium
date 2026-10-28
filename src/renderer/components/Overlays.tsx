@@ -4,6 +4,7 @@ import { baseName, relativeTime, shortPath } from "../format.ts";
 import { AppIcon, CloseIcon, FolderIcon } from "../icons.tsx";
 import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
+import { commandKey } from "../platform.ts";
 import { AskCard, answer } from "./AskCard.tsx";
 
 const close = () => setState({ overlay: null });
@@ -14,7 +15,7 @@ export function NewSessionDialog() {
 	// A project folder, or null for a chat without one.
 	const [cwd, setCwd] = useState<string | null | undefined>();
 	const [busy, setBusy] = useState(false);
-	// Focus the dialog itself so Esc and the ⌘ shortcuts work right away.
+	// Focus the dialog itself so Esc and the ⌘ (Ctrl) shortcuts work right away.
 	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -49,8 +50,8 @@ export function NewSessionDialog() {
 			onMouseDown={(event) => event.target === event.currentTarget && close()}
 			onKeyDown={(event) => {
 				if (event.key === "Escape") close();
-				else if (event.key === "Enter" && event.metaKey) void start();
-				else if (event.metaKey && /^[1-6]$/.test(event.key) && projects[Number(event.key) - 1]) setCwd(projects[Number(event.key) - 1]);
+				else if (event.key === "Enter" && commandKey(event)) void start();
+				else if (commandKey(event) && /^[1-6]$/.test(event.key) && projects[Number(event.key) - 1]) setCwd(projects[Number(event.key) - 1]);
 				else return;
 				event.preventDefault();
 			}}

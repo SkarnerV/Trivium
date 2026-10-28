@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatPairs, joinCommand, parsePairs, splitCommand } from "../../shared/connectors.ts";
 import type { ConnectorInfo, ConnectorsView } from "../../shared/protocol.ts";
 import { CloseIcon, TrashIcon } from "../icons.tsx";
+import { commandKey } from "../platform.ts";
 import { askConfirm, errorText, notify, trivium } from "../store.ts";
 
 type Mode = "stdio" | "http" | "json";
@@ -91,7 +92,7 @@ export function ConnectorDialog({
 			onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}
 			onKeyDown={(event) => {
 				if (event.key === "Escape" && !saving) onClose();
-				if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !saving) void save();
+				if (event.key === "Enter" && commandKey(event) && !saving) void save();
 			}}
 		>
 			<div className="modal cm" role="dialog" aria-modal="true" aria-labelledby="cn-title" style={{ width: 600 }}>

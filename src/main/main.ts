@@ -4,7 +4,7 @@ import { copyFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAgentDir, SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
-import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, Notification, protocol, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain, Menu, nativeImage, net, Notification, protocol, shell } from "electron";
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type {
 	AppId,
@@ -49,6 +49,7 @@ import { packageSource } from "../shared/packages.ts";
 import { READER_SCHEME, ReaderStore } from "./reader.ts";
 import { ServiceTracker } from "./services.ts";
 import { SettingsStore } from "./settings.ts";
+import { Updater } from "./updater.ts";
 import { UsageCounter } from "./usage.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
 
@@ -123,6 +124,22 @@ const connectors = new ConnectorStore(getAgentDir(), (url) => void shell.openExt
 const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
 	...new Set((await host.listSessions()).flatMap((session) => (session.cwd ? [session.cwd] : []))),
 ]);
+const updater = new Updater({
+	version: app.getVersion(),
+	platform: process.platform,
+	arch: process.arch,
+	execPath: process.execPath,
+	// A renamed development runtime reports isPackaged=true, but runs the project from source.
+	packaged: app.isPackaged && !process.defaultApp,
+	portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
+	dir: join(triviumDir, "update"),
+	// Electron's fetch goes through the system's proxy settings.
+	fetch: (url, init) => net.fetch(url, init),
+	emit: (update) => send({ type: "update", update }),
+	enabled: () => settings.get().checkUpdates,
+	confirmQuit: async () => stopConfirmed || !services.count() || confirmStop(),
+	quit: () => app.quit(),
+});
 // pi's login flow asks the host for this installation's device ID.
 const loginSettings = SettingsManager.create(homedir(), getAgentDir());
 const login = new LoginFlow(
@@ -323,6 +340,9 @@ function registerIpc(): void {
 			defaultThinkingLevel: manager.getDefaultThinkingLevel(),
 		};
 	});
+	handle("trivium:updateStatus", () => updater.get());
+	handle("trivium:checkForUpdates", () => updater.check());
+	handle("trivium:installUpdate", () => updater.install());
 	handle("trivium:openPath", async (path: string) => {
 		mkdirSync(path, { recursive: true });
 		const error = await shell.openPath(path);
@@ -528,6 +548,7 @@ app.whenReady().then(async () => {
 	protocol.handle(READER_SCHEME, (request) => reader.respond(request));
 	registerIpc();
 	createWindow();
+	void updater.start().catch((error: unknown) => console.error("Could not start the update check:", error));
 	app.on("activate", () => {
 		if (!window) createWindow();
 	});
@@ -575,6 +596,7 @@ app.on("window-all-closed", () => {
 // Cleanup is synchronous, so it runs here without holding up the quit.
 app.on("will-quit", () => {
 	host.dispose();
+	updater.dispose();
 	// Whatever is left, such as a service that started while the question was open.
 	services.dispose();
 	reader.dispose();

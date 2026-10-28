@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { DialogAnswer, DialogRequest } from "../../shared/protocol.ts";
 import { WarnIcon } from "../icons.tsx";
+import { commandKey } from "../platform.ts";
 import { attempt, trivium, setState } from "../store.ts";
 
 export function answer(id: string, value: DialogAnswer): void {
@@ -67,7 +68,7 @@ function ConfirmCard({ request }: { request: Extract<DialogRequest, { kind: "con
 			tabIndex={-1}
 			onKeyDown={(event) => {
 				if (event.key === "Escape") answer(request.id, { confirmed: false });
-				else if (event.key === "Enter" && event.metaKey) answer(request.id, { confirmed: true });
+				else if (event.key === "Enter" && commandKey(event)) answer(request.id, { confirmed: true });
 				else return;
 				event.preventDefault();
 			}}
@@ -100,7 +101,7 @@ function TextCard({ request }: { request: Extract<DialogRequest, { kind: "input"
 	const submit = () => answer(request.id, { value });
 	const onKeyDown = (event: KeyboardEvent) => {
 		if (event.key === "Escape") answer(request.id, { cancelled: true });
-		else if (event.key === "Enter" && (event.metaKey || request.kind === "input")) submit();
+		else if (event.key === "Enter" && (commandKey(event) || request.kind === "input")) submit();
 		else return;
 		event.preventDefault();
 	};

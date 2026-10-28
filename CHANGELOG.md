@@ -2,6 +2,12 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Updates from inside the app.** Trivium looks for a new GitHub release at startup and every six hours. When one is out, a row above **Settings** in the sidebar offers it; one click downloads it, checks it against the release's SHA-256 checksum, swaps it in for the current copy and restarts. If the swap fails, the old version is put back. **Settings → About** shows where updating stands, has a **Check now** button and can switch the automatic check off. Copies that can't replace themselves (run from source, the portable EXE, or a folder Trivium can't write to) open the release page instead.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added

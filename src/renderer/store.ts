@@ -17,6 +17,7 @@ import type {
 	SessionSummary,
 	SessionView,
 	TranscriptImage,
+	UpdateStatus,
 } from "../shared/protocol.ts";
 import type { CodeView } from "./panels.ts";
 import { transition } from "./transition.ts";
@@ -73,6 +74,8 @@ export interface State {
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */
 	login?: { providerId: string; name: string; events: LoginEvent[] };
+	/** Whether a newer Trivium is out, and how far installing it has got. */
+	update: UpdateStatus;
 }
 
 export interface ConfirmRequest {
@@ -124,6 +127,7 @@ let state: State = {
 	page: "main",
 	settingsSection: "general",
 	overlay: null,
+	update: { state: "idle" },
 };
 
 const listeners = new Set<() => void>();
@@ -261,6 +265,14 @@ function handleEvent(event: HostEvent): void {
 		case "services":
 			setState({ services: event.services });
 			break;
+		case "update": {
+			const before = getState().update;
+			setState({ update: event.update });
+			if (event.update.state === "available" && !(before.state === "available" && before.release.version === event.update.release.version)) {
+				notify(`Trivium ${event.update.release.version} is available`, "info");
+			}
+			break;
+		}
 		case "focus_session":
 			setState({ page: "main" });
 			void openSession(event.path);
@@ -539,6 +551,29 @@ export function closeSettings(): void {
 	if (path && !views[path]) void loadSession(path, navigation);
 }
 
+/** Installs the release found and restarts, or opens its page when Trivium can't install it itself. */
+export async function installUpdate(): Promise<void> {
+	const { update, sessions } = getState();
+	const release = "release" in update ? update.release : undefined;
+	if (!release) return;
+	if (!release.installable) {
+		await attempt(() => trivium.openExternal(release.url));
+		return;
+	}
+	const running = sessions.filter((session) => session.running).length;
+	if (
+		running &&
+		!(await askConfirm({
+			title: "Restart to update?",
+			message: `Trivium restarts once ${release.version} is downloaded, which stops ${running === 1 ? "the session that is running" : `the ${running} sessions that are running`}.`,
+			confirmLabel: "Update and restart",
+		}))
+	) {
+		return;
+	}
+	await attempt(() => trivium.installUpdate());
+}
+
 export async function updateSettings(patch: Partial<TriviumSettings>): Promise<void> {
 	const next = await attempt(() => trivium.updateSettings(patch));
 	if (next) setState({ settings: next });
@@ -550,6 +585,10 @@ export async function init(): Promise<void> {
 	if (settings) setState({ settings });
 	const services = await attempt(() => trivium.services());
 	if (services) setState({ services });
+	// A failed install from the last restart is reported before this page could hear of it.
+	const update = await attempt(() => trivium.updateStatus());
+	if (update) setState({ update });
+	if (update?.state === "error") notify(update.message);
 	const sessions = await refreshSessions();
 	// Forget remembered sessions that are gone or filed under another app, so switching apps never opens them.
 	if (sessions) {

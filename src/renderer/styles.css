@@ -458,6 +458,77 @@ body.resizing * {
 	flex: 1;
 }
 
+/* A newer Trivium is out: one click downloads it and restarts. */
+.sb-update {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-height: 40px;
+	margin-bottom: -12px;
+	padding: 6px 10px;
+	overflow: hidden;
+	border: 1px solid var(--accent-ring);
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--accent-text);
+	text-align: left;
+	width: 100%;
+}
+
+.sb-update:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 12%, var(--soft));
+}
+
+/* Busy, not unavailable: the progress stays readable. */
+.sb-update:disabled {
+	opacity: 1;
+}
+
+.sb-update.failed {
+	border-color: color-mix(in srgb, #dc2626 30%, transparent);
+	color: #b91c1c;
+}
+
+.sb-update svg {
+	flex: none;
+}
+
+.sb-update-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.sb-update-title {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sb-update-detail {
+	font-size: 11.5px;
+	color: var(--muted);
+}
+
+.sb-update-bar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2px;
+	background: var(--accent-ring);
+}
+
+.sb-update-bar > span {
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	transition: width 0.2s ease;
+}
+
 .sb-label {
 	flex: none;
 	margin: 4px 0 -10px;
@@ -725,6 +796,14 @@ body.resizing * {
 
 .rail-btn.panel {
 	background: var(--tab);
+}
+
+.rail-btn.rail-update {
+	color: var(--accent);
+}
+
+.rail-btn.rail-update:disabled {
+	opacity: 0.6;
 }
 
 .rail-btn.app {
@@ -3349,9 +3428,11 @@ body.resizing * {
 	gap: 8px;
 }
 
-.s-logo {
-	font-size: 22px;
-	font-weight: 600;
+/* Trivium's own mark, which brings its color. */
+.s-head-icon.logo {
+	background: #fff;
+	border: 1px solid var(--edge);
+	box-shadow: 0 1px 2px rgba(19, 20, 43, 0.08);
 }
 
 /* Groups, cards and rows */

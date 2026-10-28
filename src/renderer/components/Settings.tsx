@@ -29,14 +29,17 @@ import {
 	type UsageBar,
 	type UsageRange,
 } from "../../shared/usage.ts";
-import { duration, shortPath, tokens } from "../format.ts";
+import { duration, relativeTime, shortPath, tokens } from "../format.ts";
+import { useNow } from "../hooks.ts";
+import { keyName } from "../platform.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
-import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon, TriviumIcon } from "../icons.tsx";
 import {
 	attempt,
 	closeSettings,
+	installUpdate,
 	notify,
 	openSession,
 	openSettings,
@@ -74,7 +77,7 @@ function PageHeader({
 	actions,
 }: {
 	icon: ReactNode;
-	tone?: "neutral" | "accent";
+	tone?: "neutral" | "accent" | "logo";
 	title: string;
 	subtitle: ReactNode;
 	actions?: ReactNode;
@@ -1208,7 +1211,7 @@ function Keys({ keys }: { keys: string[][] }) {
 				) : (
 					<span key={index} className="s-combo">
 						{combo.map((key) => (
-							<kbd key={key}>{key}</kbd>
+							<kbd key={key}>{keyName(key)}</kbd>
 						))}
 					</span>
 				),
@@ -1236,16 +1239,86 @@ function Shortcuts() {
 
 /* About */
 
+/** What the About page says about updates, and what its button does. */
+function UpdateItem() {
+	const update = useStore((s) => s.update);
+	const now = useNow(60_000);
+	let hint: string;
+	let action: ReactNode = (
+		<button type="button" className="s-btn soft" disabled={update.state === "checking"} onClick={() => void attempt(() => trivium.checkForUpdates())}>
+			{update.state === "checking" ? "Checking…" : "Check now"}
+		</button>
+	);
+	switch (update.state) {
+		case "checking":
+			hint = "Asking GitHub for the latest release…";
+			break;
+		case "current": {
+			const ago = relativeTime(update.checkedAt, now);
+			hint = `You have the latest version · checked ${ago === "now" ? "just now" : /^\d/.test(ago) ? `${ago} ago` : ago}`;
+			break;
+		}
+		case "available":
+			hint = update.release.installable ? `Trivium ${update.release.version} is available` : `Trivium ${update.release.version} is available. ${update.release.reason}`;
+			action = (
+				<button type="button" className="s-btn accent" onClick={() => void installUpdate()}>
+					{update.release.installable ? "Update and restart" : "Download"}
+				</button>
+			);
+			break;
+		case "downloading":
+			hint = `Downloading ${update.release.version} · ${Math.floor((update.received / (update.total || 1)) * 100)}%`;
+			action = null;
+			break;
+		case "installing":
+			hint = `Installing ${update.release.version}. Trivium restarts when it's done.`;
+			action = null;
+			break;
+		case "ready":
+			hint = `${update.release.version} is ready to install`;
+			action = (
+				<button type="button" className="s-btn accent" onClick={() => void installUpdate()}>
+					Restart now
+				</button>
+			);
+			break;
+		case "error":
+			hint = update.message;
+			if (update.release) {
+				action = (
+					<button type="button" className="s-btn soft" onClick={() => void installUpdate()}>
+						Try again
+					</button>
+				);
+			}
+			break;
+		default:
+			hint = "Trivium looks for new releases on GitHub";
+	}
+	const release = "release" in update ? update.release : undefined;
+	return (
+		<Item label="Status" hint={hint}>
+			{release && (
+				<a className="s-btn soft" href={release.url} target="_blank" rel="noreferrer">
+					What's new
+				</a>
+			)}
+			{action}
+		</Item>
+	);
+}
+
 function About() {
 	const [info, setInfo] = useState<AppInfo>();
+	const settings = useStore((s) => s.settings);
 	useEffect(() => {
 		void attempt(() => trivium.appInfo()).then(setInfo);
 	}, []);
 	return (
 		<>
 			<PageHeader
-				icon={<span className="s-logo">π</span>}
-				tone="accent"
+				icon={<TriviumIcon size={30} />}
+				tone="logo"
 				title="Trivium"
 				subtitle="A desktop workspace for coding, research and writing, built on pi."
 			/>
@@ -1265,6 +1338,14 @@ function About() {
 					</Item>
 				</Group>
 			)}
+			<Group title="Updates">
+				<UpdateItem />
+				{settings && (
+					<Item label="Check automatically" hint="At startup and every few hours">
+						<Switch on={settings.checkUpdates} label="Check for updates automatically" onChange={(on) => void updateSettings({ checkUpdates: on })} />
+					</Item>
+				)}
+			</Group>
 			<Group title="Project">
 				<Item label="Source code" hint="Issues and pull requests are welcome">
 					<a className="s-btn soft" href="https://github.com/SkarnerV/Trivium" target="_blank" rel="noreferrer">

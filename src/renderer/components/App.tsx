@@ -6,6 +6,7 @@ import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, Resto
 import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
 import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
+import { commandKey, IS_WINDOWS } from "../platform.ts";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
@@ -17,7 +18,6 @@ import { MemoryPage } from "./Memory.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { AppSwitcher, PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
 
-const IS_WINDOWS = navigator.userAgent.includes("Windows");
 
 function WindowTitleBar({ app, showAppSwitcher = false }: { app: AppId; showAppSwitcher?: boolean }) {
 	const [maximized, setMaximized] = useState(false);
@@ -110,7 +110,7 @@ function Toasts() {
 function useShortcuts() {
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+			if (!commandKey(event) || event.altKey) return;
 			const state = getState();
 			if (event.key === ",") {
 				event.preventDefault();

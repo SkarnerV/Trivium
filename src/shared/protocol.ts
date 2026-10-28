@@ -327,7 +327,34 @@ export type HostEvent =
 	| { type: "trust"; request: TrustRequest }
 	| { type: "trust_closed"; id: string }
 	| { type: "reader_changed"; id: string }
-	| { type: "services"; services: Record<string, ServiceInfo[]> };
+	| { type: "services"; services: Record<string, ServiceInfo[]> }
+	| { type: "update"; update: UpdateStatus };
+
+/** A Trivium release on GitHub newer than the one running. */
+export interface ReleaseInfo {
+	version: string;
+	/** The release's page, with its notes and downloads. */
+	url: string;
+	notes: string;
+	publishedAt: string;
+	/** Trivium can download and install it itself; otherwise the release page opens. */
+	installable: boolean;
+	/** Why it can't, when it can't. */
+	reason?: string;
+}
+
+/** Where updating Trivium stands. */
+export type UpdateStatus =
+	| { state: "idle" }
+	| { state: "checking" }
+	| { state: "current"; checkedAt: number }
+	| { state: "available"; release: ReleaseInfo }
+	| { state: "downloading"; release: ReleaseInfo; received: number; total: number }
+	/** Unpacking and putting the new version in place for the restart. */
+	| { state: "installing"; release: ReleaseInfo }
+	/** In place, waiting for a restart the user put off. */
+	| { state: "ready"; release: ReleaseInfo }
+	| { state: "error"; message: string; release?: ReleaseInfo };
 
 /** Processes an agent command left running, such as a dev server or a watcher, until they end or are stopped. */
 export interface ServiceInfo {
@@ -387,6 +414,8 @@ export interface TriviumSettings {
 	idleMinutes: number;
 	notifyDone: boolean;
 	notifyWaiting: boolean;
+	/** Look for a new Trivium release on GitHub at startup and every few hours. */
+	checkUpdates: boolean;
 	apps: Record<AppId, AppSettings>;
 }
 
@@ -828,6 +857,11 @@ export interface TriviumApi {
 	signInConnector(name: string): Promise<ConnectorsView>;
 	signOutConnector(name: string): Promise<ConnectorsView>;
 	appInfo(): Promise<AppInfo>;
+	updateStatus(): Promise<UpdateStatus>;
+	/** Asks GitHub for the latest release now. Resolves with what it found. */
+	checkForUpdates(): Promise<UpdateStatus>;
+	/** Downloads the release found, puts it in place and restarts into it. */
+	installUpdate(): Promise<void>;
 	openPath(path: string): Promise<void>;
 	memoryOverview(): Promise<MemoryOverview>;
 	memoryFile(target: MemoryTarget): Promise<MemoryFile>;

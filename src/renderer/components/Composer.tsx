@@ -8,6 +8,7 @@ import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { ModelMenu } from "./ModelSelect.tsx";
+import { keyCombo } from "../platform.ts";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
 	const [open, setOpen] = useState(false);
@@ -257,7 +258,7 @@ export function Composer({ view }: { view: SessionView }) {
 							ref={ref}
 							rows={1}
 							value={text}
-							placeholder={running ? "Queue a message for after this run, or ⌥↵ to steer it" : "Ask for the next change, or type / for commands"}
+							placeholder={running ? `Queue a message for after this run, or ${keyCombo(["⌥", "↵"])} to steer it` : "Ask for the next change, or type / for commands"}
 							onChange={(event) => setText(event.target.value)}
 							onPaste={(event) => {
 								const pasted = [...event.clipboardData.files];

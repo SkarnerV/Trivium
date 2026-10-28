@@ -1,14 +1,16 @@
 import { type MouseEvent, useCallback, useEffect, useState } from "react";
-import type { AppId, SessionSummary } from "../../shared/protocol.ts";
+import type { AppId, SessionSummary, UpdateStatus } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
 import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
+import { IS_MAC, IS_WINDOWS } from "../platform.ts";
 import {
 	askConfirm,
 	attempt,
 	deleteSessions,
 	getState,
+	installUpdate,
 	notify,
 	openMemory,
 	openSession,
@@ -25,8 +27,6 @@ import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { serviceCount } from "./ServicesPanel.tsx";
 
-const IS_MAC = navigator.userAgent.includes("Mac");
-const IS_WINDOWS = navigator.userAgent.includes("Windows");
 
 interface ProjectGroup {
 	cwd: string;
@@ -387,11 +387,74 @@ export function Sidebar() {
 			<div className="sb-sessions">
 				<SessionGroups />
 			</div>
+			<UpdateRow />
 			<button type="button" className="sb-row" onClick={() => openSettings()}>
 				<GearIcon />
 				<span className="label">Settings</span>
 			</button>
 		</nav>
+	);
+}
+
+/** What the sidebar says about a newer Trivium, or nothing while there is none. */
+function updateLabel(update: UpdateStatus): { title: string; detail: string; progress?: number; busy: boolean } | undefined {
+	switch (update.state) {
+		case "available":
+			return {
+				title: `Update to ${update.release.version}`,
+				detail: update.release.installable ? "Downloads and restarts Trivium" : "Opens the download page",
+				busy: false,
+			};
+		case "downloading": {
+			const progress = update.total ? update.received / update.total : 0;
+			return { title: `Downloading ${update.release.version}`, detail: `${Math.floor(progress * 100)}%`, progress, busy: true };
+		}
+		case "installing":
+			return { title: `Installing ${update.release.version}`, detail: "Trivium restarts when it's done", busy: true };
+		case "ready":
+			return { title: "Restart to update", detail: `${update.release.version} is ready`, busy: false };
+		case "error":
+			return update.release ? { title: "Update failed", detail: "Try again", busy: false } : undefined;
+		default:
+			return undefined;
+	}
+}
+
+function UpdateRow() {
+	const update = useStore((s) => s.update);
+	const label = updateLabel(update);
+	if (!label) return null;
+	return (
+		<button
+			type="button"
+			className={`sb-update${update.state === "error" ? " failed" : ""}`}
+			disabled={label.busy}
+			title={update.state === "error" ? update.message : undefined}
+			onClick={() => void installUpdate()}
+		>
+			<DownloadIcon size={15} />
+			<span className="sb-update-text">
+				<span className="sb-update-title">{label.title}</span>
+				<span className="sb-update-detail">{label.detail}</span>
+			</span>
+			{label.progress !== undefined && (
+				<span className="sb-update-bar" aria-hidden="true">
+					<span style={{ width: `${label.progress * 100}%` }} />
+				</span>
+			)}
+		</button>
+	);
+}
+
+function UpdateRailButton() {
+	const update = useStore((s) => s.update);
+	const label = updateLabel(update);
+	if (!label) return null;
+	const text = label.busy ? `${label.title}, ${label.detail}` : label.title;
+	return (
+		<button type="button" className="rail-btn rail-update" aria-label={text} title={text} disabled={label.busy} onClick={() => void installUpdate()}>
+			<DownloadIcon size={17} />
+		</button>
 	);
 }
 
@@ -442,6 +505,7 @@ export function Rail() {
 				<MemoryIcon size={17} />
 			</button>
 			<span style={{ flex: 1 }} />
+			<UpdateRailButton />
 			<button type="button" className="rail-btn" aria-label="Settings" title="Settings" onClick={() => openSettings()}>
 				<GearIcon size={17} />
 			</button>

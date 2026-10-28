@@ -2,11 +2,26 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.5] - 2026-10-28
 
 ### Added
 
 - **Updates from inside the app.** Trivium looks for a new GitHub release at startup and every six hours. When one is out, a row above **Settings** in the sidebar offers it; one click downloads it, checks it against the release's SHA-256 checksum, swaps it in for the current copy and restarts. If the swap fails, the old version is put back. **Settings → About** shows where updating stands, has a **Check now** button and can switch the automatic check off. Copies that can't replace themselves (run from source, the portable EXE, or a folder Trivium can't write to) open the release page instead.
+- **Languages.** **Settings → General → Language** offers System, English, 简体中文 and 日本語. System follows the computer's language and falls back to English. The window, toasts, errors, dialogs, notifications, menus, dates and months switch at once. The README is also available in Simplified Chinese and Japanese.
+- **Services.** Processes a session's commands leave running, such as dev servers, are listed per session in a **Services** view in Code's side panel, with their command, ports, address and latest output. **Stop** ends the whole process tree, and pages open in Preview or the browser. A green dot in the header and sidebar marks sessions with services running. Services stop when their session is deleted, and on quit after Trivium asks; ones a crash left running are found on the next start.
+- **Permission level in the composer.** Pick how much the agent asks before acting from the message box.
+
+### Changed
+
+- The permission levels are now **Always ask**, **Approve for me** (the default, asking only before what is hard to undo) and **Bypass permissions**. The level that asked before commands but not edits is gone; a config still using it shows as your own rules.
+- Shortcuts use Ctrl outside macOS wherever they used only Cmd, and keys are written as Ctrl, Alt and Enter there instead of macOS symbols.
+- Scrollbars are thinner.
+
+### Fixed
+
+- Text typed into the message box, and attached files, are kept as the session's draft when switching to another session.
+- A run that recovered from a failed request, such as a retried 503, no longer shows an error card under its answer.
+- A user's own memory extension that registers the same tools as the built-in `@pify/memory`, such as pi-memory, now loads instead of conflicting with it.
 
 ## [0.2.0] - 2026-10-28
 
@@ -53,5 +68,6 @@ First preview release: coding, research and writing in one desktop workspace, po
 - Review code diffs, preview research notes with sources, and accept or reject tracked writing changes.
 - Built-in provider logins, custom model endpoints, MCP support and project trust.
 
+[0.2.5]: https://github.com/SkarnerV/Trivium/compare/v0.2.0...v0.2.5
 [0.2.0]: https://github.com/SkarnerV/Trivium/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SkarnerV/Trivium/releases/tag/v0.1.0

@@ -240,6 +240,7 @@ function registerIpc(): void {
 		await writePermissionLevel(getAgentDir(), level);
 		return host.describeApp(id);
 	});
+	handle("trivium:setSessionPermissions", (level: string) => writePermissionLevel(getAgentDir(), level));
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
 	handle("trivium:exportSession", async (path: string) => {
 		const info = host.exportInfo(path);

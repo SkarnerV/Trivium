@@ -293,6 +293,8 @@ export interface SessionView {
 	context?: ContextInfo;
 	queue: QueueInfo;
 	changes: FileChange[];
+	/** Set while pi-permission-system loads in this session. */
+	permissions?: PermissionSettings;
 }
 
 export type DialogRequest =
@@ -789,6 +791,8 @@ export interface TriviumApi {
 	installPackage(app: AppId, source: string): Promise<AppDetails>;
 	/** Writes a permission level to pi-permission-system's config, then describes this app again. */
 	setPermissionLevel(app: AppId, level: string): Promise<AppDetails>;
+	/** Writes a permission level to pi-permission-system's config, which every session reads, from the composer. */
+	setSessionPermissions(level: string): Promise<PermissionSettings>;
 	reloadApp(app: AppId): Promise<string[]>;
 	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */
 	exportSession(path: string): Promise<string | undefined>;

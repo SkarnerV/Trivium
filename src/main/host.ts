@@ -79,6 +79,8 @@ interface Live {
 	gitTimer?: ReturnType<typeof setTimeout>;
 	/** When the reply being written sent its first token. */
 	firstTokenAt?: number;
+	/** pi-permission-system loaded, so the composer offers its level. */
+	gated: boolean;
 }
 
 /** A session forked before a message, and that message taken back out to edit and send. */
@@ -974,6 +976,7 @@ export class SessionHost {
 			unsubscribe: () => {},
 			sentRuns: 0,
 			lastActive: Date.now(),
+			gated: resourceLoader.getExtensions().extensions.some((extension) => /pi-permission-system/.test(extension.resolvedPath)),
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
@@ -1109,6 +1112,7 @@ export class SessionHost {
 			context: this.contextOf(live),
 			queue: this.queueOf(live),
 			changes,
+			permissions: live.gated ? readPermissions(this.agentDir) : undefined,
 		};
 	}
 

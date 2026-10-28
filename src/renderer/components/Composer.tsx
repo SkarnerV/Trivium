@@ -1,10 +1,12 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ContextInfo, SessionView } from "../../shared/protocol.ts";
+import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
+import type { ContextInfo, PermissionSettings, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
-import { CloseIcon, PaperclipIcon, QueueIcon, SendIcon, SteerIcon, StopIcon } from "../icons.tsx";
+import { CloseIcon, PaperclipIcon, QueueIcon, SendIcon, ShieldIcon, SteerIcon, StopIcon } from "../icons.tsx";
 import { attempt, setState, trivium, useStore } from "../store.ts";
 import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
+import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { ModelMenu } from "./ModelSelect.tsx";
 
 function ContextRing({ context }: { context?: ContextInfo }) {
@@ -89,6 +91,34 @@ function ModelPicker({ view }: { view: SessionView }) {
 		});
 	};
 	return <ModelMenu value={view.model} level={view.thinkingLevel} onChange={(k, l) => void change(k, l)} />;
+}
+
+/** pi-permission-system's level. Its config is shared, so the choice reaches every session that loads it. */
+function PermissionPicker({ permissions }: { permissions: PermissionSettings }) {
+	// A config Trivium can't parse is the user's to edit by hand.
+	if (permissions.unreadable) return null;
+	const known = PERMISSION_LEVELS.some((entry) => entry.id === permissions.level);
+	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: entry.label }));
+	if (!known) options.push({ value: "custom", label: "Your own rules" });
+	const change = async (level: string) => {
+		const next = await attempt(() => trivium.setSessionPermissions(level));
+		if (!next) return;
+		setState((s) => ({
+			views: Object.fromEntries(
+				Object.entries(s.views).map(([path, view]) => [path, view.permissions ? { ...view, permissions: next } : view]),
+			),
+		}));
+	};
+	return (
+		<Dropdown
+			label="Ask before"
+			value={known ? permissions.level : "custom"}
+			options={options}
+			variant="ghost"
+			icon={<ShieldIcon size={13} />}
+			onChange={(value) => value !== "custom" && void change(value)}
+		/>
+	);
 }
 
 function Tray({ view }: { view: SessionView }) {
@@ -242,6 +272,7 @@ export function Composer({ view }: { view: SessionView }) {
 						<button type="button" className="icon-btn attach-btn" aria-label="Attach files" title="Attach files or images" onClick={files.pick}>
 							<PaperclipIcon />
 						</button>
+						{view.permissions && <PermissionPicker permissions={view.permissions} />}
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />
 						{running ? (

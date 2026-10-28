@@ -304,9 +304,10 @@ export class RunTracker {
 					this.applyAssistant(event.message, this.currentAssistantKey, true, "done");
 					const { errorMessage: error, provider } = event.message as { errorMessage?: string; provider?: string };
 					const run = this.runs.at(-1);
-					if (run && error) {
+					// A reply after a failed one, such as pi's retry after a 503, means the run recovered.
+					if (run) {
 						run.error = error;
-						run.errorProvider = provider;
+						run.errorProvider = error ? provider : undefined;
 					}
 					this.currentAssistantKey = undefined;
 					return true;
@@ -409,6 +410,11 @@ export class RunTracker {
 				run.error = error;
 				run.errorProvider = provider;
 				run.status = "error";
+			} else if (run?.error) {
+				// A retry that succeeded, as above.
+				run.error = undefined;
+				run.errorProvider = undefined;
+				run.status = "done";
 			}
 			return;
 		}

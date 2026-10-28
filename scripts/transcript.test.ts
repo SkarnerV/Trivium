@@ -57,6 +57,33 @@ test("a run keeps the timing of its last finished reply", () => {
 	assert.equal(history([{ type: "text", text: "Done." }]).all()[0]!.reply, undefined);
 });
 
+test("a reply after a failed one, as when a 503 is retried, clears the run's error", () => {
+	const failed = { role: "assistant", content: [], stopReason: "error", errorMessage: "503 Service Unavailable", provider: "openai", timestamp: 1200 };
+	const answer = { role: "assistant", content: [{ type: "text", text: "Done." }], timestamp: 1500 };
+	const reopened = new RunTracker([{ role: "user", content: "hi", timestamp: 1000 }, failed, answer] as unknown as Messages);
+	assert.equal(reopened.all()[0]!.error, undefined);
+	assert.equal(reopened.all()[0]!.status, "done");
+
+	const live = new RunTracker([]);
+	const end = (message: unknown) => {
+		live.apply({ type: "message_start", message } as Event);
+		live.apply({ type: "message_end", message } as Event);
+	};
+	end({ role: "user", content: "hi", timestamp: 1000 });
+	end(failed);
+	assert.equal(live.all()[0]!.error, "503 Service Unavailable");
+	end(answer);
+	live.apply({ type: "agent_settled", aborted: false } as Event);
+	assert.equal(live.all()[0]!.error, undefined);
+	assert.equal(live.all()[0]!.status, "done");
+	// A run that ends on the failure keeps it.
+	end({ role: "user", content: "again", timestamp: 2000 });
+	end(failed);
+	live.apply({ type: "agent_settled", aborted: false } as Event);
+	assert.equal(live.all()[1]!.error, "503 Service Unavailable");
+	assert.equal(live.all()[1]!.status, "error");
+});
+
 test("edit arguments preserve every replacement in expanded details", () => {
 	const args = {
 		path: "src/example.ts",

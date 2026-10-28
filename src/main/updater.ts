@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, win32 } from "node:path";
 import { once } from "node:events";
 import { promisify } from "node:util";
 import type { ReleaseInfo, UpdateStatus } from "../shared/protocol.ts";
@@ -61,7 +61,7 @@ export function assetName(version: string, platform: NodeJS.Platform, arch: stri
 
 /** What an update replaces: the folder holding Trivium.exe, or the Trivium.app bundle. */
 export function installTarget(platform: NodeJS.Platform, execPath: string): string | undefined {
-	if (platform === "win32") return dirname(execPath);
+	if (platform === "win32") return win32.dirname(execPath);
 	if (platform === "darwin") return /^(.+?\.app)\/Contents\/MacOS\/[^/]+$/.exec(execPath)?.[1];
 	return undefined;
 }

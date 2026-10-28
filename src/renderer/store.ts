@@ -11,6 +11,7 @@ import type {
 	ModelOption,
 	NewSessionInput,
 	ReaderFile,
+	ServiceInfo,
 	TrustRequest,
 	Notice,
 	SessionSummary,
@@ -56,6 +57,8 @@ export interface State {
 	previews: Record<string, { files: ReaderFile[]; active?: string }>;
 	/** The repository each Code session works in, by session path; null when it is in none. */
 	git: Record<string, GitStatus | null>;
+	/** What each session's commands left running, by session path, whether or not the session is loaded. */
+	services: Record<string, ServiceInfo[]>;
 	overlay: "new" | "search" | null;
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
@@ -115,6 +118,7 @@ let state: State = {
 	panelTab: {},
 	previews: {},
 	git: {},
+	services: {},
 	drafts: {},
 	trust: [],
 	page: "main",
@@ -254,6 +258,9 @@ function handleEvent(event: HostEvent): void {
 		case "reader_changed":
 			void reloadPreview(event.id);
 			break;
+		case "services":
+			setState({ services: event.services });
+			break;
 		case "focus_session":
 			setState({ page: "main" });
 			void openSession(event.path);
@@ -268,6 +275,11 @@ function handleEvent(event: HostEvent): void {
 			break;
 		}
 	}
+}
+
+/** Stops a service; it leaves the list once its processes are gone. */
+export async function stopService(id: string): Promise<void> {
+	await attempt(() => trivium.stopService(id));
 }
 
 /** Reads a Code session's git status, keeping the one on screen when nothing changed. */
@@ -297,6 +309,12 @@ export async function pickPreview(path: string): Promise<void> {
 	if (opened) showPreview(path, opened);
 }
 
+/** Opens a local service's page in a session's Preview panel. */
+export function openWebPreview(path: string, url: string): void {
+	const { host } = new URL(url);
+	showPreview(path, { id: `web:${url}`, path: url, rel: url, name: host, kind: "web", size: 0, mtime: Date.now(), url, scripts: true });
+}
+
 function showPreview(path: string, opened: ReaderFile): void {
 	const files = getState().previews[path]?.files ?? [];
 	// The same file opened again takes the old one's place, so it is never open twice.
@@ -307,7 +325,7 @@ function showPreview(path: string, opened: ReaderFile): void {
 		closing.push(next[0]!);
 		next = next.slice(1);
 	}
-	for (const file of closing) void trivium.closeReader(file.id).catch(() => {});
+	for (const file of closing) if (file.kind !== "web") void trivium.closeReader(file.id).catch(() => {});
 	transition("tab", () =>
 		setState((s) => ({
 			previews: { ...s.previews, [path]: { files: next, active: opened.id } },
@@ -323,7 +341,7 @@ export function selectPreview(path: string, id: string): void {
 
 /** Closes a file; the one beside it shows next. */
 export function closePreview(path: string, id: string): void {
-	void trivium.closeReader(id).catch(() => {});
+	if (!id.startsWith("web:")) void trivium.closeReader(id).catch(() => {});
 	setState((s) => {
 		const files = s.previews[path]?.files ?? [];
 		const index = files.findIndex((file) => file.id === id);
@@ -347,8 +365,15 @@ function replacePreview(id: string, file: ReaderFile): void {
 	}));
 }
 
-/** Reads a file again after it changed on disk. One that is gone stays as it was last seen. */
+/** Reads a file again after it changed on disk. One that is gone stays as it was last seen. A page loads again. */
 export async function reloadPreview(id: string): Promise<void> {
+	if (id.startsWith("web:")) {
+		const page = Object.values(state.previews)
+			.flatMap((open) => open.files)
+			.find((f) => f.id === id);
+		if (page) replacePreview(id, { ...page, mtime: Date.now() });
+		return;
+	}
 	const file = await trivium.reloadReader(id).catch(() => undefined);
 	if (file) replacePreview(id, file);
 }
@@ -520,6 +545,8 @@ export async function init(): Promise<void> {
 	trivium.onEvent(handleEvent);
 	const settings = await attempt(() => trivium.getSettings());
 	if (settings) setState({ settings });
+	const services = await attempt(() => trivium.services());
+	if (services) setState({ services });
 	const sessions = await refreshSessions();
 	// Forget remembered sessions that are gone or filed under another app, so switching apps never opens them.
 	if (sessions) {

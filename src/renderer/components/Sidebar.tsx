@@ -23,6 +23,7 @@ import {
 import { THEMES } from "../theme.ts";
 import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
 import { Resizer } from "./Resizer.tsx";
+import { serviceCount } from "./ServicesPanel.tsx";
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 const IS_WINDOWS = navigator.userAgent.includes("Windows");
@@ -89,9 +90,11 @@ function confirmDelete(sessions: SessionSummary[], what: string, title?: string)
 	const changesNote = pending
 		? ` ${pending === 1 ? "1 changed file stays as it is" : `${pending} changed files stay as they are`}, but can no longer be reverted from Trivium.`
 		: "";
+	const services = sessions.reduce((sum, session) => sum + (getState().services[session.path]?.length ?? 0), 0);
+	const servicesNote = services ? ` ${serviceCount(services)} left running ${services === 1 ? "stops" : "stop"} too.` : "";
 	void askConfirm({
 		title: title ?? (sessions.length === 1 ? "Delete this session?" : `Delete ${sessions.length} sessions?`),
-		message: `${what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.${changesNote}`,
+		message: `${what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.${changesNote}${servicesNote}`,
 		confirmLabel: sessions.length === 1 ? "Delete session" : `Delete ${sessions.length} sessions`,
 	}).then((ok) => {
 		if (ok) void deleteSessions(sessions.map((session) => session.path));
@@ -135,6 +138,7 @@ function sessionMenu(session: SessionSummary, pinned: boolean): MenuEntry[] {
 
 function SessionRow({ session, active, pinned, startedAt }: { session: SessionSummary; active: boolean; pinned: boolean; startedAt?: number }) {
 	const now = useNow(session.running ? 1000 : 60_000);
+	const services = useStore((s) => s.services[session.path]?.length ?? 0);
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
 	const closeMenu = useCallback(() => setMenu(undefined), []);
 	return (
@@ -154,6 +158,7 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 						<PinIcon size={11} />
 					</span>
 				)}
+				{services > 0 && <span className="service-dot" role="img" aria-label={serviceCount(services)} title={`${serviceCount(services)} running`} />}
 				{session.running ? (
 					<span className="running-meta">
 						<span className="live-dot" />

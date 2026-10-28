@@ -323,6 +323,14 @@ export const ExternalIcon = (p: IconProps) => (
 		<path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
 	</Svg>
 );
+export const ServerIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<rect x="3" y="4" width="18" height="7" rx="2" />
+		<rect x="3" y="13" width="18" height="7" rx="2" />
+		<path d="M7 7.5h.01" />
+		<path d="M7 16.5h.01" />
+	</Svg>
+);
 export const SendIcon = () => (
 	<Svg size={14} width={2.6}>
 		<path d="M12 19V5" />

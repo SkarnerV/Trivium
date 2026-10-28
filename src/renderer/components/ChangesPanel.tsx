@@ -1,7 +1,7 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ViewsIcon } from "../icons.tsx";
+import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
 import { type CodeView, codeTab } from "../panels.ts";
 import { attempt, openPreview, trivium, setState, useStore } from "../store.ts";
 import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
@@ -10,6 +10,7 @@ import { EmptyBody } from "./EmptyPanel.tsx";
 import { GitChanges, gitFileCount } from "./GitPanel.tsx";
 import { hasSource, PreviewBody, PreviewTabs, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
+import { ServicesBody, useServices } from "./ServicesPanel.tsx";
 import { transition } from "../transition.ts";
 
 function totals(changes: FileChange[]): { adds: number; dels: number } {
@@ -122,12 +123,14 @@ function SessionChanges({ view }: { view: SessionView }) {
 
 /**
  * The Code app's side panel. It shows one view at a time, picked from a menu: the files this session edited,
- * every change in the working tree when the project is a git repository, or files open to read.
+ * every change in the working tree when the project is a git repository, files open to read, or the services
+ * its commands left running.
  */
 export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
 	const previews = useStore((s) => s.previews[view.path]);
+	const services = useServices(view.path);
 	const tab = codeTab(view, git, picked);
 	const files = previews?.files ?? [];
 	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
@@ -143,7 +146,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 		const rect = event.currentTarget.getBoundingClientRect();
 		setMenu({ kind, x: rect.right, y: rect.bottom + 6 });
 	};
-	const title = { session: "Changes", git: "Git", preview: "Preview" }[tab];
+	const title = { session: "Changes", git: "Git", preview: "Preview", services: "Services" }[tab];
 	const views: MenuEntry[] = [
 		{
 			label: "Changes",
@@ -156,6 +159,13 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 			? [{ label: "Git", icon: <BranchIcon size={14} />, hint: gitFileCount(git) ? count(gitFileCount(git), "file") : undefined, checked: tab === "git", onSelect: () => pick("git") }]
 			: []),
 		{ label: "Preview", icon: <EyeIcon size={14} />, hint: files.length ? `${files.length} open` : undefined, checked: tab === "preview", onSelect: () => pick("preview") },
+		{
+			label: "Services",
+			icon: <ServerIcon size={14} />,
+			hint: services.length ? `${services.length} running` : undefined,
+			checked: tab === "services",
+			onSelect: () => pick("services"),
+		},
 	];
 	return (
 		<aside className="changes" aria-label={title}>
@@ -210,7 +220,9 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					</button>
 				</div>
 			</div>
-			{tab === "preview" ? (
+			{tab === "services" ? (
+				<ServicesBody view={view} />
+			) : tab === "preview" ? (
 				<PreviewBody path={view.path} file={file} source={source} />
 			) : tab === "git" && git ? (
 				<GitChanges view={view} git={git} />

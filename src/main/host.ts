@@ -10,6 +10,7 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	createAgentSession,
+	createBashToolDefinition,
 	createCodemodeExtension,
 	createMcpExtension,
 	createToolSearchExtension,
@@ -24,6 +25,7 @@ import {
 	SessionManager,
 	type SessionMessageEntry,
 	SettingsManager,
+	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type {
 	AppDetails,
@@ -48,6 +50,7 @@ import type {
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
+import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
@@ -187,6 +190,7 @@ export class SessionHost {
 	private readonly settings: SettingsStore;
 	private readonly onDone: (path: string, title: string) => void;
 	private readonly thumbnail: Thumbnail | undefined;
+	private readonly services: ServiceTracker;
 	private idleTimer: ReturnType<typeof setInterval> | undefined;
 	private trustStore!: ProjectTrustStore;
 	/** Decisions made for this run of the app only. */
@@ -206,6 +210,8 @@ export class SessionHost {
 		onDone: (path: string, title: string) => void;
 		/** Previews for images in the transcript. */
 		thumbnail?: Thumbnail;
+		/** Runs agent commands and keeps the processes they leave running. */
+		services: ServiceTracker;
 	}) {
 		this.emit = options.emit;
 		this.broker = options.broker;
@@ -213,6 +219,7 @@ export class SessionHost {
 		this.settings = options.settings;
 		this.onDone = options.onDone;
 		this.thumbnail = options.thumbnail;
+		this.services = options.services;
 	}
 
 	get runtime(): ModelRuntime {
@@ -641,8 +648,8 @@ export class SessionHost {
 	}
 
 	/**
-	 * Deletes sessions: unloads them, moves their files with `trash` (the system Trash),
-	 * and drops Trivium's own records of them. Refuses while any of them is running.
+	 * Deletes sessions: unloads them, stops the services they left running, moves their files with `trash`
+	 * (the system Trash), and drops Trivium's own records of them. Refuses while any of them is running.
 	 */
 	async deleteSessions(paths: string[], trash: (path: string) => Promise<void>): Promise<string[]> {
 		for (const path of paths) {
@@ -654,6 +661,7 @@ export class SessionHost {
 			const live = this.live.get(path);
 			const id = live?.session.sessionId ?? this.summaries.find((summary) => summary.path === path)?.id;
 			if (live) this.unload(live);
+			await this.services.stopSession(path);
 			this.unsaved.delete(path);
 			if (this.viewing === path) this.viewing = undefined;
 			// A new session has no file until its first message.
@@ -669,7 +677,7 @@ export class SessionHost {
 		return deleted;
 	}
 
-	/** Unloads a session from memory. Its file stays; opening it again reloads it. */
+	/** Unloads a session from memory. Its file stays; opening it again reloads it. Its services keep running. */
 	private unload(live: Live): void {
 		this.broker.cancelAll(live.path);
 		clearTimeout(live.gitTimer);
@@ -928,6 +936,14 @@ export class SessionHost {
 		// A new session starts on the app's model when one is set; a reopened session keeps its own.
 		const appSettings = this.settings.app(app);
 		const slash = appSettings.model?.indexOf("/") ?? -1;
+		// pi's bash tool, running commands so the processes they leave show as services. An extension's own bash wins.
+		let sessionPath = "";
+		const ownBash = resourceLoader.getExtensions().extensions.some((extension) => extension.tools.has("bash"));
+		const shell = { shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() };
+		const customTools =
+			profileInfo(app).tools.includes("bash") && !ownBash
+				? [createBashToolDefinition(cwd, { ...shell, operations: this.services.bashOperations(() => sessionPath, shell) }) as ToolDefinition<any, any>]
+				: undefined;
 		const model =
 			isNew && appSettings.model && slash > 0
 				? this.modelRuntime.getModel(appSettings.model.slice(0, slash), appSettings.model.slice(slash + 1))
@@ -940,10 +956,12 @@ export class SessionHost {
 			resourceLoader,
 			sessionManager,
 			tools: profile.tools,
+			customTools,
 			model,
 			thinkingLevel: model ? (appSettings.thinkingLevel as Parameters<AgentSession["setThinkingLevel"]>[0]) : undefined,
 		});
 		const path = session.sessionFile ?? `memory:${randomUUID()}`;
+		sessionPath = path;
 		const live: Live = {
 			path,
 			app,

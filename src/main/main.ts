@@ -47,6 +47,7 @@ import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
 import { READER_SCHEME, ReaderStore } from "./reader.ts";
+import { ServiceTracker } from "./services.ts";
 import { SettingsStore } from "./settings.ts";
 import { UsageCounter } from "./usage.ts";
 import { refreshWindowsIcons, registerWindowsShortcuts } from "./windows-branding.ts";
@@ -94,6 +95,7 @@ function emit(event: HostEvent): void {
 }
 
 const broker = new DialogBroker(emit);
+const services = new ServiceTracker({ file: join(triviumDir, "services.json"), emit: (list) => send({ type: "services", services: list }) });
 const host = new SessionHost({
 	emit,
 	broker,
@@ -101,6 +103,7 @@ const host = new SessionHost({
 	settings,
 	onDone: (path, title) => alert("done", path, title),
 	thumbnail,
+	services,
 });
 
 /** A preview at most 320×240, twice the size it shows at. JPEG keeps it small; PNG keeps transparency. */
@@ -376,6 +379,12 @@ function registerIpc(): void {
 			host.resolveChange(path, file, id, action, expect),
 	);
 	handle("trivium:gitStatus", (path: string) => host.gitStatus(path));
+	handle("trivium:services", () => services.list());
+	handle("trivium:stopService", (id: string) => services.stop(id));
+	handle("trivium:openExternal", async (url: string) => {
+		if (!/^https?:\/\//i.test(url)) throw new Error("Only web addresses open in the browser.");
+		await shell.openExternal(url);
+	});
 	handle("trivium:gitDiff", (path: string, file: Pick<GitFile, "rel" | "area">) => host.gitDiff(path, file));
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		// VS Code's URL handler opens the file at a line; fall back to the system default app.
@@ -445,13 +454,20 @@ function createWindow(): void {
 	window.webContents.on("will-navigate", (event, url) => {
 		if (url !== page) event.preventDefault();
 	});
-	// A previewed page stays on Trivium's files, whose random tokens it cannot guess; web links open in the browser.
+	// A previewed page stays on Trivium's files, whose random tokens it cannot guess, or on a local service's
+	// pages; other web links open in the browser.
 	window.webContents.on("will-frame-navigate", (event) => {
-		if (event.isMainFrame || event.url.startsWith(`${READER_SCHEME}://`)) return;
+		if (event.isMainFrame || event.url.startsWith(`${READER_SCHEME}://`) || isLocalPage(event.url)) return;
 		event.preventDefault();
 		if (/^https?:/.test(event.url)) void shell.openExternal(event.url);
 	});
 	window.once("ready-to-show", () => window?.show());
+	// Closing the window quits on Windows and Linux; say first that the services will stop.
+	window.on("close", (event) => {
+		if (process.platform === "darwin" || stopConfirmed || !services.count()) return;
+		event.preventDefault();
+		void confirmStop().then((ok) => ok && window?.close());
+	});
 	// The custom title bar's maximize button reflects the window state.
 	window.on("maximize", () => window?.webContents.send("trivium:maximize-changed", true));
 	window.on("unmaximize", () => window?.webContents.send("trivium:maximize-changed", false));
@@ -506,12 +522,49 @@ app.whenReady().then(async () => {
 		]),
 	);
 	await host.init();
+	// Services a crash left running show again in their sessions.
+	void services.init().catch((error: unknown) => console.error("Could not check for services left running:", error));
 	protocol.handle(READER_SCHEME, (request) => reader.respond(request));
 	registerIpc();
 	createWindow();
 	app.on("activate", () => {
 		if (!window) createWindow();
 	});
+});
+
+/** A page a local service serves, which the Preview panel may show. */
+function isLocalPage(url: string): boolean {
+	return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[\w-]+\.localhost)(:\d+)?(\/|$)/i.test(url);
+}
+
+/** Set once the user agreed to stop the services, or there were none, so quitting goes ahead. */
+let stopConfirmed = false;
+
+/**
+ * Asks before quitting while sessions' services run, then stops them all: they would otherwise run on with
+ * nothing in Trivium to show or stop them.
+ */
+async function confirmStop(): Promise<boolean> {
+	const count = services.count();
+	const options = {
+		type: "question" as const,
+		buttons: ["Stop and quit", "Cancel"],
+		defaultId: 0,
+		cancelId: 1,
+		message: count === 1 ? "A service started by Trivium is still running" : `${count} services started by Trivium are still running`,
+		detail: "Quitting stops them, such as dev servers and watchers your sessions started. To keep one, run it yourself outside Trivium.",
+	};
+	const { response } = window && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
+	if (response !== 0) return false;
+	stopConfirmed = true;
+	await services.stopAll().catch(() => {});
+	return true;
+}
+
+app.on("before-quit", (event) => {
+	if (stopConfirmed || !services.count()) return;
+	event.preventDefault();
+	void confirmStop().then((ok) => ok && app.quit());
 });
 
 app.on("window-all-closed", () => {
@@ -521,5 +574,7 @@ app.on("window-all-closed", () => {
 // Cleanup is synchronous, so it runs here without holding up the quit.
 app.on("will-quit", () => {
 	host.dispose();
+	// Whatever is left, such as a service that started while the question was open.
+	services.dispose();
 	reader.dispose();
 });

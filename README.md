@@ -39,7 +39,7 @@ skill and provider works here.
 
 | | Mode | Built for | Default setup |
 |---|---|---|---|
-| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a panel with Changes, Git and Preview |
+| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a panel with Changes, Git, Preview and Services |
 | <img src="https://img.shields.io/badge/-%20-0B7A6E?style=flat-square" alt=""> | **Research** | Reading sources and writing notes | No shell; `read` `write` `grep` `find` `ls` and any `web_*` tools; told to cite every claim |
 | <img src="https://img.shields.io/badge/-%20-A65A08?style=flat-square" alt=""> | **Write** | Documents in your project | Edit tools; told to keep your voice and make small, reviewable edits |
 
@@ -94,6 +94,7 @@ Code mode's side panel shows one view at a time, picked from its **Show in panel
 - **Changes.** Code mode records each file before the agent first touches it, so this view shows the net diff of the whole session, per file. **Keep changes** accepts them. **Revert** puts every file back and removes files and folders the agent created. Open any file in VS Code at the first changed line.
 - **Git.** In a git repository, staged, unstaged, untracked and conflicted files, each with its diff. It refreshes after a run, after an edit or command, and when the window regains focus, without polling.
 - **Preview.** Open project files as tabs: HTML pages in a sandboxed frame with their own styles and images (scripts off until you ask, network blocked), Markdown, CSV tables, text with line numbers, and images. Files reload when they change on disk. Open one from a step's eye icon, a file path in a reply, or the Changes and Git views.
+- **Services.** Dev servers, watchers, databases and any other process a command leaves running, such as `npm run dev &`. Each shows its command, processes, the port it listens on and its latest output, with **Stop**, which ends it and everything it started. Open its address in Preview or the browser. A green dot in the header and the sidebar says a session has some running. Services keep running when a session is unloaded, and stop when the session is deleted or Trivium quits, which asks first. If Trivium crashes, they show again at the next start.
 
 The header shows the session's branch, how many files changed, and a dot when there are commits to
 push or pull. Click it for a summary in words: the upstream and when it was last fetched, commits
@@ -197,7 +198,7 @@ windows before restarting so the old taskbar group can exit.
 ```mermaid
 flowchart LR
   subgraph Window["Renderer (React)"]
-    UI["Sidebar · Transcript · Composer<br/>Changes · Git · Preview<br/>Memory · Settings"]
+    UI["Sidebar · Transcript · Composer<br/>Changes · Git · Preview · Services<br/>Memory · Settings"]
   end
   subgraph Main["Main process (Node)"]
     Host["Session host<br/>one AgentSession per open session"]
@@ -281,7 +282,8 @@ changes.
 
 You don't need a real provider to work on the UI. `TRIVIUM_DEV_FAUX=1` loads a scripted model,
 `trivium-faux/scripted`, that plays a whole bug fix: it reads a file, runs commands, asks a
-question, edits, writes a test and explains. Keep test runs out of your real data; `TRIVIUM_HOME`
+question, edits, writes a test and explains. A prompt that mentions "server" starts a small web
+server in the background instead, for the Services view. Keep test runs out of your real data; `TRIVIUM_HOME`
 also holds that copy's window state, so it doesn't change the open session or layout of your own:
 
 ```bash

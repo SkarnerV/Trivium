@@ -1639,6 +1639,169 @@ body.resizing * {
 	color: var(--ink-2);
 }
 
+/* Services: processes a session's commands left running. A green dot in the header, the sidebar and the panel. */
+.service-dot {
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--add);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--add) 16%, transparent);
+}
+
+.service-dot.stopping {
+	background: var(--ink-4);
+	box-shadow: none;
+}
+
+.services-toggle {
+	color: var(--add);
+}
+
+.services {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 0 12px 12px;
+	overflow: auto;
+}
+
+.service {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: #fff;
+}
+
+.service-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.service-name {
+	min-width: 0;
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.service-port {
+	flex: none;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--tab);
+	color: var(--ink-3);
+	font-size: 11px;
+	line-height: 18px;
+}
+
+.btn.service-stop {
+	min-height: 28px;
+	margin-left: auto;
+	padding: 0 12px;
+	color: var(--del);
+	font-size: 12.5px;
+}
+
+.btn.service-stop:hover:not(:disabled) {
+	border-color: var(--del);
+	background: #fdeeee;
+}
+
+.btn.service-stop:disabled {
+	color: var(--ink-4);
+}
+
+.service-command {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+	padding: 6px 8px;
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--ink-2);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.service-meta {
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.service-url {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+}
+
+.service-url a {
+	flex: 1;
+	min-width: 0;
+	color: var(--accent-text);
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.service-url a:hover {
+	text-decoration: underline;
+}
+
+.service-output-toggle {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	align-self: flex-start;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.service-output-toggle:hover {
+	color: var(--ink);
+}
+
+.service-output {
+	max-height: 240px;
+	margin: 0;
+	padding: 8px;
+	overflow: auto;
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--ink-2);
+	font-family: var(--mono);
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.services-note {
+	margin: 0;
+	font-size: 11.5px;
+	color: var(--ink-4);
+	text-align: center;
+}
+
+.session-row .service-dot {
+	width: 6px;
+	height: 6px;
+}
+
 /* Commits to push (blue) or to pull (amber); the summary says which in words. */
 .branch-dot {
 	flex: none;

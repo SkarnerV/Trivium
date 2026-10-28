@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName, duration } from "../format.ts";
-import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon } from "../icons.tsx";
+import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
 import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
@@ -11,6 +11,7 @@ import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { ChangeCount } from "./ChangesPanel.tsx";
 import { branchLabel, gitFileCount } from "./GitPanel.tsx";
 import { Composer } from "./Composer.tsx";
+import { serviceCount, useServices } from "./ServicesPanel.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
@@ -330,6 +331,27 @@ function BranchButton({ view, git }: { view: SessionView; git: GitStatus }) {
 	);
 }
 
+/** Says the session has services running, and opens the panel on them. */
+function ServicesButton({ view }: { view: SessionView }) {
+	const services = useServices(view.path);
+	const showing = useStore((s) => !s.changesHidden[view.path] && s.panelTab[view.path] === "services");
+	if (!services.length) return null;
+	const ports = services.flatMap((service) => service.ports.map((port) => `:${port}`));
+	return (
+		<button
+			type="button"
+			className="changes-toggle services-toggle"
+			aria-pressed={showing}
+			title={`${serviceCount(services.length)} running${ports.length ? ` on ${ports.join(", ")}` : ""}. Show them in the panel.`}
+			onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: false }, panelTab: { ...s.panelTab, [view.path]: "services" } }))}
+		>
+			<span className="service-dot" aria-hidden="true" />
+			<ServerIcon size={14} />
+			<span>{serviceCount(services.length)}</span>
+		</button>
+	);
+}
+
 export function SessionPane({ view }: { view: SessionView }) {
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
@@ -350,6 +372,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<span className="project-name">/</span>
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
+				<ServicesButton view={view} />
 				{git && <BranchButton view={view} git={git} />}
 				<button
 					type="button"

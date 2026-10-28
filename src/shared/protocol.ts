@@ -240,8 +240,8 @@ export interface GitDiff {
 	binary: boolean;
 }
 
-/** How the Preview panel shows a file. */
-export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary";
+/** How the Preview panel shows a file. "web" is a local service's page, by its address. */
+export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary" | "web";
 
 /** A file open in the Preview panel. */
 export interface ReaderFile {
@@ -324,7 +324,27 @@ export type HostEvent =
 	| { type: "unloaded"; paths: string[] }
 	| { type: "trust"; request: TrustRequest }
 	| { type: "trust_closed"; id: string }
-	| { type: "reader_changed"; id: string };
+	| { type: "reader_changed"; id: string }
+	| { type: "services"; services: Record<string, ServiceInfo[]> };
+
+/** Processes an agent command left running, such as a dev server or a watcher, until they end or are stopped. */
+export interface ServiceInfo {
+	id: string;
+	/** The command the agent ran. */
+	command: string;
+	cwd: string;
+	startedAt: number;
+	/** Its processes still running: the ones the command started, and theirs. */
+	processes: { pid: number; name: string }[];
+	/** TCP ports it listens on. */
+	ports: number[];
+	/** Where it serves pages: an address it printed, or its first port. */
+	url?: string;
+	/** The last of what it printed, while its output still comes to Trivium. */
+	output: string;
+	/** A stop is under way. */
+	stopping: boolean;
+}
 
 /** What goes into a session's message box, unsent: such as an earlier message taken back to edit. */
 export interface Draft {
@@ -730,6 +750,12 @@ export interface TriviumApi {
 	/** One changed file's diff, as the session's latest git status lists it. */
 	gitDiff(path: string, file: Pick<GitFile, "rel" | "area">): Promise<GitDiff>;
 	openInEditor(file: string, line?: number): Promise<void>;
+	/** The services every session's commands left running, by session path. */
+	services(): Promise<Record<string, ServiceInfo[]>>;
+	/** Ends a service and everything it started; fails if some of it is still running after. */
+	stopService(id: string): Promise<void>;
+	/** Opens a web address in the system browser. */
+	openExternal(url: string): Promise<void>;
 	/** Opens a file with its default app. */
 	openFile(file: string): Promise<void>;
 	/** Current text of a file this session changed. */

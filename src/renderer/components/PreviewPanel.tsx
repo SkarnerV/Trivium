@@ -33,7 +33,14 @@ export function PreviewTabs({ path, files, active }: { path: string; files: Read
 /** What the "More" button offers for the file showing. */
 export function previewMenu(path: string, file: ReaderFile | undefined): MenuEntry[] {
 	const entries: MenuEntry[] = [];
-	if (file) {
+	if (file?.kind === "web") {
+		entries.push(
+			{ label: "Open in browser", icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openExternal(file.path)) },
+			{ label: "Copy address", icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
+			{ label: "Reload", icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
+			"separator",
+		);
+	} else if (file) {
 		entries.push(
 			{ label: "Open in VS Code", icon: <CodeIcon size={14} />, onSelect: () => void attempt(() => trivium.openInEditor(file.path)) },
 			{ label: "Open with default app", icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openFile(file.path)) },
@@ -85,6 +92,17 @@ export function PreviewBody({ path, file, source }: { path: string; file: Reader
 function FileView({ file, source }: { file: ReaderFile; source: boolean }) {
 	if (source && file.text !== undefined) return <TextView text={file.text} />;
 	switch (file.kind) {
+		case "web":
+			// A local service's page, on its own origin, so it can keep its storage and reach its own server.
+			return (
+				<iframe
+					key={`${file.url}#${file.mtime}`}
+					className="preview-frame"
+					src={file.url}
+					title={file.name}
+					sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+				/>
+			);
 		case "html":
 			// No allow-same-origin: the page gets an opaque origin and cannot reach Trivium. Links that open a
 			// new window go to the browser.

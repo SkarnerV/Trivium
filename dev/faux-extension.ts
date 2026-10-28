@@ -7,6 +7,7 @@
 // - Write tightens two paragraphs of docs/rpc-integration.md and adds one.
 // - A prompt that mentions "subagent", in any app, delegates: one child, three in parallel, then one in
 //   the background whose result arrives later as its own run.
+// - A prompt that mentions "server", in Code, starts a small web server in the background, for the Services view.
 // Every prompt replays the story from its first step.
 import {
 	createFauxCore,
@@ -294,6 +295,18 @@ const SUBAGENT_STORY: Step[] = [
 		),
 ];
 
+/** A page server on port 4173 that the command leaves running, as `npm run dev &` would. */
+const SERVER = `node -e "require('http').createServer((q, s) => { s.setHeader('content-type', 'text/html'); s.end('<h1>Hello from a service</h1>'); }).listen(4173, () => console.log('Ready on http://localhost:4173/'))" &
+sleep 1`;
+
+const SERVER_STORY: Step[] = [
+	() =>
+		fauxAssistantMessage([fauxText("I'll start the preview server in the background."), fauxToolCall("bash", { command: SERVER })], {
+			stopReason: "toolUse",
+		}),
+	() => fauxAssistantMessage(fauxText("The server is running on http://localhost:4173/. Stop it from the Services view when you're done.")),
+];
+
 const NOTICE_REPLY: Step = () =>
 	fauxAssistantMessage(
 		fauxText("The researcher is back: Electron starts about **2.1× slower** than Tauri here (420 ms vs 200 ms), but both stay under half a second, so it isn't a reason to switch."),
@@ -374,7 +387,7 @@ export default function (pi: ExtensionAPI) {
 		// pi hands a custom message to the model as a user message.
 		const prompt = textOf(context.messages[lastUser]?.content);
 		if (prompt.includes("Background task completed")) return NOTICE_REPLY();
-		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : scripts[app]!;
+		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : app === "code" && /server/i.test(prompt) ? SERVER_STORY : scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();
 	};
 	core.setResponses(Array.from({ length: 200 }, () => respond));

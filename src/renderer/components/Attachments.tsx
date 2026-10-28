@@ -23,15 +23,19 @@ function formatSize(bytes: number): string {
  * pasted or dragged-in images without one are sent as data. Unsent attachments are released
  * when the message box goes away.
  */
-export function useAttachments() {
+/** `onLeave` takes what the box holds when it goes away, to keep for later; without it they are dropped. */
+export function useAttachments(onLeave?: (items: AttachmentInfo[]) => void) {
 	const [items, setItems] = useState<AttachmentInfo[]>([]);
 	const [pending, setPending] = useState(0);
 	const current = useRef(items);
 	current.current = items;
+	const leave = useRef(onLeave);
+	leave.current = onLeave;
 
 	useEffect(
 		() => () => {
-			if (current.current.length) void trivium.dropAttachments(current.current.map((item) => item.id));
+			if (leave.current) leave.current(current.current);
+			else if (current.current.length) void trivium.dropAttachments(current.current.map((item) => item.id));
 		},
 		[],
 	);

@@ -497,7 +497,10 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 	const deleted = await attempt(() => trivium.deleteSessions(paths));
 	if (!deleted?.length) return;
 	const gone = new Set(deleted);
+	const left = deleted.flatMap((path) => getState().drafts[path]?.attachments ?? []);
+	if (left.length) void trivium.dropAttachments(left.map((item) => item.id));
 	setState((s) => ({
+		drafts: Object.fromEntries(Object.entries(s.drafts).filter(([path]) => !gone.has(path))),
 		sessions: s.sessions.filter((session) => !gone.has(session.path)),
 		views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))),
 		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),

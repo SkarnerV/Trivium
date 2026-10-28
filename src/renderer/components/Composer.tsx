@@ -126,7 +126,13 @@ export function Composer({ view }: { view: SessionView }) {
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
 	const menu = useCommandMenu(view.path, text, setText);
-	const files = useAttachments();
+	const unsent = useRef(text);
+	unsent.current = text;
+	// Keeps an unsent message for when the user comes back to this session.
+	const files = useAttachments((attachments) => {
+		if (!unsent.current.trim() && !attachments.length) return;
+		setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: unsent.current, attachments } } }));
+	});
 	useEffect(() => {
 		if (!draft) return;
 		setText(draft.text);

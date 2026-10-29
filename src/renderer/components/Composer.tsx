@@ -122,8 +122,8 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 }
 
 function Tray({ view }: { view: SessionView }) {
-	const { steering, followUp } = view.queue;
-	if (!steering.length && !followUp.length) return null;
+	const { steering, followUp } = view.running ? view.queue : { steering: [], followUp: [] };
+	if (!view.compacting && !steering.length && !followUp.length) return null;
 	const clear = async () => {
 		const queue = await attempt(() => trivium.clearQueue(view.path));
 		if (queue) setState((s) => ({ views: { ...s.views, [view.path]: { ...view, queue } } }));
@@ -143,6 +143,11 @@ function Tray({ view }: { view: SessionView }) {
 	);
 	return (
 		<div className="tray" role="region" aria-label={t("Pending work")}>
+			{view.compacting && (
+				<div className="tray-row" role="status">
+					<span className="text shimmer">{t("Compacting the conversation…")}</span>
+				</div>
+			)}
 			{steering.map((text, index) => row("steer", text, index))}
 			{followUp.map((text, index) => row("queue", text, index))}
 		</div>
@@ -155,6 +160,8 @@ export function Composer({ view }: { view: SessionView }) {
 	const [text, setText] = useState(() => draft?.text ?? "");
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
+	// Stopping a run also stops a compaction, including one started by /compact while nothing ran.
+	const stoppable = running || view.compacting;
 	const menu = useCommandMenu(view.path, text, setText);
 	const unsent = useRef(text);
 	unsent.current = text;
@@ -212,7 +219,7 @@ export function Composer({ view }: { view: SessionView }) {
 		if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
 			event.preventDefault();
 			void send(running ? (event.altKey ? "steer" : "followUp") : "prompt");
-		} else if (event.key === "Escape" && running) {
+		} else if (event.key === "Escape" && stoppable) {
 			event.preventDefault();
 			stop();
 		}
@@ -221,7 +228,7 @@ export function Composer({ view }: { view: SessionView }) {
 	return (
 		<div className="dock">
 			<div className="dock-inner">
-				{running && <Tray view={view} />}
+				<Tray view={view} />
 				{menu.open && (
 					<CommandMenu
 						items={menu.items}
@@ -279,7 +286,7 @@ export function Composer({ view }: { view: SessionView }) {
 						{view.permissions && <PermissionPicker permissions={view.permissions} />}
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />
-						{running ? (
+						{stoppable ? (
 							<button type="button" className="round-btn" aria-label={t("Stop")} title={t("Stop ({key})", { key: keyName("esc") })} onClick={stop}>
 								<StopIcon />
 							</button>

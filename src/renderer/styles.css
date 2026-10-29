@@ -1160,7 +1160,8 @@ body.resizing * {
 
 /* A light passing across "Working" or "Waiting for your answer" says the run is alive, without a dot beside it. */
 .steps-toggle .shimmer,
-.ask-head .shimmer {
+.ask-head .shimmer,
+.tray-row .shimmer {
 	background: linear-gradient(90deg, var(--ink) 35%, var(--ink-4) 50%, var(--ink) 65%) 0 0 / 300% 100%;
 	-webkit-background-clip: text;
 	background-clip: text;
@@ -1179,7 +1180,8 @@ body.resizing * {
 
 @media (prefers-reduced-motion: reduce) {
 	.steps-toggle .shimmer,
-	.ask-head .shimmer {
+	.ask-head .shimmer,
+	.tray-row .shimmer {
 		animation: none;
 	}
 }

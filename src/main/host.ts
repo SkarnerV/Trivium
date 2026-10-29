@@ -70,6 +70,8 @@ interface Live {
 	tracker: RunTracker;
 	changes: ChangeTracker;
 	running: boolean;
+	/** Between compaction_start and compaction_end, whether started by /compact or automatically. */
+	compacting: boolean;
 	unread: boolean;
 	unsubscribe: () => void;
 	flushTimer?: ReturnType<typeof setTimeout>;
@@ -444,14 +446,8 @@ export class SessionHost {
 		const fail = (error: unknown) => this.notice(error instanceof Error ? error.message : String(error), "error");
 		if (name === "compact") {
 			if (live.running) throw new Error(t("Wait for the run to finish, or stop it, before compacting."));
-			this.notice(t("Compacting the conversation…"), "info");
-			void session
-				.compact(args.trim() || undefined)
-				.then(() => {
-					this.emitStatus(live);
-					this.notice(t("Conversation compacted"), "info");
-				})
-				.catch(fail);
+			// compaction_start and compaction_end show the progress and the outcome, as they do for automatic compaction.
+			void session.compact(args.trim() || undefined).catch(() => {});
 			return;
 		}
 		if (name === "name") {
@@ -973,6 +969,7 @@ export class SessionHost {
 			tracker: new RunTracker(session.messages, this.thumbnail),
 			changes,
 			running: false,
+			compacting: false,
 			unread: false,
 			unsubscribe: () => {},
 			sentRuns: 0,
@@ -1018,9 +1015,18 @@ export class SessionHost {
 					this.scheduleGit(live);
 				}
 				break;
+			case "compaction_start":
+				live.compacting = true;
+				this.emitStatus(live);
+				break;
+			case "compaction_end":
+				live.compacting = false;
+				this.emitStatus(live);
+				if (event.errorMessage) this.notice(event.errorMessage, "error");
+				else if (event.result) this.notice(t("Conversation compacted"), "info");
+				break;
 			case "queue_update":
 			case "message_end":
-			case "compaction_end":
 				this.emitStatus(live);
 				break;
 			case "session_info_changed":
@@ -1088,6 +1094,7 @@ export class SessionHost {
 			type: "status",
 			path: live.path,
 			running: live.running,
+			compacting: live.compacting,
 			context: this.contextOf(live),
 			queue: this.queueOf(live),
 			title: this.titleFor(live),
@@ -1106,6 +1113,7 @@ export class SessionHost {
 			title: this.titleFor(live),
 			runs: live.tracker.all(),
 			running: live.running,
+			compacting: live.compacting,
 			// pi uses an "unknown" placeholder when no model is configured; show that as no model.
 			model:
 				session.model && session.model.provider !== "unknown" ? `${session.model.provider}/${session.model.id}` : undefined,

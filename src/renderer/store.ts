@@ -234,6 +234,7 @@ function handleEvent(event: HostEvent): void {
 						[event.path]: {
 							...view,
 							running: event.running,
+							compacting: event.compacting,
 							context: event.context,
 							queue: event.queue,
 							title: event.title,

@@ -290,6 +290,8 @@ export interface SessionView {
 	title: string;
 	runs: Run[];
 	running: boolean;
+	/** pi is summarizing the conversation, after /compact or when the context ran full. */
+	compacting: boolean;
 	model?: string;
 	thinkingLevel: string;
 	context?: ContextInfo;
@@ -317,7 +319,7 @@ export type HostEvent =
 	| { type: "sessions"; sessions: SessionSummary[] }
 	| { type: "view"; view: SessionView }
 	| { type: "run"; path: string; index: number; run: Run }
-	| { type: "status"; path: string; running: boolean; context?: ContextInfo; queue: QueueInfo; title: string }
+	| { type: "status"; path: string; running: boolean; compacting: boolean; context?: ContextInfo; queue: QueueInfo; title: string }
 	| { type: "changes"; path: string; changes: FileChange[] }
 	| { type: "git"; path: string; git: GitStatus | null }
 	| { type: "dialog"; request: DialogRequest }

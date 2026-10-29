@@ -33,12 +33,34 @@ export interface ServiceKey {
 	startedAt: number;
 	/** The shell that ran the command; its process group holds the command's processes on macOS and Linux. */
 	shellPid?: number;
+	/**
+	 * On Windows, a command that started programs detached, such as with Start-Process, and when it ended. What it
+	 * started is not a Git Bash process, so its id cannot be read, and its launcher has exited.
+	 */
+	detached?: { command: string; endedAt: number };
+}
+
+/** Whether a command may start programs that outlive it apart from Git Bash: Start-Process, or cmd's start. */
+export function startsDetached(command: string): boolean {
+	return /\b(?:start-process|saps)\b|(?:^|[;&|(\n]\s*|\bcmd(?:\.exe)?\s+\/[ck]\s+)start\s/i.test(command);
 }
 
 /**
- * Each service's live processes: the ones carrying its id or in its shell's process group, and their children.
- * On Windows a native child carries no readable environment, so it is found by its parent; one started before
- * the service is a reused process id, not a child.
+ * A process a detached command left: started while the command ran, by a launcher that has since exited, and
+ * running a program the command names.
+ */
+function leftBehind(row: ProcessRow, service: ServiceKey, alive: Set<number>): boolean {
+	const detached = service.detached;
+	if (!detached || alive.has(row.ppid) || row.created === undefined) return false;
+	if (row.created < service.startedAt - 1000 || row.created > detached.endedAt + 1000) return false;
+	const name = row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return name !== "" && new RegExp(`\\b${name}\\b`, "i").test(detached.command);
+}
+
+/**
+ * Each service's live processes: the ones carrying its id, in its shell's process group, or left by a detached
+ * command, and their children. On Windows a native child carries no readable environment, so it is found by its
+ * parent; one started before the service is a reused process id, not a child.
  */
 export function groupProcesses(rows: ProcessRow[], services: ServiceKey[]): Map<string, ProcessRow[]> {
 	const children = new Map<number, ProcessRow[]>();
@@ -47,11 +69,16 @@ export function groupProcesses(rows: ProcessRow[], services: ServiceKey[]): Map<
 		if (list) list.push(row);
 		else children.set(row.ppid, [row]);
 	}
+	const alive = new Set(rows.map((row) => row.pid));
 	const claimed = new Set<number>();
 	const groups = new Map<string, ProcessRow[]>();
 	for (const service of services) {
 		const seeds = rows.filter(
-			(row) => !claimed.has(row.pid) && (row.marker === service.id || (service.shellPid !== undefined && row.pgid === service.shellPid && row.pid !== service.shellPid)),
+			(row) =>
+				!claimed.has(row.pid) &&
+				(row.marker === service.id ||
+					(service.shellPid !== undefined && row.pgid === service.shellPid && row.pid !== service.shellPid) ||
+					leftBehind(row, service, alive)),
 		);
 		const found: ProcessRow[] = [];
 		const queue = [...seeds];
@@ -74,6 +101,29 @@ export function groupProcesses(rows: ProcessRow[], services: ServiceKey[]): Map<
 export function rootsOf(rows: ProcessRow[]): ProcessRow[] {
 	const pids = new Set(rows.map((row) => row.pid));
 	return rows.filter((row) => !pids.has(row.ppid));
+}
+
+/**
+ * A command's processes as the programs it left running, one per root process with everything under it: a
+ * command that started a frontend and a backend left two services, not one.
+ */
+export function splitByRoot(rows: ProcessRow[]): ProcessRow[][] {
+	const children = new Map<number, ProcessRow[]>();
+	for (const row of rows) {
+		const list = children.get(row.ppid);
+		if (list) list.push(row);
+		else children.set(row.ppid, [row]);
+	}
+	return rootsOf(rows).map((root) => {
+		const part: ProcessRow[] = [];
+		const queue = [root];
+		while (queue.length) {
+			const row = queue.shift()!;
+			part.push(row);
+			queue.push(...(children.get(row.pid) ?? []));
+		}
+		return part.sort((a, b) => a.pid - b.pid);
+	});
 }
 
 /** Windows' process list, from PowerShell's Win32_Process query as JSON. */
@@ -366,8 +416,15 @@ interface Tracked extends ServiceKey {
 	output: OutputTail;
 	processes: ProcessRow[];
 	ports: number[];
+	/** The ports each of its processes listens on. */
+	listening: Map<number, number[]>;
 	stopping: boolean;
+	/** The programs being stopped on their own, by root process id. */
+	stoppingRoots: Set<number>;
 }
+
+/** A command's state before its processes are read. */
+const NOTHING_YET = () => ({ processes: [], ports: [], listening: new Map<number, number[]>(), stopping: false, stoppingRoots: new Set<number>() });
 
 /** What services.json keeps, so services left by a crash are found again at the next start. */
 interface Saved {
@@ -376,6 +433,7 @@ interface Saved {
 	command: string;
 	cwd: string;
 	startedAt: number;
+	detached?: ServiceKey["detached"];
 }
 
 /**
@@ -423,7 +481,7 @@ export class ServiceTracker {
 		} catch {
 			// Without Git Bash there are no ids to read.
 		}
-		for (const entry of saved) this.pending.set(entry.id, { ...entry, output: new OutputTail(), processes: [], ports: [], stopping: false });
+		for (const entry of saved) this.pending.set(entry.id, { ...entry, output: new OutputTail(), ...NOTHING_YET() });
 		await this.refresh();
 		await this.save();
 	}
@@ -481,7 +539,8 @@ export class ServiceTracker {
 					clearTimeout(timer);
 					signal?.removeEventListener("abort", stop);
 					const shown = options.commandPrefix && command.startsWith(`${options.commandPrefix}\n`) ? command.slice(options.commandPrefix.length + 1) : command;
-					this.ended({ id, startedAt, shellPid: child.pid, sessionPath: sessionPath(), command: shown.trim(), cwd, output, processes: [], ports: [], stopping: false });
+					const detached = process.platform === "win32" && startsDetached(shown) ? { command: shown, endedAt: Date.now() } : undefined;
+					this.ended({ id, startedAt, shellPid: child.pid, detached, sessionPath: sessionPath(), command: shown.trim(), cwd, output, ...NOTHING_YET() });
 				}
 			},
 		};
@@ -490,27 +549,62 @@ export class ServiceTracker {
 	/** The running services of every session, by session path. */
 	list(): Record<string, ServiceInfo[]> {
 		const result: Record<string, ServiceInfo[]> = {};
-		for (const service of this.services.values()) (result[service.sessionPath] ??= []).push(this.info(service));
-		for (const list of Object.values(result)) list.sort((a, b) => a.startedAt - b.startedAt);
+		for (const service of this.services.values()) (result[service.sessionPath] ??= []).push(...this.infos(service));
+		for (const list of Object.values(result)) list.sort((a, b) => a.startedAt - b.startedAt || a.processes[0]!.pid - b.processes[0]!.pid);
 		return result;
 	}
 
+	/** How many services are running, counting each program a command left. */
 	count(): number {
-		return this.services.size;
+		return [...this.services.values()].reduce((sum, service) => sum + Math.max(1, splitByRoot(service.processes).length), 0);
 	}
 
-	/** Ends a service and everything it started. Resolves once its processes are gone, or fails if some are left. */
+	/**
+	 * Ends a service and everything it started: a whole command's, or one program of a command that left several.
+	 * Resolves once its processes are gone, or fails if some are left.
+	 */
 	async stop(id: string): Promise<void> {
-		const service = this.services.get(id);
+		const [commandId, root] = id.split(":");
+		const service = this.services.get(commandId!);
 		if (!service) return;
-		await this.stopAll([service]);
-		if (this.services.has(id)) {
-			const left = this.services.get(id)!.processes.map((row) => `${row.name} (${row.pid})`).join(", ");
+		let left: ProcessRow[];
+		if (root === undefined) {
+			await this.stopAll([service]);
+			left = this.services.get(commandId!)?.processes ?? [];
+		} else {
+			left = await this.stopProgram(service, Number(root));
+		}
+		if (left.length) {
 			throw new Error(
 				t(process.platform === "darwin" ? "Couldn't stop {name}. Try again, or end it from Activity Monitor." : "Couldn't stop {name}. Try again, or end it from Task Manager.", {
-					name: left,
+					name: left.map((row) => `${row.name} (${row.pid})`).join(", "),
 				}),
 			);
+		}
+	}
+
+	/** Ends one program a command left, leaving its others running, as stopAll does a whole command. Returns what is left of it. */
+	private async stopProgram(service: Tracked, root: number): Promise<ProcessRow[]> {
+		const part = splitByRoot(service.processes).find((rows) => rows.some((row) => row.pid === root));
+		if (!part) return [];
+		const pids = new Set(part.map((row) => row.pid));
+		const remaining = () => (this.services.get(service.id)?.processes ?? []).filter((row) => pids.has(row.pid));
+		service.stoppingRoots.add(root);
+		this.changed();
+		try {
+			await this.probe.kill(part, false);
+			for (let attempt = 0; attempt < 10; attempt++) {
+				await this.refresh();
+				if (!remaining().length) return [];
+				await new Promise((resolve) => setTimeout(resolve, 300));
+			}
+			await this.probe.kill(remaining(), true);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			await this.refresh();
+			return remaining();
+		} finally {
+			service.stoppingRoots.delete(root);
+			this.changed();
 		}
 	}
 
@@ -576,9 +670,10 @@ export class ServiceTracker {
 		let pending = [...this.pending.values()];
 		this.pending.clear();
 		// Most commands leave nothing running; on Windows a quick look for their ids saves reading every process.
+		// A detached command's programs carry no id that can be read, so it is always checked.
 		if (!this.services.size && pending.length && this.probe.markers) {
 			const ids = await this.probe.markers(this.shell);
-			pending = pending.filter((service) => ids.has(service.id));
+			pending = pending.filter((service) => ids.has(service.id) || service.detached);
 		}
 		const all = [...this.services.values(), ...pending];
 		if (!all.length) return;
@@ -599,6 +694,7 @@ export class ServiceTracker {
 			}
 			service.processes = processes;
 			service.ports = next;
+			service.listening = new Map(processes.flatMap((row) => (ports.has(row.pid) ? [[row.pid, ports.get(row.pid)!] as const] : [])));
 			if (!this.services.has(service.id)) {
 				this.services.set(service.id, service);
 				service.output.onChange = () => this.outputChanged();
@@ -631,24 +727,37 @@ export class ServiceTracker {
 		}, 1000);
 	}
 
-	private info(service: Tracked): ServiceInfo {
+	/**
+	 * A command's services: one, or one per program when it left several running, each with its own id, ports
+	 * and address. They share the command's output, which all of them printed to.
+	 */
+	private infos(service: Tracked): ServiceInfo[] {
 		const output = service.output.read();
-		return {
-			id: service.id,
+		const parts = splitByRoot(service.processes);
+		const info = (id: string, processes: ProcessRow[], ports: number[], url: string | undefined, stopping: boolean): ServiceInfo => ({
+			id,
 			command: service.command,
 			cwd: service.cwd,
 			startedAt: service.startedAt,
-			processes: service.processes.map((row) => ({ pid: row.pid, name: row.name })),
-			ports: service.ports,
-			url: serviceUrl(output, service.ports),
+			processes: processes.map((row) => ({ pid: row.pid, name: row.name })),
+			ports,
+			url,
 			output,
-			stopping: service.stopping,
-		};
+			stopping,
+		});
+		if (parts.length <= 1) return [info(service.id, service.processes, service.ports, serviceUrl(output, service.ports), service.stopping)];
+		return parts.map((part) => {
+			const root = rootsOf(part)[0]!;
+			const ports = [...new Set(part.flatMap((row) => service.listening.get(row.pid) ?? []))].sort((a, b) => a - b);
+			// An address printed without a port of this program's could be another program's.
+			const url = ports.length ? serviceUrl(output, ports) : undefined;
+			return info(`${service.id}:${root.pid}`, part, ports, url, service.stopping || service.stoppingRoots.has(root.pid));
+		});
 	}
 
 	private async save(): Promise<void> {
 		// Not the shell's process id: after a restart another process may have it.
-		const saved: Saved[] = [...this.services.values()].map(({ id, sessionPath, command, cwd, startedAt }) => ({ id, sessionPath, command, cwd, startedAt }));
+		const saved: Saved[] = [...this.services.values()].map(({ id, sessionPath, command, cwd, startedAt, detached }) => ({ id, sessionPath, command, cwd, startedAt, detached }));
 		if (!saved.length && !existsSync(this.file)) return;
 		const tmp = `${this.file}.tmp`;
 		await writeFile(tmp, JSON.stringify(saved, null, 2), { mode: 0o600 });

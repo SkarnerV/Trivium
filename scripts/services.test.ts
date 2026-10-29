@@ -19,6 +19,8 @@ import {
 	rootsOf,
 	serviceUrl,
 	ServiceTracker,
+	splitByRoot,
+	startsDetached,
 } from "../src/main/services.ts";
 import type { ServiceInfo } from "../src/shared/protocol.ts";
 
@@ -51,6 +53,43 @@ test("a child older than the service is a reused process id, not its child", () 
 test("on macOS and Linux the shell's process group counts even without the id", () => {
 	const rows = [row(50, 1, { pgid: 40 }), row(51, 50, { pgid: 40 }), row(60, 1, { pgid: 60 })];
 	assert.deepEqual(groupProcesses(rows, [{ id: "a", startedAt: 0, shellPid: 40 }]).get("a")?.map((r) => r.pid), [50, 51]);
+});
+
+test("a detached command's programs count once their launcher has exited", () => {
+	const command = 'powershell.exe -Command \'Start-Process -FilePath "uv" -ArgumentList "run","app"; Start-Process -FilePath "npm.cmd" -ArgumentList "run","dev"\'';
+	const rows = [
+		row(1, 0),
+		// Started by the command's PowerShell, which has exited.
+		row(10, 99, { name: "uv", created: 5100 }),
+		row(11, 10, { name: "python", created: 5200 }),
+		row(20, 99, { name: "cmd", created: 5150 }),
+		row(21, 20, { name: "node", created: 5300 }),
+		// An orphan the command does not name, one from before it, and a named one whose parent lives.
+		row(30, 98, { name: "updater", created: 5100 }),
+		row(40, 97, { name: "uv", created: 1000 }),
+		row(50, 1, { name: "uv", created: 5100 }),
+	];
+	const groups = groupProcesses(rows, [{ id: "a", startedAt: 5000, detached: { command, endedAt: 6000 } }]);
+	assert.deepEqual(groups.get("a")?.map((r) => r.pid), [10, 11, 20, 21]);
+	// Without the detached launch, the same processes are not the command's.
+	assert.equal(groupProcesses(rows, [{ id: "a", startedAt: 5000 }]).has("a"), false);
+});
+
+test("Start-Process and cmd's start launch detached; npm start does not", () => {
+	assert.equal(startsDetached('powershell -Command "Start-Process node server.js"'), true);
+	assert.equal(startsDetached("cmd /c start /b node server.js"), true);
+	assert.equal(startsDetached("cd app && start node server.js"), true);
+	assert.equal(startsDetached("npm run dev"), false);
+	assert.equal(startsDetached("npm start -- --port 3000"), false);
+});
+
+test("a command's processes split into one program per root, each with everything under it", () => {
+	const parts = splitByRoot([row(10, 1), row(11, 10), row(12, 11), row(20, 2), row(21, 20)]);
+	assert.deepEqual(parts.map((part) => part.map((r) => r.pid)), [
+		[10, 11, 12],
+		[20, 21],
+	]);
+	assert.deepEqual(splitByRoot([]), []);
 });
 
 test("the roots are the processes whose parent is not in the group", () => {
@@ -223,6 +262,54 @@ test("a command that leaves a process running becomes a service until it is stop
 		assert.deepEqual(probe.killed[0], [500, 501]);
 		assert.equal(tracker.count(), 0);
 		assert.deepEqual(emitted.at(-1), {});
+	} finally {
+		tracker.dispose();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("a command that leaves two programs running lists two services, each stopped on its own", { skip: !hasShell() && "no bash" }, async () => {
+	const dir = mkdtempSync(join(tmpdir(), "trivium-services-"));
+	const probe = fakeProbe();
+	const tracker = new ServiceTracker({ file: join(dir, "services.json"), emit: () => {}, probe, pollMs: 60_000 });
+	try {
+		let output = "";
+		let id = "";
+		await tracker.bashOperations(() => "s").exec(`echo "id=$${MARKER}"; echo "Local: http://localhost:5173/"`, dir, {
+			onData: (data) => {
+				output += data;
+				id = /id=(\w+)/.exec(output)?.[1] ?? "";
+				if (id && !probe.rows.length) {
+					probe.rows = [
+						row(500, 1, { marker: id, name: "node" }),
+						row(501, 500, { name: "esbuild" }),
+						row(600, 1, { marker: id, name: "uv" }),
+						row(601, 600, { name: "python" }),
+					];
+					probe.ports.set(500, [5173]);
+					probe.ports.set(601, [8000]);
+				}
+			},
+		});
+		await tracker.refresh();
+		const services = tracker.list()["s"] ?? [];
+		assert.deepEqual(
+			services.map((service) => [service.id, service.processes.map((p) => p.pid), service.ports, service.url]),
+			[
+				[`${id}:500`, [500, 501], [5173], "http://localhost:5173/"],
+				[`${id}:600`, [600, 601], [8000], "http://localhost:8000"],
+			],
+		);
+		assert.equal(tracker.count(), 2);
+
+		await tracker.stop(`${id}:600`);
+		assert.deepEqual(probe.killed[0], [600, 601]);
+		// The frontend keeps running, now the command's only program.
+		assert.deepEqual(
+			(tracker.list()["s"] ?? []).map((service) => [service.id, service.ports]),
+			[[id, [5173]]],
+		);
+		assert.equal(tracker.count(), 1);
 	} finally {
 		tracker.dispose();
 		rmSync(dir, { recursive: true, force: true });

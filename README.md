@@ -79,7 +79,7 @@ A project with its own `.pi` folder (settings, extensions, skills, prompts, MCP 
 
 ### Commands and MCP
 
-- **Type `/` for commands.** The list shows extension commands, prompt templates and skills, plus Trivium's `/compact [instructions]` and `/name <title>`. Commands that offer suggestions, such as `/mcp login <server>`, complete their arguments too.
+- **Type `/` for commands.** The list shows extension commands, prompt templates and skills, plus Trivium's `/compact [instructions]` and `/name <title>`. Commands that offer suggestions, such as `/mcp login <server>`, complete their arguments too. After a compaction, by `/compact` or automatic, the earlier messages stay on screen above a divider; the agent works from the summary.
 - **MCP servers work like in the CLI.** Trivium loads pi's built-in MCP, codemode and tool search extensions, so servers from `~/.pi/agent/mcp.json` and a trusted project's `.pi/mcp.json` connect when a session starts. `/mcp` shows their status.
 - **A Connectors page to manage them.** **Settings → Connectors** adds servers from a command, a URL or `mcpServers` JSON pasted from Claude, Cursor or VS Code, and edits, removes or switches them off. Each shows whether it is connected, needs sign-in (with a **Sign in** button) or is failing, and lists its tools. Choose how tools reach the agent, for the whole server or per tool: code mode, on search, always or off. Changes go to pi's global `mcp.json`, so the pi CLI sees them too.
 

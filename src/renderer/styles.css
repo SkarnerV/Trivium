@@ -1015,6 +1015,22 @@ body.resizing * {
 	gap: 22px;
 }
 
+/* Under the last run a compaction summarized: everything above stays readable, but the agent sees only the summary. */
+.compacted {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 12px;
+	color: var(--ink-4);
+}
+
+.compacted::before,
+.compacted::after {
+	content: "";
+	flex: 1;
+	border-top: 1px solid var(--line);
+}
+
 .prompt {
 	position: relative;
 	display: flex;

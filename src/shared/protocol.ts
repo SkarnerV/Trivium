@@ -150,6 +150,8 @@ export interface Run {
 	limit?: LimitNotice;
 	/** The run's last finished reply: when its request was sent, how long it took, and the output tokens it wrote. */
 	reply?: ReplyTiming;
+	/** The conversation was compacted after this run: it stays on screen, but the agent sees only a summary of it and what came before. */
+	compacted?: boolean;
 }
 
 export interface ReplyTiming {

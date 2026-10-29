@@ -898,6 +898,8 @@ export default {
 	"Wait for the run to finish, or stop it, before compacting.": "圧縮する前に、実行が終わるのを待つか停止してください。",
 	"Compacting the conversation…": "会話を圧縮しています…",
 	"Conversation compacted": "会話を圧縮しました",
+	"Conversation compacted above": "ここより上の会話は圧縮されました",
+	"The agent sees a summary of the conversation above from here on.": "ここから先、エージェントには上の会話の要約だけが渡されます。",
 	"Give the session a name: /name <title>": "セッションに名前を付けてください：/name <タイトル>",
 	"Unknown model {model}": "不明なモデル {model}",
 	"Stop the run before reverting its changes.": "変更を元に戻す前に実行を停止してください。",

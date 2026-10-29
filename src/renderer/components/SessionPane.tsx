@@ -253,6 +253,11 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 				)}
 				{run.error && run.status !== "aborted" && (run.limit ? <LimitCard limit={run.limit} /> : <div className="run-error">{run.error}</div>)}
 			</div>
+			{run.compacted && (
+				<div className="compacted" role="separator" title={t("The agent sees a summary of the conversation above from here on.")}>
+					<span>{t("Conversation compacted above")}</span>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -338,7 +343,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 	const lastRun = view.runs.at(-1);
 	// Only the Code panel has a Preview view so far.
 	const preview = useMemo(() => (app === "code" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
-	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
+	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	return (
 		<main className={`pane${summary ? " has-summary" : ""}`}>
 			<header className="pane-head drag">

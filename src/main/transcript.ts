@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { type AgentSessionEvent, type SessionEntry, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
 import type { ReplyTiming, Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
 import { describeSubagent, launchesSubagents, noticeOf, subagentOf } from "./subagents.ts";
@@ -47,6 +47,8 @@ interface RunState {
 	/** The provider that reported the error, which tells apart errors that read alike. */
 	errorProvider?: string;
 	reply?: ReplyTiming;
+	/** The conversation was compacted after this run. */
+	compacted?: boolean;
 }
 
 type ContentPart = { type: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
@@ -58,6 +60,14 @@ function textOf(content: unknown): string {
 		.filter((part): part is { type: "text"; text: string } => part?.type === "text" && typeof part.text === "string")
 		.map((part) => part.text)
 		.join("");
+}
+
+/**
+ * The messages on a session's branch, including those a compaction summarized, which the agent no longer
+ * sees. Each compaction stays in place as its summary message, which the transcript shows as a divider.
+ */
+export function branchMessages(entries: SessionEntry[]): AgentMessage[] {
+	return entries.flatMap((entry) => sessionEntryToContextMessages(entry));
 }
 
 /** Makes a small preview of an image sent with a prompt. The host supplies it, since resizing needs Electron. */
@@ -340,6 +350,12 @@ export class RunTracker {
 				tool.tail = undefined;
 				return true;
 			}
+			case "compaction_end": {
+				const run = this.runs.at(-1);
+				if (!run || !event.result) return false;
+				run.compacted = true;
+				return true;
+			}
 			case "agent_settled": {
 				const run = this.runs.at(-1);
 				if (!run) return false;
@@ -367,6 +383,12 @@ export class RunTracker {
 	private applyMessage(message: AgentMessage, live: boolean): void {
 		const timestamp = timestampOf(message);
 		const current = this.runs.at(-1);
+		if (message.role === "compactionSummary") {
+			if (current) current.compacted = true;
+			return;
+		}
+		// A compaction's saved system prompt, which isn't part of any run.
+		if (message.role === "system") return;
 		// A background subagent's result starts a run of its own, as a user message would.
 		const notice = noticeOf(message);
 		if (!live && current && timestamp && message.role !== "user" && !notice) current.endedAt = timestamp;
@@ -517,6 +539,7 @@ export class RunTracker {
 			error: run.error,
 			limit: run.error ? explainLimit(run.error, run.errorProvider) : undefined,
 			reply: run.reply,
+			compacted: run.compacted,
 		};
 	}
 }

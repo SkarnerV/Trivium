@@ -55,6 +55,39 @@ test("an export lists each prompt, the tools called and the answers, without thi
 	);
 });
 
+test("an export keeps the conversation from before a compaction, with a rule where it happened", () => {
+	const reply = (text: string) => ({ role: "assistant", content: [{ type: "text", text }], timestamp: at });
+	const messages = [
+		{ role: "user", content: "First", timestamp: at },
+		reply("One"),
+		{ role: "compactionSummary", summary: "They asked once.", tokensBefore: 1000, timestamp: at },
+		reply("Still going"),
+	] as unknown as AgentMessage[];
+	const markdown = sessionMarkdown({ title: "Long", id: "01a1", cwd: "C:\\shop", messages }, new Date(at));
+	assert.equal(
+		markdown.split("\n").slice(4).join("\n"),
+		[
+			"## You · 2026-10-26 15:22",
+			"",
+			"First",
+			"",
+			"## Assistant · 2026-10-26 15:22",
+			"",
+			"One",
+			"",
+			"---",
+			"",
+			"*Conversation compacted above · 2026-10-26 15:22*",
+			"",
+			"## Assistant · 2026-10-26 15:22",
+			"",
+			"Still going",
+			"",
+		].join("\n"),
+	);
+	assert.ok(!markdown.includes("They asked once."));
+});
+
 test("export file names drop characters file systems refuse", () => {
 	assert.equal(exportFileName('Fix "total": a/b?'), "Fix total a b");
 	assert.equal(exportFileName("  "), "Session");

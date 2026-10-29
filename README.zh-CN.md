@@ -76,7 +76,7 @@
 
 ### 命令与 MCP
 
-- **输入 `/` 使用命令。** 列表中有扩展命令、提示模板和技能，以及 Trivium 的 `/compact [instructions]` 和 `/name <title>`。提供建议的命令（如 `/mcp login <server>`）也会补全参数。
+- **输入 `/` 使用命令。** 列表中有扩展命令、提示模板和技能，以及 Trivium 的 `/compact [instructions]` 和 `/name <title>`。提供建议的命令（如 `/mcp login <server>`）也会补全参数。压缩之后（无论是 `/compact` 还是自动压缩），之前的消息仍显示在分隔线上方；智能体此后依据摘要工作。
 - **MCP 服务器的用法与 CLI 相同。** Trivium 会加载 pi 内置的 MCP、codemode 和工具搜索扩展，因此会话启动时会连接 `~/.pi/agent/mcp.json` 以及已信任项目的 `.pi/mcp.json` 中的服务器。`/mcp` 可查看它们的状态。
 - **用连接器页面管理它们。** **设置 → 连接器** 可以通过命令、URL 或从 Claude、Cursor、VS Code 粘贴的 `mcpServers` JSON 添加服务器，也可以编辑、移除或关闭它们。每个服务器都会显示是否已连接、是否需要登录（带**登录**按钮）或是否出错，并列出其工具。你可以为整个服务器或单个工具选择工具提供给 Agent 的方式：代码模式、按需搜索、始终或关闭。更改会写入 pi 的全局 `mcp.json`，pi CLI 也能看到。
 

@@ -60,7 +60,7 @@ import { isInside } from "./reader.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
 import type { SettingsStore } from "./settings.ts";
-import { attachmentsOf, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
+import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
 	path: string;
@@ -384,7 +384,7 @@ export class SessionHost {
 		if (!text.trim() && !attached) throw new Error(t("Write a message to send."));
 		const result = await live.session.navigateTree(entry.id);
 		if (result.cancelled) return;
-		live.tracker = new RunTracker(live.session.messages, this.thumbnail);
+		live.tracker = new RunTracker(branchMessages(live.session.sessionManager.getBranch()), this.thumbnail);
 		// The shorter transcript must reach the window before the new run's events do.
 		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
 		this.scheduleList();
@@ -424,7 +424,7 @@ export class SessionHost {
 	/** The user message a run began with, on the session's current branch. */
 	private userEntry(live: Live, index: number): UserEntry {
 		const wanted = live.tracker.userMessage(index);
-		// The transcript can begin after a compaction, so count from the end of the branch.
+		// Counted from the end of the branch, which the transcript holds in full.
 		const entries = live.session.sessionManager
 			.getBranch()
 			.filter((entry): entry is UserEntry => entry.type === "message" && entry.message.role === "user");
@@ -639,11 +639,11 @@ export class SessionHost {
 		}, GIT_MS);
 	}
 
-	/** The conversation on a session's current branch, read from its file, for export. */
+	/** The conversation on a session's current branch, read from its file, for export. Compacted messages are kept. */
 	exportInfo(path: string): ExportInfo {
 		const manager = SessionManager.open(path);
 		const title = this.summaries.find((summary) => summary.path === path)?.title ?? manager.getSessionName() ?? "Session";
-		return { title, id: manager.getSessionId(), cwd: manager.getCwd(), messages: manager.buildSessionContext().messages };
+		return { title, id: manager.getSessionId(), cwd: manager.getCwd(), messages: branchMessages(manager.getBranch()) };
 	}
 
 	/**
@@ -966,7 +966,8 @@ export class SessionHost {
 			app,
 			cwd,
 			session,
-			tracker: new RunTracker(session.messages, this.thumbnail),
+			// The whole branch rather than session.messages, so messages from before a compaction still show.
+			tracker: new RunTracker(branchMessages(sessionManager.getBranch()), this.thumbnail),
 			changes,
 			running: false,
 			compacting: false,

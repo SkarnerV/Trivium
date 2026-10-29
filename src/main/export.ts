@@ -26,7 +26,7 @@ type Part = { type?: string; text?: string; name?: string; arguments?: Record<st
 
 /**
  * A session's conversation as Markdown: each prompt, the tools the agent called and what it answered. Thinking
- * and tool output are left out; the session file keeps them.
+ * and tool output are left out; the session file keeps them. A compaction shows as a rule where it happened.
  */
 export function sessionMarkdown(info: ExportInfo, exported = new Date()): string {
 	const lines = [`# ${info.title}`, "", `Session \`${info.id}\` · ${info.cwd} · exported ${stamp(exported)}`];
@@ -38,6 +38,9 @@ export function sessionMarkdown(info: ExportInfo, exported = new Date()): string
 			lines.push("", `## You${time}`, "", prompt.trim());
 			if (attachments?.length) lines.push("", `Attached: ${attachments.map((item) => item.name).join(", ")}`);
 			speaker = "user";
+		} else if (message.role === "compactionSummary") {
+			lines.push("", "---", "", `*Conversation compacted above${time}*`);
+			speaker = undefined;
 		} else if (message.role === "assistant") {
 			const parts = ((Array.isArray(message.content) ? message.content : []) as Part[]).filter(
 				(part) => (part.type === "text" && part.text?.trim()) || part.type === "toolCall",

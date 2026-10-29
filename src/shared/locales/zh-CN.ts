@@ -898,6 +898,8 @@ export default {
 	"Wait for the run to finish, or stop it, before compacting.": "请等待运行结束或将其停止后再压缩。",
 	"Compacting the conversation…": "正在压缩对话…",
 	"Conversation compacted": "对话已压缩",
+	"Conversation compacted above": "以上对话已压缩",
+	"The agent sees a summary of the conversation above from here on.": "从这里开始，智能体只能看到以上对话的摘要。",
 	"Give the session a name: /name <title>": "请为会话命名：/name <标题>",
 	"Unknown model {model}": "未知模型 {model}",
 	"Stop the run before reverting its changes.": "请先停止运行，再还原其更改。",

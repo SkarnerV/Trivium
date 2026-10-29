@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { AttachmentStore } from "../src/main/attachments.ts";
-import { attachmentsOf, messageFiles, RunTracker } from "../src/main/transcript.ts";
+import { attachmentsOf, branchMessages, messageFiles, RunTracker } from "../src/main/transcript.ts";
 
 type Messages = ConstructorParameters<typeof RunTracker>[0];
 type Event = Parameters<RunTracker["apply"]>[0];
@@ -195,6 +199,51 @@ test("each run knows how many later runs began with a user message", () => {
 	assert.equal(tracker.userMessage(0), undefined);
 	assert.deepEqual(tracker.userMessage(1), { prompt: "First", later: 1 });
 	assert.deepEqual(tracker.userMessage(2), { prompt: "Second", later: 0 });
+});
+
+test("history from before a compaction stays, with the compaction marked, after the session is reopened", () => {
+	const dir = mkdtempSync(join(tmpdir(), "trivium-compaction-"));
+	try {
+		const manager = SessionManager.create(dir, dir);
+		const reply = (text: string, timestamp: number) =>
+			({ role: "assistant", content: [{ type: "text", text }], usage: { output: 1 }, timestamp }) as unknown as Parameters<SessionManager["appendMessage"]>[0];
+		manager.appendMessage({ role: "user", content: "First", timestamp: 1 });
+		manager.appendMessage(reply("One", 2));
+		const kept = manager.appendMessage({ role: "user", content: "Second", timestamp: 3 });
+		manager.appendMessage(reply("Two", 4));
+		manager.appendCompaction("They asked twice.", kept, 1000);
+		manager.appendMessage({ role: "user", content: "Third", timestamp: 6 });
+		manager.appendMessage(reply("Three", 7));
+
+		const reopened = SessionManager.open(manager.getSessionFile()!);
+		// The agent's context starts at the summary; the transcript keeps everything.
+		assert.equal(reopened.buildSessionContext().messages.some((message) => message.role === "user" && message.content === "First"), false);
+		const tracker = new RunTracker(branchMessages(reopened.getBranch()));
+		const runs = tracker.all();
+		assert.deepEqual(runs.map((run) => [run.prompt, run.answer, Boolean(run.compacted)]), [
+			["First", "One", false],
+			["Second", "Two", true],
+			["Third", "Three", false],
+		]);
+		// The summary isn't drawn as a reply, and doesn't move the end of the run before it.
+		assert.equal(runs[1]!.endedAt, 4);
+		// Messages from before the compaction can still be edited or forked.
+		assert.deepEqual(tracker.userMessage(0), { prompt: "First", later: 2 });
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("a live compaction marks the run it followed, and a failed one marks nothing", () => {
+	const tracker = new RunTracker([
+		{ role: "user", content: "First", timestamp: 1 },
+		{ role: "assistant", content: [{ type: "text", text: "One" }], timestamp: 2 },
+	] as unknown as Messages);
+	assert.equal(tracker.apply({ type: "compaction_end", reason: "manual", result: undefined, aborted: true, willRetry: false } as Event), false);
+	assert.equal(tracker.all()[0]!.compacted, undefined);
+	const result = { summary: "They asked once.", firstKeptEntryId: "x", tokensBefore: 1000 };
+	assert.equal(tracker.apply({ type: "compaction_end", reason: "threshold", result, aborted: false, willRetry: false } as Event), true);
+	assert.equal(tracker.all()[0]!.compacted, true);
 });
 
 test("an edited message goes out with the files and images the original carried", () => {

@@ -2,6 +2,12 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Compacting a conversation, with `/compact` or automatically, no longer clears it from the screen. Earlier messages stay above a **Conversation compacted above** divider, also after reopening the session or restarting Trivium, and exported Markdown keeps them too; the agent works from the summary from there on.
+
 ## [0.2.5] - 2026-10-28
 
 ### Added

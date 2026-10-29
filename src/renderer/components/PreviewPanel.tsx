@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import type { ReaderFile } from "../../shared/protocol.ts";
 import { fileSize, relativeTime } from "../format.ts";
-import { CloseIcon, CodeIcon, CopyIcon, ExternalIcon, EyeIcon, FileIcon, ShieldIcon, UndoIcon } from "../icons.tsx";
-import { attempt, closePreview, pickPreview, reloadPreview, selectPreview, setPreviewScripts, trivium } from "../store.ts";
+import { CodeIcon, CopyIcon, ExternalIcon, EyeIcon, FileIcon, ShieldIcon, UndoIcon } from "../icons.tsx";
+import { attempt, pickPreview, reloadPreview, setPreviewScripts, trivium } from "../store.ts";
 import type { MenuEntry } from "./ContextMenu.tsx";
 import { parseTable } from "../preview.ts";
 import { Markdown } from "./Markdown.tsx";
@@ -11,24 +11,6 @@ import { t } from "../i18n.tsx";
 /** Pages and Markdown have a rendered view and their source to switch between. */
 export function hasSource(file: ReaderFile): boolean {
 	return (file.kind === "html" || file.kind === "markdown") && file.text !== undefined;
-}
-
-/** The open files, as tabs in the panel's head. */
-export function PreviewTabs({ path, files, active }: { path: string; files: ReaderFile[]; active: string | undefined }) {
-	return (
-		<div className="preview-tabs" role="tablist" aria-label={t("Open files")}>
-			{files.map((file) => (
-				<div key={file.id} className="preview-tab" aria-current={file.id === active} title={file.rel}>
-					<button type="button" role="tab" aria-selected={file.id === active} className="preview-tab-name" onClick={() => selectPreview(path, file.id)}>
-						{file.name}
-					</button>
-					<button type="button" className="preview-tab-close" aria-label={t("Close {name}", { name: file.name })} title={t("Close")} onClick={() => closePreview(path, file.id)}>
-						<CloseIcon size={10} width={2.4} />
-					</button>
-				</div>
-			))}
-		</div>
-	);
 }
 
 /** What the "More" button offers for the file showing. */

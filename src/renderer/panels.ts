@@ -24,11 +24,15 @@ export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undef
 export type CodeView = "session" | "git" | "preview" | "services";
 
 /**
- * The Code panel's view: the user's pick (Git only in a repository), else this session's edits when it has
- * any, else the repository's changes.
+ * The views open as tabs in the Code panel, in the order they were opened. Before the user opens any, it is
+ * this session's edits when it has any, else the repository's changes. Git closes when there is no repository.
  */
-export function codeTab(view: SessionView, git: GitStatus | null | undefined, picked: CodeView | undefined): CodeView {
-	if (picked === "preview" || picked === "services" || (picked === "git" && git)) return picked;
-	if (picked === "session" || !git) return "session";
-	return view.changes.length ? "session" : "git";
+export function codeViews(view: SessionView, git: GitStatus | null | undefined, open: CodeView[] | undefined): CodeView[] {
+	const views = (open ?? [git && !view.changes.length ? "git" : "session"]).filter((name) => name !== "git" || git);
+	return views.length ? views : ["session"];
+}
+
+/** The tab showing: the one the user picked while it is open, else the one opened last. */
+export function codeTab(views: CodeView[], picked: CodeView | undefined): CodeView {
+	return picked && views.includes(picked) ? picked : views.at(-1)!;
 }

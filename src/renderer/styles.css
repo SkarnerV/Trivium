@@ -904,6 +904,26 @@ body.resizing * {
 	overflow-y: auto;
 }
 
+/* The thread, and the summary cards beside it when they show; one scrollbar, at the pane's right edge. */
+.scroll-row {
+	display: flex;
+	align-items: flex-start;
+}
+
+.scroll-row > .thread {
+	flex: 1;
+	min-width: 0;
+}
+
+/* The message box and the latest-button stay under the thread, clear of the cards. */
+.has-summary .dock {
+	padding-right: 296px;
+}
+
+.has-summary .to-latest {
+	left: calc(50% - 136px);
+}
+
 /* Shown once the user scrolls up from the end of the thread; takes them back and follows again. */
 .to-latest {
 	position: absolute;
@@ -1722,32 +1742,101 @@ body.resizing * {
 	flex: none;
 }
 
-/* The branch beside the panel toggle, and the Code panel's Git tab. */
+/* The summary cards beside the conversation, under the header's button; each opens its view in the Code panel. */
 
-.branch-toggle {
-	min-width: 0;
-	max-width: 240px;
-}
-
-.branch-toggle .mono {
-	font-size: 12px;
-}
-
-.branch-count {
+.summary {
+	position: sticky;
+	top: 0;
 	flex: none;
-	min-width: 18px;
-	padding: 0 5px;
-	border-radius: 999px;
-	background: var(--tab);
-	color: var(--ink-3);
-	font-size: 11px;
-	line-height: 18px;
-	text-align: center;
+	width: 272px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 2px 20px 16px 0;
 }
 
-.branch-toggle[aria-expanded="true"] {
-	background: var(--tab);
+.summary-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px 14px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: 0 2px 8px rgba(19, 20, 43, 0.06);
+	color: var(--ink);
+	text-align: left;
+	transition:
+		border-color 120ms ease,
+		box-shadow 120ms ease;
+}
+
+.summary-card:hover {
+	border-color: var(--edge);
+	box-shadow: 0 4px 14px rgba(19, 20, 43, 0.1);
+}
+
+.summary-card[aria-current="true"] {
+	border-color: var(--accent);
+}
+
+.summary-card-title {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.summary-card-title svg {
+	color: var(--ink-4);
+}
+
+.summary-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	font-size: 12.5px;
 	color: var(--ink-2);
+}
+
+.summary-row svg {
+	flex: none;
+	color: var(--ink-3);
+}
+
+.summary-row.is-push svg {
+	color: var(--accent-text);
+}
+
+.summary-row.is-pull svg {
+	color: #8a4f06;
+}
+
+.summary-row.is-done svg {
+	color: var(--add);
+}
+
+.summary-row-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.summary-row-value {
+	flex: none;
+	max-width: 50%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	color: var(--ink-3);
+}
+
+.views-toggle {
+	width: 30px;
+	justify-content: center;
+	padding: 0;
 }
 
 /* Services: processes a session's commands left running. A green dot in the header, the sidebar and the panel. */
@@ -1911,24 +2000,6 @@ body.resizing * {
 .session-row .service-dot {
 	width: 6px;
 	height: 6px;
-}
-
-/* Commits to push (blue) or to pull (amber); the summary says which in words. */
-.branch-dot {
-	flex: none;
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: var(--accent);
-}
-
-.branch-dot.is-pull {
-	background: #b86a0a;
-}
-
-.branch-toggle[aria-expanded="true"] .branch-count {
-	background: #fff;
-	color: var(--accent-text);
 }
 
 .seg-count {
@@ -6376,14 +6447,17 @@ body.resizing * {
 	background: rgba(255, 255, 255, 0.2);
 }
 
-/* The Preview view: open files as tabs, and the file itself edge to edge. */
+/* The Code panel's head: the views open in it as tabs, as a browser holds pages; Preview shows its file edge to edge. */
 
-.panel-head:has(.preview-tabs) {
-	margin-bottom: 0;
+.panel-head:has(.panel-tabs) {
 	padding-left: 6px;
 }
 
-.preview-tabs {
+.panel-head.is-flush {
+	margin-bottom: 0;
+}
+
+.panel-tabs {
 	flex: 1;
 	min-width: 0;
 	align-self: stretch;
@@ -6392,7 +6466,7 @@ body.resizing * {
 	scrollbar-width: none;
 }
 
-.preview-tab {
+.panel-tab {
 	position: relative;
 	flex: none;
 	display: flex;
@@ -6403,11 +6477,11 @@ body.resizing * {
 	color: var(--ink-3);
 }
 
-.preview-tab[aria-current="true"] {
+.panel-tab[aria-current="true"] {
 	color: var(--ink);
 }
 
-.preview-tab[aria-current="true"]::after {
+.panel-tab[aria-current="true"]::after {
 	content: "";
 	position: absolute;
 	inset: auto 8px -1px 8px;
@@ -6416,8 +6490,11 @@ body.resizing * {
 	background: var(--accent);
 }
 
-.preview-tab-name {
+.panel-tab-name {
 	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	padding: 6px 0;
 	border: 0;
 	background: none;
@@ -6429,7 +6506,7 @@ body.resizing * {
 	text-overflow: ellipsis;
 }
 
-.preview-tab-close {
+.panel-tab-close {
 	width: 18px;
 	height: 18px;
 	flex: none;
@@ -6442,13 +6519,13 @@ body.resizing * {
 	opacity: 0;
 }
 
-.preview-tab:hover .preview-tab-close,
-.preview-tab[aria-current="true"] .preview-tab-close,
-.preview-tab-close:focus-visible {
+.panel-tab:hover .panel-tab-close,
+.panel-tab[aria-current="true"] .panel-tab-close,
+.panel-tab-close:focus-visible {
 	opacity: 1;
 }
 
-.preview-tab-close:hover {
+.panel-tab-close:hover {
 	background: var(--tab);
 	color: var(--ink);
 }
@@ -6667,195 +6744,7 @@ body.resizing * {
 	color: var(--accent-text);
 }
 
-/* The branch summary, under the header's branch button. */
-
-.branch-summary {
-	position: fixed;
-	z-index: 80;
-	width: 340px;
-	display: flex;
-	flex-direction: column;
-	border-radius: 14px;
-	background: #fff;
-	box-shadow:
-		0 0 0 1px var(--edge),
-		0 12px 32px rgba(19, 20, 43, 0.16);
-	outline: none;
-	overflow: hidden;
-	animation: dd-in 0.12s ease-out;
-	font-size: 13px;
-}
-
-.branch-summary section {
-	padding: 12px 16px;
-}
-
-.branch-summary section + section {
-	border-top: 1px solid var(--line);
-}
-
-.bs-name {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	color: var(--ink);
-}
-
-.bs-name svg {
-	flex: none;
-	color: var(--ink-4);
-}
-
-.bs-name .mono {
-	min-width: 0;
-	font-size: 13.5px;
-	font-weight: 500;
-}
-
-.bs-name .icon-btn {
-	width: 26px;
-	height: 26px;
-	margin-left: auto;
-}
-
-.bs-sub {
-	margin: 2px 0 0 23px;
-	color: var(--ink-3);
-	font-size: 12px;
-}
-
-.bs-sub .mono,
-.bs-line .mono {
-	font-size: 0.95em;
-}
-
-.branch-summary h3 {
-	margin: 0 0 6px;
-	color: var(--ink-4);
-	font-size: 11px;
-	font-weight: 500;
-}
-
-.bs-line {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	margin: 0;
-	padding: 2px 0;
-	color: var(--ink-2);
-	line-height: 1.45;
-}
-
-.bs-line svg {
-	flex: none;
-	margin-top: 1px;
-	color: var(--ink-4);
-}
-
-.bs-line strong {
-	color: var(--ink);
-	font-weight: 600;
-}
-
-.bs-line.is-push svg {
-	color: var(--accent);
-}
-
-.bs-line.is-pull svg {
-	color: #b86a0a;
-}
-
-.bs-line.is-done svg {
-	color: var(--add);
-}
-
-.bs-line + .bs-line,
-.bs-commits + .bs-line {
-	margin-top: 4px;
-}
-
-.bs-commits {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	margin: 4px 0 0 7px;
-	padding: 0 0 0 16px;
-	border-left: 2px solid var(--line);
-	list-style: none;
-	font-size: 12px;
-}
-
-.bs-commits li {
-	display: flex;
-	gap: 8px;
-	min-width: 0;
-	color: var(--ink-2);
-}
-
-.bs-commits .mono {
-	flex: none;
-	color: var(--muted);
-	font-size: 11.5px;
-}
-
-.bs-commits .bs-more {
-	color: var(--ink-4);
-}
-
-.bs-note {
-	margin: 4px 0 0 23px;
-	color: var(--ink-3);
-	font-size: 12px;
-}
-
-.bs-tiles {
-	display: grid;
-	grid-auto-columns: minmax(0, 1fr);
-	grid-auto-flow: column;
-	gap: 8px;
-}
-
-.bs-tile {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	padding: 8px 10px;
-	border-radius: 10px;
-	background: var(--tray);
-}
-
-.bs-tile strong {
-	font-size: 18px;
-	font-weight: 500;
-	line-height: 1.3;
-}
-
-.bs-tile span {
-	color: var(--ink-3);
-	font-size: 11.5px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.bs-tile.is-conflicted strong {
-	color: var(--del);
-}
-
-.bs-actions {
-	display: flex;
-	gap: 6px;
-	padding: 10px 12px;
-	border-top: 1px solid var(--line);
-	background: var(--tray);
-}
-
-.bs-actions .btn {
-	min-height: 32px;
-	padding: 0 12px;
-	font-size: 12.5px;
-}
+/* The Code panel's Git tab: commits waiting each way. */
 
 .git-sync {
 	flex: none;

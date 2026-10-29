@@ -1,22 +1,20 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AppId, GitStatus, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
-import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, trivium, useStore } from "../store.ts";
+import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
-import { BranchSummary, branchTitle } from "./BranchSummary.tsx";
-import { panelFor, panelKind, panelOpen } from "../panels.ts";
-import { ChangeCount } from "./ChangesPanel.tsx";
-import { branchLabel, gitFileCount } from "./GitPanel.tsx";
+import { panelKind, panelOpen } from "../panels.ts";
 import { Composer } from "./Composer.tsx";
 import { serviceCount, useServices } from "./ServicesPanel.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
 import { SubagentNoticeLine } from "./Subagents.tsx";
+import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
 function fileKind(name: string, kind: "image" | "file"): string {
@@ -304,39 +302,6 @@ function useGitStatus(view: SessionView, app: AppId) {
 		window.addEventListener("focus", onFocus);
 		return () => window.removeEventListener("focus", onFocus);
 	}, [view.path, enabled]);
-	return useStore((s) => (enabled ? s.git[view.path] : undefined));
-}
-
-/**
- * The branch in the header: its name, how many files changed, and a dot when there are commits to push
- * (blue) or to pull (amber). It opens the branch summary, which says the rest in words.
- */
-function BranchButton({ view, git }: { view: SessionView; git: GitStatus }) {
-	const [open, setOpen] = useState(false);
-	const ref = useRef<HTMLButtonElement>(null);
-	const count = gitFileCount(git);
-	const dot = git.behind > 0 ? "pull" : git.ahead > 0 ? "push" : undefined;
-	const close = useCallback(() => setOpen(false), []);
-	return (
-		<>
-			<button
-				ref={ref}
-				type="button"
-				className="changes-toggle branch-toggle"
-				aria-haspopup="dialog"
-				aria-expanded={open}
-				title={branchTitle(git, count)}
-				onClick={() => setOpen(!open)}
-			>
-				<BranchIcon size={14} />
-				<span className="mono ellipsis">{branchLabel(git)}</span>
-				{count > 0 && <span className="branch-count">{count}</span>}
-				{dot && <span className={`branch-dot is-${dot}`} aria-hidden="true" />}
-				<Chevron open={open} down size={11} />
-			</button>
-			{open && ref.current && <BranchSummary view={view} git={git} anchor={ref.current} onClose={close} />}
-		</>
-	);
 }
 
 /** Says the session has services running, and opens the panel on them. */
@@ -354,7 +319,7 @@ function ServicesButton({ view }: { view: SessionView }) {
 				services: serviceCount(services.length),
 				ports: ports.join(", "),
 			})}
-			onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: false }, panelTab: { ...s.panelTab, [view.path]: "services" } }))}
+			onClick={() => showPanelView(view.path, "services")}
 		>
 			<span className="service-dot" aria-hidden="true" />
 			<ServerIcon size={14} />
@@ -367,14 +332,15 @@ export function SessionPane({ view }: { view: SessionView }) {
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
-	const git = useGitStatus(view, app);
+	const summary = useStore((s) => s.app === "code" && Boolean(s.summaryShown[view.path]));
+	useGitStatus(view, app);
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
 	// Only the Code panel has a Preview view so far.
 	const preview = useMemo(() => (app === "code" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${dialogs.length}`);
 	return (
-		<main className="pane">
+		<main className={`pane${summary ? " has-summary" : ""}`}>
 			<header className="pane-head drag">
 				<div className="crumb">
 					<span className="project-name" title={view.cwd}>
@@ -384,36 +350,36 @@ export function SessionPane({ view }: { view: SessionView }) {
 					<h1 className="ellipsis">{view.title}</h1>
 				</div>
 				<ServicesButton view={view} />
-				{git && <BranchButton view={view} git={git} />}
-				<button
-					type="button"
-					className="changes-toggle"
-					aria-pressed={open}
-					title={t(open ? "Hide panel" : "Show panel")}
-					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
-				>
-					<PanelRightIcon size={15} />
-					{panelFor(app, view) === "changes" ? (
-						<>
-							<span>{t(view.changes.length === 1 ? "1 file" : "{n} files", { n: view.changes.length })}</span>
-							<ChangeCount changes={view.changes} />
-						</>
-					) : (
+				{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
+				{app === "code" ? (
+					<SummaryButton path={view.path} />
+				) : (
+					<button
+						type="button"
+						className="changes-toggle"
+						aria-pressed={open}
+						title={t(open ? "Hide panel" : "Show panel")}
+						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
+					>
+						<PanelRightIcon size={15} />
 						<span>{t({ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)])}</span>
-					)}
-				</button>
+					</button>
+				)}
 			</header>
 			<div className="thread-frame">
 				<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
-					<div className="thread">
-						<PreviewOpener.Provider value={preview}>
-							{view.runs.map((run, index) => (
-								<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+					<div className="scroll-row">
+						<div className="thread">
+							<PreviewOpener.Provider value={preview}>
+								{view.runs.map((run, index) => (
+									<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+								))}
+							</PreviewOpener.Provider>
+							{dialogs.map((request) => (
+								<AskCard key={request.id} request={request} />
 							))}
-						</PreviewOpener.Provider>
-						{dialogs.map((request) => (
-							<AskCard key={request.id} request={request} />
-						))}
+						</div>
+						{summary && <SummaryCards view={view} />}
 					</div>
 				</div>
 				{scroll.away && (

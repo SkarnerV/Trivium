@@ -20,7 +20,7 @@ import type {
 	UpdateStatus,
 } from "../shared/protocol.ts";
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
-import type { CodeView } from "./panels.ts";
+import { type CodeView, codeTab, codeViews } from "./panels.ts";
 import { transition } from "./transition.ts";
 
 declare global {
@@ -53,8 +53,12 @@ export interface State {
 	panelWidth?: number;
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
-	/** The Code panel's view the user picked for each session; unset shows this session's edits when it has any. */
+	/** The views open as tabs in each session's Code panel, oldest first; unset opens the one it has most to show in. */
+	panelTabs: Record<string, CodeView[]>;
+	/** The Code panel tab the user picked for each session; unset shows the one opened last. */
 	panelTab: Record<string, CodeView>;
+	/** Sessions showing the summary cards beside the conversation. */
+	summaryShown: Record<string, boolean>;
 	/** The files open in each session's Preview panel, oldest first, and the one showing. */
 	previews: Record<string, { files: ReaderFile[]; active?: string }>;
 	/** The repository each Code session works in, by session path; null when it is in none. */
@@ -121,7 +125,9 @@ let state: State = {
 	models: [],
 	peek: false,
 	changesHidden: {},
+	panelTabs: {},
 	panelTab: {},
+	summaryShown: {},
 	previews: {},
 	git: {},
 	services: {},
@@ -342,20 +348,52 @@ function showPreview(path: string, opened: ReaderFile): void {
 		next = next.slice(1);
 	}
 	for (const file of closing) if (file.kind !== "web") void trivium.closeReader(file.id).catch(() => {});
-	transition("tab", () =>
-		setState((s) => ({
-			previews: { ...s.previews, [path]: { files: next, active: opened.id } },
-			panelTab: { ...s.panelTab, [path]: "preview" },
+	transition("tab", () => {
+		setState((s) => ({ previews: { ...s.previews, [path]: { files: next, active: opened.id } } }));
+		showPanelView(path, "preview");
+	});
+}
+
+function openViews(s: State, path: string): CodeView[] {
+	const view = s.views[path];
+	return view ? codeViews(view, s.git[path], s.panelTabs[path]) : (s.panelTabs[path] ?? []);
+}
+
+/** Opens a view as a tab in a session's Code panel, or goes to its tab when it is open already, and shows the panel. */
+export function showPanelView(path: string, name: CodeView): void {
+	setState((s) => {
+		const open = openViews(s, path);
+		return {
+			panelTabs: { ...s.panelTabs, [path]: open.includes(name) ? open : [...open, name] },
+			panelTab: { ...s.panelTab, [path]: name },
 			changesHidden: { ...s.changesHidden, [path]: false },
-		})),
-	);
+		};
+	});
+}
+
+/** Closes a view's tab; the one beside it shows next. Closing the last tab hides the panel. */
+export function closePanelView(path: string, name: CodeView): void {
+	setState((s) => {
+		const open = openViews(s, path);
+		const index = open.indexOf(name);
+		const next = open.filter((other) => other !== name);
+		if (!next.length) {
+			const { [path]: _, ...rest } = s.panelTabs;
+			return { panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
+		}
+		const showing = codeTab(open, s.panelTab[path]);
+		return {
+			panelTabs: { ...s.panelTabs, [path]: next },
+			panelTab: { ...s.panelTab, [path]: showing === name ? next[Math.min(index, next.length - 1)]! : showing },
+		};
+	});
 }
 
 export function selectPreview(path: string, id: string): void {
 	transition("tab", () => setState((s) => ({ previews: { ...s.previews, [path]: { files: s.previews[path]?.files ?? [], active: id } } })));
 }
 
-/** Closes a file; the one beside it shows next. */
+/** Closes a file; the one beside it shows next. Closing the last one closes the Preview tab. */
 export function closePreview(path: string, id: string): void {
 	if (!id.startsWith("web:")) void trivium.closeReader(id).catch(() => {});
 	setState((s) => {
@@ -365,6 +403,7 @@ export function closePreview(path: string, id: string): void {
 		const active = s.previews[path]?.active === id ? next[Math.min(index, next.length - 1)]?.id : s.previews[path]?.active;
 		return { previews: { ...s.previews, [path]: { files: next, active } } };
 	});
+	if (!getState().previews[path]?.files.length) closePanelView(path, "preview");
 }
 
 /** Puts a file's new state in place of its old one, wherever it is open; `id` is the one it had. */
@@ -522,6 +561,8 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),
 		dialogs: s.dialogs.filter((dialog) => !gone.has(dialog.sessionPath)),
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
+		panelTabs: Object.fromEntries(Object.entries(s.panelTabs).filter(([path]) => !gone.has(path))),
+		summaryShown: Object.fromEntries(Object.entries(s.summaryShown).filter(([path]) => !gone.has(path))),
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));
 	notify(deleted.length === 1 ? t("Session moved to the Trash") : t("{n} sessions moved to the Trash", { n: deleted.length }), "info");

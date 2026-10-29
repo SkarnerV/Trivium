@@ -1,16 +1,16 @@
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
-import { type CodeView, codeTab } from "../panels.ts";
-import { attempt, openPreview, trivium, setState, useStore } from "../store.ts";
-import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
+import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon } from "../icons.tsx";
+import { type CodeView, codeTab, codeViews } from "../panels.ts";
+import { attempt, closePanelView, closePreview, openPreview, selectPreview, trivium, setState, useStore } from "../store.ts";
+import { ContextMenu } from "./ContextMenu.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { EmptyBody } from "./EmptyPanel.tsx";
-import { GitChanges, gitFileCount } from "./GitPanel.tsx";
-import { hasSource, PreviewBody, PreviewTabs, previewMenu } from "./PreviewPanel.tsx";
+import { GitChanges } from "./GitPanel.tsx";
+import { hasSource, PreviewBody, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
-import { ServicesBody, useServices } from "./ServicesPanel.tsx";
+import { ServicesBody } from "./ServicesPanel.tsx";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
 
@@ -122,65 +122,103 @@ function SessionChanges({ view }: { view: SessionView }) {
 	);
 }
 
+const VIEW_ICONS: Record<CodeView, (size: number) => ReactNode> = {
+	session: (size) => <FileIcon size={size} />,
+	git: (size) => <BranchIcon size={size} />,
+	preview: (size) => <EyeIcon size={size} />,
+	services: (size) => <ServerIcon size={size} />,
+};
+
+const VIEW_NAMES: Record<CodeView, string> = { session: "Changes", git: "Git", preview: "Preview", services: "Services" };
+
+/** One tab in the panel's head, closed by its own button or a middle click, as a browser's are. */
+function PanelTab({ name, icon, title, current, onSelect, onClose }: {
+	name: string;
+	icon: ReactNode;
+	title?: string;
+	current: boolean;
+	onSelect: () => void;
+	onClose: () => void;
+}) {
+	return (
+		<div
+			className="panel-tab"
+			aria-current={current}
+			title={title ?? name}
+			onAuxClick={(event) => {
+				if (event.button !== 1) return;
+				event.preventDefault();
+				onClose();
+			}}
+		>
+			<button type="button" role="tab" aria-selected={current} className="panel-tab-name" onClick={onSelect}>
+				{icon}
+				<span className="ellipsis">{name}</span>
+			</button>
+			<button type="button" className="panel-tab-close" aria-label={t("Close {name}", { name })} title={t("Close")} onClick={onClose}>
+				<CloseIcon size={10} width={2.4} />
+			</button>
+		</div>
+	);
+}
+
 /**
- * The Code app's side panel. It shows one view at a time, picked from a menu: the files this session edited,
- * every change in the working tree when the project is a git repository, files open to read, or the services
- * its commands left running.
+ * The Code app's side panel. Its head holds the views open in it as tabs, as a browser holds pages: the files
+ * this session edited, every change in the working tree when the project is a git repository, the services its
+ * commands left running, and each file open to read in a tab of its own. The summary cards open them.
  */
 export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
+	const tabs = useStore((s) => s.panelTabs[view.path]);
 	const previews = useStore((s) => s.previews[view.path]);
-	const services = useServices(view.path);
-	const tab = codeTab(view, git, picked);
+	const views = codeViews(view, git, tabs);
+	const tab = codeTab(views, picked);
 	const files = previews?.files ?? [];
 	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
 	// Rendered or source, by file path, for as long as the panel is open.
 	const [sources, setSources] = useState<Record<string, boolean>>({});
 	const source = Boolean(file && hasSource(file) && sources[file.path]);
-	const [menu, setMenu] = useState<{ kind: "views" | "more"; x: number; y: number }>();
-	// A click on a menu's own button closes it on mousedown; the click that follows must not open it again.
-	const closed = useRef<{ kind: string; at: number }>(undefined);
-	const pick = (next: CodeView) => transition("tab", () => setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } })));
-	const toggleMenu = (kind: "views" | "more") => (event: MouseEvent<HTMLButtonElement>) => {
-		if (closed.current?.kind === kind && Date.now() - closed.current.at < 300) return;
-		const rect = event.currentTarget.getBoundingClientRect();
-		setMenu({ kind, x: rect.right, y: rect.bottom + 6 });
-	};
-	const title = t({ session: "Changes", git: "Git", preview: "Preview", services: "Services" }[tab]);
-	const views: MenuEntry[] = [
-		{
-			label: t("Changes"),
-			icon: <FileIcon size={14} />,
-			hint: view.changes.length ? fileCount(view.changes.length) : undefined,
-			checked: tab === "session",
-			onSelect: () => pick("session"),
-		},
-		...(git
-			? [{ label: t("Git"), icon: <BranchIcon size={14} />, hint: gitFileCount(git) ? fileCount(gitFileCount(git)) : undefined, checked: tab === "git", onSelect: () => pick("git") }]
-			: []),
-		{ label: t("Preview"), icon: <EyeIcon size={14} />, hint: files.length ? t("{n} open", { n: files.length }) : undefined, checked: tab === "preview", onSelect: () => pick("preview") },
-		{
-			label: t("Services"),
-			icon: <ServerIcon size={14} />,
-			hint: services.length ? t("{n} running", { n: services.length }) : undefined,
-			checked: tab === "services",
-			onSelect: () => pick("services"),
-		},
-	];
+	const [menu, setMenu] = useState<{ x: number; y: number }>();
+	// A click on the More button closes its menu on mousedown; the click that follows must not open it again.
+	const closed = useRef(0);
+	const pick = (next: CodeView, then?: () => void) =>
+		transition("tab", () => {
+			setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } }));
+			then?.();
+		});
 	return (
-		<aside className="changes" aria-label={title}>
+		<aside className="changes" aria-label={t(VIEW_NAMES[tab])}>
 			<Resizer target="panel" />
-			<div className="panel-head">
-				{tab === "preview" && files.length ? (
-					<PreviewTabs path={view.path} files={files} active={file?.id} />
-				) : (
-					<h2 className="panel-title">
-						{title}
-						{tab === "session" && view.changes.length > 0 && <ChangeCount changes={view.changes} />}
-					</h2>
-				)}
+			<div className={`panel-head${tab === "preview" ? " is-flush" : ""}`}>
+				<div className="panel-tabs" role="tablist" aria-label={t("Panel views")}>
+					{views.flatMap((name) =>
+						name === "preview" && files.length
+							? files.map((open) => (
+									<PanelTab
+										key={open.id}
+										name={open.name}
+										title={open.rel}
+										icon={VIEW_ICONS.preview(13)}
+										current={tab === "preview" && open.id === file?.id}
+										onSelect={() => pick("preview", () => selectPreview(view.path, open.id))}
+										onClose={() => closePreview(view.path, open.id)}
+									/>
+								))
+							: [
+									<PanelTab
+										key={name}
+										name={t(VIEW_NAMES[name])}
+										icon={VIEW_ICONS[name](13)}
+										current={tab === name}
+										onSelect={() => pick(name)}
+										onClose={() => closePanelView(view.path, name)}
+									/>,
+								],
+					)}
+				</div>
 				<div className="panel-tools">
+					{tab === "session" && view.changes.length > 0 && <ChangeCount changes={view.changes} />}
 					{tab === "preview" && file && hasSource(file) && (
 						<button
 							type="button"
@@ -194,21 +232,21 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 						</button>
 					)}
 					{tab === "preview" && (
-						<button type="button" className="icon-btn" aria-label={t("More")} title={t("More")} aria-expanded={menu?.kind === "more"} onClick={toggleMenu("more")}>
+						<button
+							type="button"
+							className="icon-btn"
+							aria-label={t("More")}
+							title={t("More")}
+							aria-expanded={Boolean(menu)}
+							onClick={(event) => {
+								if (Date.now() - closed.current < 300) return;
+								const rect = event.currentTarget.getBoundingClientRect();
+								setMenu({ x: rect.right, y: rect.bottom + 6 });
+							}}
+						>
 							<MoreIcon size={16} />
 						</button>
 					)}
-					<button
-						type="button"
-						className="icon-btn"
-						aria-label={t("Choose what the panel shows")}
-						title={t("Panel views")}
-						aria-haspopup="menu"
-						aria-expanded={menu?.kind === "views"}
-						onClick={toggleMenu("views")}
-					>
-						<ViewsIcon size={16} />
-					</button>
 					<span className="panel-sep" aria-hidden="true" />
 					<button
 						type="button"
@@ -237,18 +275,14 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					x={menu.x}
 					y={menu.y}
 					align="right"
-					label={t(menu.kind === "views" ? "Show in panel" : "More")}
-					entries={menu.kind === "views" ? views : previewMenu(view.path, file)}
+					label={t("More")}
+					entries={previewMenu(view.path, file)}
 					onClose={() => {
-						closed.current = { kind: menu.kind, at: Date.now() };
+						closed.current = Date.now();
 						setMenu(undefined);
 					}}
 				/>
 			)}
 		</aside>
 	);
-}
-
-function fileCount(n: number): string {
-	return t(n === 1 ? "1 file" : "{n} files", { n });
 }

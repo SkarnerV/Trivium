@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import type { UpdateStatus } from "../src/shared/protocol.ts";
 import { assetName, installTarget, newerThan, readRelease, Updater, type UpdaterOptions, windowsScript } from "../src/main/updater.ts";
 
@@ -170,3 +171,52 @@ test(
 		}
 	},
 );
+
+test(
+	"the Windows install script runs, and keeps running after Trivium exits, when started the way Trivium starts it",
+	{ skip: process.platform !== "win32" && "PowerShell script", timeout: 30_000 },
+	async () => {
+		// A space and non-ASCII letters, as in many users' profile folders.
+		const root = mkdtempSync(join(tmpdir(), "trivium update 更新-"));
+		try {
+			const mark = join(root, "ran.txt");
+			const script = join(root, "install.ps1");
+			writeFileSync(script, `﻿Set-Content -LiteralPath '${mark}' -Value 'started'\nStart-Sleep -Seconds 2\nAdd-Content -LiteralPath '${mark}' -Value 'outlived Trivium'\n`);
+			// Stands in for Trivium: starts the script as restart() does, then exits at once. Node ends the children it
+			// didn't start detached when it exits, and a PowerShell started detached never ran its script at all.
+			const updater = pathToFileURL(join(import.meta.dirname, "..", "src", "main", "updater.ts")).href;
+			const parent = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `
+				import { launch, windowsLaunch } from ${JSON.stringify(updater)};
+				launch(windowsLaunch(${JSON.stringify(script)}));
+				setTimeout(() => process.exit(0), 300);
+			`], { encoding: "utf8" });
+			assert.equal(parent.status, 0, parent.stderr);
+			let text = "";
+			for (let i = 0; i < 100 && !text.includes("outlived"); i++) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				text = existsSync(mark) ? readFileSync(mark, "utf8") : "";
+			}
+			assert.match(text, /started/, "the script ran");
+			assert.match(text, /outlived Trivium/, "the script kept running after Trivium exited");
+		} finally {
+			rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		}
+	},
+);
+
+test("starting on Windows clears a version an earlier install left unpacked in Trivium's folder", async () => {
+	const target = mkdtempSync(join(tmpdir(), "trivium-install-"));
+	const { updater: instance } = updater(RELEASE, { execPath: join(target, "Trivium.exe"), enabled: () => false });
+	mkdirSync(join(target, ".trivium-update", "resources"), { recursive: true });
+	mkdirSync(join(target, ".trivium-previous"), { recursive: true });
+	writeFileSync(join(target, "notes.txt"), "mine");
+	try {
+		await instance.start();
+	} finally {
+		instance.dispose();
+	}
+	assert.equal(existsSync(join(target, ".trivium-update")), false);
+	assert.equal(existsSync(join(target, ".trivium-previous")), false);
+	assert.equal(existsSync(join(target, "notes.txt")), true);
+	rmSync(target, { recursive: true, force: true });
+});

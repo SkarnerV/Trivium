@@ -137,6 +137,36 @@ try {
 `;
 }
 
+/** How the install script starts. It runs in `cwd`, and must keep running once Trivium quits. */
+export interface Launch {
+	command: string;
+	args: string[];
+	cwd: string;
+	/** The arguments go on the command line as written, for cmd's own quoting. */
+	verbatim?: boolean;
+}
+
+/**
+ * Starts the Windows install script through `start`, from a detached cmd. Node ends every child that isn't
+ * detached when Trivium exits, and PowerShell started detached has no console and exits without running the
+ * script; `start` gives PowerShell a console of its own, minimized and then hidden.
+ */
+export function windowsLaunch(script: string): Launch {
+	const powershell = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "${basename(script)}"`;
+	return {
+		command: process.env.ComSpec ?? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"),
+		// The script is named relative to its folder, so nothing in the path can mean something to cmd.
+		args: ["/d", "/s", "/c", `"start "" /min ${powershell}"`],
+		cwd: dirname(script),
+		verbatim: true,
+	};
+}
+
+/** Starts the install script on its own, so it keeps running once Trivium quits. */
+export function launch({ command, args, cwd, verbatim }: Launch): void {
+	spawn(command, args, { cwd, detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments: verbatim }).unref();
+}
+
 /** Waits for Trivium to exit, swaps in the new Trivium.app, putting the old one back if that fails, and opens it. */
 export function macScript(input: { pid: number; source: string; target: string; log: string }): string {
 	return `#!/bin/sh
@@ -186,7 +216,7 @@ export class Updater {
 	private status: UpdateStatus = { state: "idle" };
 	private asset: ReleaseAsset | undefined;
 	/** The install script, written once the new version is unpacked and waiting for the restart. */
-	private pending: { command: string; args: string[] } | undefined;
+	private pending: Launch | undefined;
 	private timers: NodeJS.Timeout[] = [];
 	private readonly options: UpdaterOptions;
 
@@ -205,6 +235,11 @@ export class Updater {
 			const reason = (await readFile(log, "utf8").catch(() => "")).trim();
 			await rm(log, { force: true });
 			this.set({ state: "error", message: reason ? t("The last update could not be installed: {reason}", { reason }) : t("The last update could not be installed.") });
+		}
+		// An install script that never ran, as from 0.3.0 and earlier, left the unpacked version behind.
+		if (this.options.platform === "win32" && this.options.packaged && !this.options.portable) {
+			const target = installTarget("win32", this.options.execPath)!;
+			await Promise.all([".trivium-update", ".trivium-previous"].map((name) => rm(join(target, name), { recursive: true, force: true }).catch(() => {})));
 		}
 		const scheduled = () => {
 			if (this.options.enabled()) void this.check(false);
@@ -275,13 +310,7 @@ export class Updater {
 			this.set({ state: "ready", release });
 			return;
 		}
-		const child = spawn(this.pending.command, this.pending.args, {
-			cwd: this.options.dir,
-			detached: true,
-			stdio: "ignore",
-			windowsHide: true,
-		});
-		child.unref();
+		launch(this.pending);
 		this.options.quit();
 	}
 
@@ -338,7 +367,7 @@ export class Updater {
 	}
 
 	/** Unpacks the ZIP inside Trivium's folder, so the script's moves stay on one drive. */
-	private async stageWindows(zip: string): Promise<{ command: string; args: string[] }> {
+	private async stageWindows(zip: string): Promise<Launch> {
 		const target = installTarget("win32", this.options.execPath)!;
 		const staging = join(target, ".trivium-update");
 		await rm(staging, { recursive: true, force: true });
@@ -357,14 +386,11 @@ export class Updater {
 		const log = join(this.options.dir, FAILURE_LOG);
 		// PowerShell 5 reads a script without a byte order mark as the system code page, which garbles non-ASCII paths.
 		await writeFile(script, `\uFEFF${windowsScript({ pid: process.pid, source, target, staging, exe: join(target, exe), log })}`);
-		return {
-			command: "powershell.exe",
-			args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script],
-		};
+		return windowsLaunch(script);
 	}
 
 	/** Copies Trivium.app out of the disk image to beside the running one. */
-	private async stageMac(dmg: string): Promise<{ command: string; args: string[] }> {
+	private async stageMac(dmg: string): Promise<Launch> {
 		const target = installTarget("darwin", this.options.execPath)!;
 		const mount = join(this.options.dir, "mount");
 		const source = join(dirname(target), ".Trivium-update.app");
@@ -380,7 +406,7 @@ export class Updater {
 		}
 		const script = join(this.options.dir, "install.sh");
 		await writeFile(script, macScript({ pid: process.pid, source, target, log: join(this.options.dir, FAILURE_LOG) }));
-		return { command: "/bin/sh", args: [script] };
+		return { command: "/bin/sh", args: [script], cwd: this.options.dir };
 	}
 
 	private set(status: UpdateStatus): UpdateStatus {

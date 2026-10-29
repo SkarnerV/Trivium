@@ -2,6 +2,13 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-29
+
+### Fixed
+
+- **Updating from inside the app on Windows.** **Update and restart** downloaded the new version and quit Trivium, but the step that puts it in place never ran, so Trivium didn't restart and was still the old version when opened again. Copies on 0.2.5 or 0.3.0 have the broken updater and need to download 0.3.1 by hand once; updates from 0.3.1 on install from inside the app.
+- On Windows, the unpacked copy of the new version that a failed update left in Trivium's folder (`.trivium-update`) is deleted when Trivium starts.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
@@ -86,6 +93,7 @@ First preview release: coding, research and writing in one desktop workspace, po
 - Review code diffs, preview research notes with sources, and accept or reject tracked writing changes.
 - Built-in provider logins, custom model endpoints, MCP support and project trust.
 
+[0.3.1]: https://github.com/SkarnerV/Trivium/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/SkarnerV/Trivium/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/SkarnerV/Trivium/compare/v0.2.0...v0.2.5
 [0.2.0]: https://github.com/SkarnerV/Trivium/compare/v0.1.0...v0.2.0

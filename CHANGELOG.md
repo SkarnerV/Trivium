@@ -2,11 +2,23 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-29
+
+### Added
+
+- **Summary cards beside the conversation.** In Code sessions, one header button shows cards for Services, Git and Changes in a column beside the conversation, each with a few facts. A card opens its view, with the details, as a tab in the side panel.
+- **Tabs in the side panel.** The panel holds its views as tabs, as a browser holds pages, with each previewed file in a tab of its own. Closing the last tab hides the panel.
 
 ### Changed
 
 - Compacting a conversation, with `/compact` or automatically, no longer clears it from the screen. Earlier messages stay above a **Conversation compacted above** divider, also after reopening the session or restarting Trivium, and exported Markdown keeps them too; the agent works from the summary from there on.
+- Compaction shows its progress above the message box until it finishes, automatic compaction included, and **Stop** or Esc stops it.
+- A command that leaves several programs running, such as a frontend and a backend, lists one service per program, each with its own ports, address and **Stop** button.
+- The Code header's branch button and its branch summary give way to the Git card. Research and Write keep their header button for the Note and Review panels.
+
+### Fixed
+
+- On Windows, programs started with PowerShell's `Start-Process` or cmd's `start` now show as services.
 
 ## [0.2.5] - 2026-10-28
 
@@ -74,6 +86,7 @@ First preview release: coding, research and writing in one desktop workspace, po
 - Review code diffs, preview research notes with sources, and accept or reject tracked writing changes.
 - Built-in provider logins, custom model endpoints, MCP support and project trust.
 
+[0.3.0]: https://github.com/SkarnerV/Trivium/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/SkarnerV/Trivium/compare/v0.2.0...v0.2.5
 [0.2.0]: https://github.com/SkarnerV/Trivium/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SkarnerV/Trivium/releases/tag/v0.1.0

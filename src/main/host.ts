@@ -292,7 +292,8 @@ export class SessionHost {
 	}
 
 	async listModels(): Promise<ModelOption[]> {
-		const models = await this.modelRuntime.getAvailable();
+		const hidden = new Set(this.settings.get().hiddenModels);
+		const models = (await this.modelRuntime.getAvailable()).filter((model) => !hidden.has(`${model.provider}/${model.id}`));
 		return models.map((model) => ({
 			key: `${model.provider}/${model.id}`,
 			provider: model.provider,

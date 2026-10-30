@@ -11,7 +11,7 @@ const DEFAULT_OUTPUT = 16384;
 /** A model in the list; only those turned on are saved. */
 export type Row = CustomModel & {
 	on: boolean;
-	/** In a built-in provider's catalog, so always offered: it can be changed but not turned off or removed. */
+	/** In a built-in provider's catalog: it can be changed and turned off, but not removed. */
 	builtIn?: boolean;
 	/** models.json changes it already. */
 	edited?: boolean;
@@ -87,8 +87,7 @@ function ModelRow({
 					aria-checked={row.on}
 					aria-label={t("Use {model}", { model: row.id })}
 					className="cm-check"
-					disabled={row.builtIn}
-					title={row.builtIn ? t("Part of the provider's catalog, so always offered") : undefined}
+					title={row.builtIn ? t("Turned off, it stays out of Trivium's model picker. The pi CLI still lists it.") : undefined}
 					onClick={() => onChange({ on: !row.on })}
 				>
 					<span className="cm-box" />
@@ -166,12 +165,11 @@ export function ModelList({
 		const q = query.trim().toLowerCase();
 		return q ? rows.filter((row) => row.id.toLowerCase().includes(q) || row.name?.toLowerCase().includes(q)) : rows;
 	}, [rows, query]);
-	const switchable = shown.filter((row) => !row.builtIn);
 
 	const update = (modelId: string, patch: Partial<Row>) =>
 		setRows((current) => current.map((row) => (row.id === modelId ? { ...row, ...patch } : row)));
 	const turnShown = (on: boolean) =>
-		setRows((current) => current.map((row) => (switchable.includes(row) ? { ...row, on } : row)));
+		setRows((current) => current.map((row) => (shown.includes(row) ? { ...row, on } : row)));
 
 	const fetchList = async () => {
 		if (!fetchModels) return;
@@ -183,12 +181,22 @@ export function ModelList({
 			const known = new Set(rows.map((row) => row.id));
 			const added = models.filter((model) => !known.has(model.id));
 			const pick = rows.length === 0 && models.length <= 12;
-			setRows((current) => [...current, ...added.map((model) => ({ ...model, on: pick }))]);
+			// A catalog lists models this login may not be served, so the server's answer decides which are on. When
+			// it names none of them, its IDs are likely spelled differently (a proxy's, say), and the catalog stays.
+			const listed = new Set(models.map((model) => model.id));
+			const sync = rows.some((row) => row.builtIn && listed.has(row.id));
+			const off = sync ? rows.filter((row) => row.builtIn && row.on && !listed.has(row.id)).length : 0;
+			setRows((current) => [
+				...current.map((row) => (sync && row.builtIn ? { ...row, on: listed.has(row.id) } : row)),
+				...added.map((model) => ({ ...model, on: pick })),
+			]);
 			setFetched((current) => new Set([...current, ...added.map((model) => model.id)]));
+			// The list can hold more than the server names, such as a provider's whole catalog, so say whose count it is.
+			const counts = { n: models.length, added: added.length, off };
 			notify(
 				added.length
-					? t("Found {n} models, {added} new", { n: models.length, added: added.length })
-					: t("Found {n} models, all listed already", { n: models.length }),
+					? t(off ? "The server lists {n} models, {added} of them new; turned off the {off} it doesn't list" : "The server lists {n} models, {added} of them new", counts)
+					: t(off ? "The server lists {n} models; turned off the {off} it doesn't list" : "The server lists {n} models, all already in the list", counts),
 				"info",
 			);
 		} catch (thrown) {
@@ -231,7 +239,7 @@ export function ModelList({
 			{fetchError && <div className="run-error">{fetchError}</div>}
 			{rows.length ? (
 				<>
-					{switchable.length > 1 && (
+					{shown.length > 1 && (
 						<div className="cm-bulk">
 							<button type="button" className="s-link" onClick={() => turnShown(true)}>
 								{t(query ? "Turn on all shown" : "Turn all on")}

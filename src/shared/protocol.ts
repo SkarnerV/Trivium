@@ -425,6 +425,8 @@ export interface TriviumSettings {
 	/** Look for a new Trivium release on GitHub at startup and every few hours. */
 	checkUpdates: boolean;
 	apps: Record<AppId, AppSettings>;
+	/** Catalog models, as "provider/id", left out of the model picker: the provider doesn't serve them to this login. */
+	hiddenModels: string[];
 }
 
 export type ExtensionSource = "App" | "Added" | "Trivium" | "Global" | "Project" | "Package" | "Built-in" | "Dev";
@@ -579,6 +581,8 @@ export interface PresetProvider {
 	api?: CustomApi;
 	/** Catalog models, which can be changed but not removed. */
 	builtIn: PresetModel[];
+	/** IDs of catalog models turned off, which Trivium leaves out of its model picker. */
+	hidden: string[];
 	/** Models added in models.json. */
 	added: CustomModel[];
 }
@@ -592,6 +596,8 @@ export interface PresetProviderChanges {
 	 */
 	edits: { id: string; reset?: boolean; fields: { [K in PresetModelField]?: CustomModel[K] | null } }[];
 	added: CustomModel[];
+	/** Catalog models to leave out of the model picker, kept in Trivium's settings: pi's catalog has no such switch. */
+	hidden: string[];
 }
 
 export interface AppInfo {

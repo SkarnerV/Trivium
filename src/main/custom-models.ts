@@ -183,7 +183,7 @@ function mainApi(models: readonly Model<Api>[]): string | undefined {
 }
 
 /** A built-in provider's models as pi offers them now, split into its catalog's and those models.json adds. */
-export function readPresetProvider(agentDir: string, runtime: ModelRuntime, id: string): PresetProvider & { mainApi?: string } {
+export function readPresetProvider(agentDir: string, runtime: ModelRuntime, id: string): Omit<PresetProvider, "hidden"> & { mainApi?: string } {
 	const base = catalogProvider(id);
 	const provider = runtime.getProvider(id);
 	if (!base || !provider) throw new Error(t("{id} isn't one of pi's own providers.", { id }));

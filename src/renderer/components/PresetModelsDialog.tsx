@@ -31,7 +31,7 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 				setPreset(loaded);
 				setBaseUrl(loaded.baseUrl);
 				setRows([
-					...loaded.builtIn.map((model) => ({ ...model, on: true, builtIn: true })),
+					...loaded.builtIn.map((model) => ({ ...model, on: !loaded.hidden.includes(model.id), builtIn: true })),
 					...loaded.added.map((model) => ({ ...model, on: true })),
 				]);
 			},
@@ -56,9 +56,10 @@ export function PresetModelsDialog({ providerId, onClose, onSaved }: { providerI
 		const added = rows
 			.filter((row) => !row.builtIn && row.on)
 			.map(({ id, name, contextWindow, maxTokens, images, reasoning }): CustomModel => ({ id, name, contextWindow, maxTokens, images, reasoning }));
+		const hidden = rows.filter((row) => row.builtIn && !row.on).map((row) => row.id);
 		setSaving(true);
 		try {
-			await trivium.savePresetProvider(preset.id, { baseUrl: baseUrl.trim(), edits, added });
+			await trivium.savePresetProvider(preset.id, { baseUrl: baseUrl.trim(), edits, added, hidden });
 			notify(t("Saved {name}'s models", { name: preset.name }), "info");
 			onSaved();
 			onClose();

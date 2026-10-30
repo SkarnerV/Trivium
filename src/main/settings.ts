@@ -13,6 +13,7 @@ const DEFAULTS: TriviumSettings = {
 	notifyWaiting: true,
 	checkUpdates: true,
 	apps: { code: emptyApp(), research: emptyApp(), write: emptyApp() },
+	hiddenModels: [],
 };
 
 /** The app's own preferences in ~/.trivium/settings.json. pi's settings stay in ~/.pi/agent. */

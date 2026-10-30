@@ -320,11 +320,16 @@ function registerIpc(): void {
 	handle("trivium:signOutConnector", (name: string) => connectors.signOut(name));
 	handle("trivium:presetProvider", (id: string) => {
 		const { mainApi: _mainApi, ...preset } = readPresetProvider(getAgentDir(), host.runtime, id);
-		return preset;
+		const prefix = `${id}/`;
+		const hidden = settings.get().hiddenModels.filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length));
+		return { ...preset, hidden };
 	});
 	handle("trivium:fetchPresetModels", (id: string, baseUrl: string) => fetchPresetModels(getAgentDir(), host.runtime, id, baseUrl));
 	handle("trivium:savePresetProvider", async (id: string, changes: PresetProviderChanges) => {
 		await savePresetProvider(getAgentDir(), host.runtime, id, changes);
+		const prefix = `${id}/`;
+		const others = settings.get().hiddenModels.filter((key) => !key.startsWith(prefix));
+		await settings.update({ hiddenModels: [...others, ...changes.hidden.map((model) => prefix + model)] });
 		await host.runtime.refresh({ allowNetwork: false });
 	});
 	handle("trivium:setDefaultModel", async (key: string, level: string) => {

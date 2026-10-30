@@ -783,7 +783,6 @@ export interface TriviumApi {
 	commands(path: string): Promise<SlashCommand[]>;
 	/** Argument suggestions for `/name prefix`, or an empty list. */
 	completeCommand(path: string, name: string, prefix: string): Promise<CompletionItem[]>;
-	clearQueue(path: string): Promise<QueueInfo>;
 	setModel(path: string, modelKey: string, thinkingLevel: string): Promise<void>;
 	answerDialog(id: string, answer: DialogAnswer): Promise<void>;
 	/** Accepts changes; all files when `files` is omitted. */

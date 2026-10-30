@@ -2599,7 +2599,29 @@ body.resizing * {
 
 .tray-row .when {
 	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
 	color: var(--muted);
+}
+
+.tray-btn {
+	height: 24px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ink-2);
+	font: inherit;
+}
+
+.tray-btn:hover {
+	background: var(--tab);
+	color: var(--ink);
 }
 
 .mini-btn {

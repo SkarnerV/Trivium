@@ -229,7 +229,6 @@ function registerIpc(): void {
 	handle("trivium:abort", (path: string) => host.abort(path));
 	handle("trivium:commands", (path: string) => host.commands(path));
 	handle("trivium:completeCommand", (path: string, name: string, prefix: string) => host.completeCommand(path, name, prefix));
-	handle("trivium:clearQueue", (path: string) => host.clearQueue(path));
 	handle("trivium:setModel", (path: string, key: string, level: string) => host.setModel(path, key, level));
 	handle("trivium:answerDialog", (id: string, answer: DialogAnswer) => broker.answer(id, answer));
 	handle("trivium:keepChanges", (path: string, files?: string[]) => host.keepChanges(path, files));

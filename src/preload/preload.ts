@@ -39,7 +39,6 @@ const api: TriviumApi = {
 	abort: call("abort") as TriviumApi["abort"],
 	commands: call("commands") as TriviumApi["commands"],
 	completeCommand: call("completeCommand") as TriviumApi["completeCommand"],
-	clearQueue: call("clearQueue") as TriviumApi["clearQueue"],
 	setModel: call("setModel") as TriviumApi["setModel"],
 	answerDialog: call("answerDialog") as TriviumApi["answerDialog"],
 	keepChanges: call("keepChanges") as TriviumApi["keepChanges"],

@@ -509,12 +509,6 @@ export class SessionHost {
 		await this.require(path).session.abort();
 	}
 
-	clearQueue(path: string): QueueInfo {
-		const live = this.require(path);
-		live.session.clearQueue();
-		return this.queueOf(live);
-	}
-
 	async setModel(path: string, modelKey: string, thinkingLevel: string): Promise<void> {
 		const { session } = this.require(path);
 		const slash = modelKey.indexOf("/");

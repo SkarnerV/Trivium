@@ -73,6 +73,8 @@ export interface State {
 	locale: Locale;
 	/** Text to put in a session's message box when it next shows. */
 	drafts: Record<string, Draft>;
+	/** Messages written while a session ran, by session path, oldest first. They go out one by one as its runs end. */
+	queued: Record<string, QueuedMessage[]>;
 	/** Projects asking to load their .pi resources, oldest first. */
 	trust: TrustRequest[];
 	/** The transcript image open in the lightbox, and the session it belongs to. */
@@ -83,6 +85,10 @@ export interface State {
 	login?: { providerId: string; name: string; events: LoginEvent[] };
 	/** Whether a newer Trivium is out, and how far installing it has got. */
 	update: UpdateStatus;
+}
+
+export interface QueuedMessage extends Draft {
+	id: number;
 }
 
 export interface ConfirmRequest {
@@ -132,6 +138,7 @@ let state: State = {
 	git: {},
 	services: {},
 	drafts: {},
+	queued: {},
 	trust: [],
 	page: "main",
 	settingsSection: "general",
@@ -242,6 +249,9 @@ function handleEvent(event: HostEvent): void {
 					},
 				};
 			});
+			// A queued message goes out once the session is free; one that just went out is busy now.
+			if (event.running || event.compacting) sendingQueued.delete(event.path);
+			else void sendNextQueued(event.path);
 			break;
 		case "changes":
 			setState((s) => {
@@ -502,6 +512,89 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 	return view;
 }
 
+let queuedIds = 0;
+/** Sessions that were sent their next queued message and have not started its run yet. */
+const sendingQueued = new Set<string>();
+/** Sessions the user stopped: their queue waits until they send something again. */
+const heldQueues = new Set<string>();
+
+function setQueue(path: string, update: (list: QueuedMessage[]) => QueuedMessage[]): void {
+	setState((s) => {
+		const { [path]: list = [], ...rest } = s.queued;
+		const next = update(list);
+		return { queued: next.length ? { ...rest, [path]: next } : rest };
+	});
+}
+
+function busy(path: string): boolean {
+	const { views, sessions } = getState();
+	const view = views[path];
+	return view ? view.running || view.compacting : (sessions.find((session) => session.path === path)?.running ?? false);
+}
+
+/** Keeps a message for when the session's run ends. Its attachments stay stored until it is sent or deleted. */
+export function queueMessage(path: string, draft: Draft): void {
+	setQueue(path, (list) => [...list, { ...draft, id: ++queuedIds }]);
+}
+
+/** Takes a message out of the queue, such as to edit it; its attachments stay stored. */
+export function unqueueMessage(path: string, id: number): QueuedMessage | undefined {
+	const message = getState().queued[path]?.find((item) => item.id === id);
+	if (message) setQueue(path, (list) => list.filter((item) => item.id !== id));
+	return message;
+}
+
+export function deleteQueued(path: string, id: number): void {
+	const message = unqueueMessage(path, id);
+	if (message?.attachments.length) void trivium.dropAttachments(message.attachments.map((item) => item.id));
+}
+
+/** Stops the queue going out when the current run ends, as when the user stops the run. */
+export function holdQueue(path: string): void {
+	heldQueues.add(path);
+}
+
+/** Lets the queue go out again once the session is free. */
+export function resumeQueue(path: string): void {
+	heldQueues.delete(path);
+}
+
+/** Sends a queued message now: into the running turn as a steer, or as the next prompt when nothing runs. */
+export async function sendQueuedNow(path: string, id: number): Promise<void> {
+	const index = getState().queued[path]?.findIndex((item) => item.id === id) ?? -1;
+	const message = unqueueMessage(path, id);
+	if (!message) return;
+	resumeQueue(path);
+	await sendQueued(path, message, busy(path) ? "steer" : "prompt", index);
+}
+
+async function sendNextQueued(path: string): Promise<void> {
+	if (sendingQueued.has(path) || heldQueues.has(path) || busy(path)) return;
+	const next = getState().queued[path]?.[0];
+	if (!next) return;
+	unqueueMessage(path, next.id);
+	await sendQueued(path, next, "prompt", 0);
+}
+
+/** A message that fails to send goes back where it was in the queue, and the queue waits for the user. */
+async function sendQueued(path: string, message: QueuedMessage, mode: "prompt" | "steer", index: number): Promise<void> {
+	if (mode === "prompt") sendingQueued.add(path);
+	const ids = message.attachments.map((item) => item.id);
+	const sent = await attempt(() => trivium.send(path, message.text, mode, ids).then(() => true));
+	if (!sent) {
+		sendingQueued.delete(path);
+		holdQueue(path);
+		setQueue(path, (list) => [...list.slice(0, index), message, ...list.slice(index)]);
+	} else if (mode === "prompt" && message.text.startsWith("/")) {
+		// A command such as /name starts no run, so no run's end would send the next message.
+		setTimeout(() => {
+			if (busy(path)) return;
+			sendingQueued.delete(path);
+			void sendNextQueued(path);
+		}, 1000);
+	}
+}
+
 /** Sends a new version of an earlier message. Resolves false when it could not be sent. */
 export async function editMessage(path: string, run: number, text: string): Promise<boolean> {
 	return (await attempt(() => trivium.editMessage(path, run, text).then(() => true))) ?? false;
@@ -552,10 +645,14 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 	const deleted = await attempt(() => trivium.deleteSessions(paths));
 	if (!deleted?.length) return;
 	const gone = new Set(deleted);
-	const left = deleted.flatMap((path) => getState().drafts[path]?.attachments ?? []);
+	const left = deleted.flatMap((path) => [
+		...(getState().drafts[path]?.attachments ?? []),
+		...(getState().queued[path] ?? []).flatMap((message) => message.attachments),
+	]);
 	if (left.length) void trivium.dropAttachments(left.map((item) => item.id));
 	setState((s) => ({
 		drafts: Object.fromEntries(Object.entries(s.drafts).filter(([path]) => !gone.has(path))),
+		queued: Object.fromEntries(Object.entries(s.queued).filter(([path]) => !gone.has(path))),
 		sessions: s.sessions.filter((session) => !gone.has(session.path)),
 		views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))),
 		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),

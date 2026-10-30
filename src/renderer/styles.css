@@ -861,6 +861,7 @@ body.resizing * {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
+	container: pane / inline-size;
 }
 
 .pane-head {
@@ -922,6 +923,38 @@ body.resizing * {
 
 .has-summary .to-latest {
 	left: calc(50% - 136px);
+}
+
+/* Too narrow for the cards beside the thread: they go above it, side by side, and scroll away with it. */
+@container pane (max-width: 700px) {
+	.scroll-row {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.scroll-row > .summary {
+		order: -1;
+		position: static;
+		flex-direction: row;
+		flex-wrap: wrap;
+		width: 100%;
+		max-width: 720px;
+		margin: 0 auto;
+		padding: 2px 24px 6px;
+	}
+
+	.scroll-row > .summary > .summary-card {
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+
+	.has-summary .dock {
+		padding-right: 24px;
+	}
+
+	.has-summary .to-latest {
+		left: 50%;
+	}
 }
 
 /* Shown once the user scrolls up from the end of the thread; takes them back and follows again. */
@@ -2049,7 +2082,7 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
-.git-files {
+.change-list {
 	flex: 0 1 auto;
 	max-height: 40%;
 	margin: 0 12px 10px;
@@ -2060,7 +2093,7 @@ body.resizing * {
 	overflow: auto;
 }
 
-.git-section-head {
+.change-section-head {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -2074,18 +2107,18 @@ body.resizing * {
 	text-align: left;
 }
 
-.git-section-head:hover {
+.change-section-head:hover {
 	color: var(--ink-2);
 }
 
-.git-section-count {
+.change-section-count {
 	color: var(--ink-4);
 	font-weight: 400;
 }
 
-.git-file {
+.change-file {
 	display: grid;
-	grid-template-columns: 14px minmax(0, max-content) minmax(0, 1fr);
+	grid-template-columns: 14px minmax(0, max-content) minmax(0, 1fr) auto;
 	align-items: baseline;
 	gap: 8px;
 	width: 100%;
@@ -2098,16 +2131,16 @@ body.resizing * {
 	text-align: left;
 }
 
-.git-file:hover {
+.change-file:hover {
 	background: var(--tab);
 }
 
-.git-file[aria-current="true"] {
+.change-file[aria-current="true"] {
 	background: var(--soft);
 	color: var(--accent-text);
 }
 
-.git-mark {
+.change-mark {
 	font-family: var(--mono);
 	font-size: 11px;
 	font-weight: 600;
@@ -2115,44 +2148,56 @@ body.resizing * {
 	color: var(--ink-3);
 }
 
-.git-mark.is-added,
-.git-mark.is-untracked {
+.change-mark.is-added,
+.change-mark.is-untracked {
 	color: var(--add);
 }
 
-.git-mark.is-deleted,
-.git-mark.is-conflicted {
+.change-mark.is-deleted,
+.change-mark.is-conflicted {
 	color: var(--del);
 }
 
-.git-mark.is-modified,
-.git-mark.is-renamed,
-.git-mark.is-copied,
-.git-mark.is-typechange {
+.change-mark.is-modified,
+.change-mark.is-renamed,
+.change-mark.is-copied,
+.change-mark.is-typechange {
 	color: #9a6700;
 }
 
-.git-name {
+.change-name {
 	font-family: var(--mono);
 	font-size: 12px;
 }
 
-.git-dir {
+.change-dir {
 	color: var(--ink-4);
 	font-size: 11.5px;
 }
 
-.git-more {
+.change-meta {
+	display: flex;
+	gap: 6px;
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+.change-meta .tag {
+	color: var(--muted);
+	font-size: 10.5px;
+}
+
+.change-more {
 	margin: 4px 12px;
 	color: var(--ink-4);
 	font-size: 11.5px;
 }
 
-.git-diff {
+.diff.is-last {
 	margin-bottom: 12px;
 }
 
-.git-diff-path {
+.change-diff-path {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -2161,12 +2206,20 @@ body.resizing * {
 	min-height: 36px;
 }
 
-.git-diff-path .ellipsis {
-	flex: 1;
+/* The file's name stays whole; its folder gives way first. */
+.change-diff-path .change-name {
+	flex: 0 1 auto;
 	min-width: 0;
+	color: var(--ink-2);
 }
 
-.git-diff-path .icon-btn {
+.change-diff-path .change-dir {
+	flex: 1 1 0;
+	min-width: 0;
+	font-family: var(--sans);
+}
+
+.change-diff-path .icon-btn {
 	width: 26px;
 	height: 26px;
 }
@@ -6762,7 +6815,7 @@ body.resizing * {
 	color: var(--accent-text);
 }
 
-/* The Code panel's Git tab: commits waiting each way. */
+/* The Changes view's branch row: commits waiting each way. */
 
 .git-sync {
 	flex: none;

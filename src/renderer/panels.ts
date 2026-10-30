@@ -1,4 +1,4 @@
-import type { AppId, GitStatus, SessionView } from "../shared/protocol.ts";
+import type { AppId, SessionView } from "../shared/protocol.ts";
 
 /** Each app's side panel, and whether this session has anything to show in it. */
 export function panelFor(app: AppId, view: SessionView): "changes" | "note" | "review" | undefined {
@@ -20,16 +20,12 @@ export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undef
 	return hidden === undefined ? panelFor(app, view) !== undefined : !hidden;
 }
 
-/** What the Code panel can show: this session's edits, the repository's changes, files open to read, or what its commands left running. */
-export type CodeView = "session" | "git" | "preview" | "services";
+/** What the Code panel can show: the changes (this session's edits and the repository's others), files open to read, or what its commands left running. */
+export type CodeView = "session" | "preview" | "services";
 
-/**
- * The views open as tabs in the Code panel, in the order they were opened. Before the user opens any, it is
- * this session's edits when it has any, else the repository's changes. Git closes when there is no repository.
- */
-export function codeViews(view: SessionView, git: GitStatus | null | undefined, open: CodeView[] | undefined): CodeView[] {
-	const views = (open ?? [git && !view.changes.length ? "git" : "session"]).filter((name) => name !== "git" || git);
-	return views.length ? views : ["session"];
+/** The views open as tabs in the Code panel, in the order they were opened; the changes before the user opens any. */
+export function codeViews(open: CodeView[] | undefined): CodeView[] {
+	return open?.length ? open : ["session"];
 }
 
 /** The tab showing: the one the user picked while it is open, else the one opened last. */

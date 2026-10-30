@@ -5,8 +5,7 @@ import { type CodeView, codeTab, codeViews, panelOpen } from "../panels.ts";
 import { setState, showPanelView, useStore } from "../store.ts";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
-import { ChangeCount } from "./ChangesPanel.tsx";
-import { branchLabel, gitFileCount } from "./GitPanel.tsx";
+import { branchLabel, ChangeCount, otherChanges } from "./ChangesPanel.tsx";
 import { serviceCount, useServices } from "./ServicesPanel.tsx";
 
 function fileCount(n: number): string {
@@ -55,17 +54,18 @@ function Row({ icon, children, value, tone }: { icon: ReactNode; children: React
 
 /**
  * The summary cards beside the conversation, under the header's button: a few facts about the services running,
- * the repository and this session's edits. Picking one opens its view, with the details, in a tab of the panel.
+ * and about the branch, this session's edits and any other uncommitted changes. Picking one opens its view, with
+ * the details, in a tab of the panel.
  */
 export function SummaryCards({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const services = useServices(view.path);
 	const showing = useStore((s) =>
-		panelOpen(s.app, view, s.changesHidden[view.path]) ? codeTab(codeViews(view, s.git[view.path], s.panelTabs[view.path]), s.panelTab[view.path]) : undefined,
+		panelOpen(s.app, view, s.changesHidden[view.path]) ? codeTab(codeViews(s.panelTabs[view.path]), s.panelTab[view.path]) : undefined,
 	);
 
 	const open = (name: CodeView) => () => transition("tab", () => showPanelView(view.path, name));
-	const changed = git ? gitFileCount(git) : 0;
+	const others = otherChanges(view.changes, git).length;
 	const ports = services.flatMap((service) => service.ports.map((port) => `:${port}`));
 	return (
 		<aside className="summary" aria-label={t("Session summary")}>
@@ -78,38 +78,37 @@ export function SummaryCards({ view }: { view: SessionView }) {
 					<Row icon={<ServerIcon size={14} />}>{t("Nothing running")}</Row>
 				)}
 			</Card>
-			{git && (
-				<Card title={t("Git")} current={showing === "git"} onOpen={open("git")}>
+			<Card title={t("Changes")} current={showing === "session"} onOpen={open("session")}>
+				{git && (
 					<Row icon={<BranchIcon size={14} />} value={git.upstream && <span className="mono">{git.upstream}</span>}>
 						<span className="mono">{branchLabel(git)}</span>
 					</Row>
-					{git.ahead > 0 && (
-						<Row icon={<CloudUpIcon size={14} />} tone="push">
-							{t("{n} to push", { n: git.ahead })}
-						</Row>
-					)}
-					{git.behind > 0 && (
-						<Row icon={<CloudDownIcon size={14} />} tone="pull">
-							{t("{n} to pull", { n: git.behind })}
-						</Row>
-					)}
-					{changed ? (
-						<Row icon={<FileIcon size={14} />}>{t(changed === 1 ? "1 file changed" : "{n} files changed", { n: changed })}</Row>
-					) : (
-						<Row icon={<CheckIcon size={14} width={2.2} />} tone="done">
-							{t("Nothing to commit")}
-						</Row>
-					)}
-				</Card>
-			)}
-			<Card title={t("Changes")} current={showing === "session"} onOpen={open("session")}>
-				{view.changes.length ? (
+				)}
+				{git && git.ahead > 0 && (
+					<Row icon={<CloudUpIcon size={14} />} tone="push">
+						{t("{n} to push", { n: git.ahead })}
+					</Row>
+				)}
+				{git && git.behind > 0 && (
+					<Row icon={<CloudDownIcon size={14} />} tone="pull">
+						{t("{n} to pull", { n: git.behind })}
+					</Row>
+				)}
+				{view.changes.length > 0 && (
 					<Row icon={<FileIcon size={14} />} value={<ChangeCount changes={view.changes} />}>
-						{fileCount(view.changes.length)}
+						{t("{files} this session", { files: fileCount(view.changes.length) })}
+					</Row>
+				)}
+				{others > 0 && (
+					<Row icon={<FileIcon size={14} />}>{t(others === 1 ? "1 other uncommitted file" : "{n} other uncommitted files", { n: others })}</Row>
+				)}
+				{!view.changes.length && !others && (git ? (
+					<Row icon={<CheckIcon size={14} width={2.2} />} tone="done">
+						{t("Nothing to commit")}
 					</Row>
 				) : (
 					<Row icon={<FileIcon size={14} />}>{t("No changes yet")}</Row>
-				)}
+				))}
 			</Card>
 		</aside>
 	);

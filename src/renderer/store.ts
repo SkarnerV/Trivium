@@ -356,8 +356,7 @@ function showPreview(path: string, opened: ReaderFile): void {
 }
 
 function openViews(s: State, path: string): CodeView[] {
-	const view = s.views[path];
-	return view ? codeViews(view, s.git[path], s.panelTabs[path]) : (s.panelTabs[path] ?? []);
+	return s.views[path] ? codeViews(s.panelTabs[path]) : (s.panelTabs[path] ?? []);
 }
 
 /** Opens a view as a tab in a session's Code panel, or goes to its tab when it is open already, and shows the panel. */

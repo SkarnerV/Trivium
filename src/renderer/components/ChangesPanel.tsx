@@ -1,13 +1,13 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { FileChange, SessionView } from "../../shared/protocol.ts";
+import type { FileChange, GitArea, GitDiff, GitFile, GitStatus, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { BranchIcon, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon } from "../icons.tsx";
+import { BranchIcon, Chevron, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon } from "../icons.tsx";
 import { type CodeView, codeTab, codeViews } from "../panels.ts";
-import { attempt, closePanelView, closePreview, openPreview, selectPreview, trivium, setState, useStore } from "../store.ts";
+import { IS_WINDOWS } from "../platform.ts";
+import { attempt, closePanelView, closePreview, errorText, openPreview, selectPreview, trivium, setState, useStore } from "../store.ts";
 import { ContextMenu } from "./ContextMenu.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { EmptyBody } from "./EmptyPanel.tsx";
-import { GitChanges } from "./GitPanel.tsx";
 import { hasSource, PreviewBody, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { ServicesBody } from "./ServicesPanel.tsx";
@@ -31,13 +31,122 @@ function firstChangedLine(change: FileChange): number | undefined {
 	return change.lines.find((line) => line.kind === "add" || line.kind === "ctx")?.newNo;
 }
 
-/** The files this session edited, to keep or revert. */
-function SessionChanges({ view }: { view: SessionView }) {
+const MARK: Record<GitFile["status"], string> = {
+	added: "A",
+	modified: "M",
+	deleted: "D",
+	renamed: "R",
+	copied: "C",
+	typechange: "T",
+	untracked: "U",
+	conflicted: "!",
+};
+
+/** In the order they need attention: conflicts block a commit, and staged files go into the next one. */
+const AREAS: GitArea[] = ["conflicted", "staged", "unstaged", "untracked"];
+
+/** The branch as the panel and its card show it: its name, or the commit a detached HEAD is at. */
+export function branchLabel(git: GitStatus): string {
+	return git.branch ?? (git.head ? t("detached at {commit}", { commit: git.head }) : t("detached"));
+}
+
+/** A path to compare by: git and the session's records may write the same Windows path with other slashes or case. */
+function pathKey(path: string): string {
+	const slashed = path.replaceAll("\\", "/");
+	return IS_WINDOWS ? slashed.toLowerCase() : slashed;
+}
+
+/**
+ * What git reports that this session did not change: edits made by hand or before the session, and files it
+ * kept or committed since. A file both staged and changed again shows once per area, conflicts first.
+ */
+export function otherChanges(changes: FileChange[], git: GitStatus | null | undefined): GitFile[] {
+	if (!git) return [];
+	const ours = new Set(changes.map((change) => pathKey(change.path)));
+	return git.files
+		.filter((file) => !ours.has(pathKey(file.path)))
+		.sort((a, b) => AREAS.indexOf(a.area) - AREAS.indexOf(b.area));
+}
+
+/** The tag a file's row carries when git has it somewhere other than plain changed. */
+function areaTag(areas: GitArea[]): string | undefined {
+	if (areas.includes("conflicted")) return t("conflict");
+	if (areas.includes("staged")) return t("staged");
+	return undefined;
+}
+
+function dirName(rel: string): string {
+	const slash = rel.replaceAll("\\", "/").lastIndexOf("/");
+	return slash > 0 ? rel.slice(0, slash) : "";
+}
+
+function emptyNote(status: GitFile["status"], binary = false): string {
+	if (binary) return t("Binary file.");
+	if (status === "deleted") return t("File deleted.");
+	if (status === "renamed" || status === "copied" || status === "typechange") return t("No changes to the content.");
+	return t("Empty file.");
+}
+
+function FileRow({ status, rel, title, current, tag, onSelect, children }: {
+	status: GitFile["status"];
+	rel: string;
+	title?: string;
+	current: boolean;
+	tag?: string;
+	onSelect: () => void;
+	children?: ReactNode;
+}) {
+	return (
+		<button type="button" className="change-file" aria-current={current} title={title ?? rel} onClick={() => transition("tab", onSelect)}>
+			<span className={`change-mark is-${status}`} aria-label={status}>
+				{MARK[status]}
+			</span>
+			<span className="change-name ellipsis">{baseName(rel)}</span>
+			<span className="change-dir ellipsis">{dirName(rel)}</span>
+			<span className="change-meta">
+				{tag && <span className="tag">{tag}</span>}
+				{children}
+			</span>
+		</button>
+	);
+}
+
+function Section({ label, count, folded, onFold, children }: { label: string; count: number; folded: boolean; onFold: () => void; children: ReactNode }) {
+	return (
+		<section className="change-section">
+			<button type="button" className="change-section-head" aria-expanded={!folded} onClick={onFold}>
+				<Chevron open={!folded} size={10} />
+				<span>{label}</span>
+				<span className="change-section-count">{count}</span>
+			</button>
+			{!folded && children}
+		</section>
+	);
+}
+
+type Picked = { kind: "session"; change: FileChange } | { kind: "git"; file: GitFile };
+
+const pickedKey = (picked: Picked) => (picked.kind === "session" ? `session:${picked.change.path}` : `git:${picked.file.area}:${picked.file.rel}`);
+
+/**
+ * The Code panel's Changes view: the branch, the files this session edited (to keep or revert), any other
+ * uncommitted changes git reports, and the selected file's diff. Outside a repository it is the session's files alone.
+ */
+function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null | undefined }) {
 	const { changes } = view;
+	const others = otherChanges(changes, git);
 	const [selected, setSelected] = useState<string | undefined>();
+	const [folded, setFolded] = useState<{ session?: boolean; other?: boolean }>({});
 	const [confirmRevert, setConfirmRevert] = useState(false);
 	const [busy, setBusy] = useState(false);
-	const current = changes.find((change) => change.path === selected) ?? changes[0];
+	const [shown, setShown] = useState<{ key: string; diff?: GitDiff; error?: string }>();
+	const items: Picked[] = [
+		...changes.map((change) => ({ kind: "session" as const, change })),
+		...others.map((file) => ({ kind: "git" as const, file })),
+	];
+	const current = items.find((item) => pickedKey(item) === selected) ?? items[0];
+	const key = current ? pickedKey(current) : "";
+	const gitFile = current?.kind === "git" ? current.file : undefined;
 
 	useEffect(() => {
 		if (!confirmRevert) return;
@@ -60,76 +169,152 @@ function SessionChanges({ view }: { view: SessionView }) {
 		}
 	};
 
+	useEffect(() => {
+		if (!gitFile) return;
+		let live = true;
+		trivium.gitDiff(view.path, { rel: gitFile.rel, area: gitFile.area }).then(
+			(diff) => live && setShown({ key, diff }),
+			(error: unknown) => live && setShown({ key, error: errorText(error) }),
+		);
+		return () => {
+			live = false;
+		};
+		// A new status object means git was read again, and the file may have changed since.
+	}, [view.path, key, git]);
+
+	// Where git has each file this session changed, to tag the ones staged or in conflict.
+	const areas = new Map<string, GitArea[]>();
+	for (const file of git?.files ?? []) areas.set(pathKey(file.path), [...(areas.get(pathKey(file.path)) ?? []), file.area]);
+
 	const files = t(changes.length === 1 ? "1 file" : "{n} files", { n: changes.length });
+	const gitDiff = shown?.key === key ? shown : undefined;
+	const path = current?.kind === "session" ? current.change.path : current?.file.path;
+	const rel = (current?.kind === "session" ? current.change.rel : current?.file.rel) ?? "";
+	const status = current?.kind === "session" ? current.change.status : current?.file.status;
+	const counts = current?.kind === "session" ? current.change : gitDiff?.diff;
 	return (
 		<>
-			<div className="chips" role="tablist" aria-label={t("Changed files")}>
-				{changes.map((change) => (
-					<button
-						key={change.path}
-						type="button"
-						role="tab"
-						className="chip"
-						aria-selected={change === current}
-						title={change.rel}
-						onClick={() => transition("tab", () => setSelected(change.path))}
-					>
-						<span>{baseName(change.rel)}</span>
-						{change.status === "added" && <span className="tag">{t("new")}</span>}
-						{change.status === "deleted" && <span className="tag">{t("deleted")}</span>}
-						{change.adds > 0 && <span className="plus">+{change.adds}</span>}
-						{change.dels > 0 && <span className="minus">−{change.dels}</span>}
-					</button>
-				))}
-			</div>
-			{current && (
-				<div className="diff" role="tabpanel">
-					<div className="diff-path">{current.rel}</div>
-					<DiffView lines={current.lines} tooLarge={current.tooLarge} empty={t(current.status === "deleted" ? "File deleted." : "Empty file.")} />
+			{git && (
+				<div className="git-branch" title={git.root}>
+					<BranchIcon size={13} />
+					<span className="mono ellipsis">{branchLabel(git)}</span>
+					{git.upstream && <span className="git-upstream mono ellipsis">{git.upstream}</span>}
+					{git.ahead > 0 && <span className="git-sync">{t("{n} to push", { n: git.ahead })}</span>}
+					{git.behind > 0 && <span className="git-sync is-pull">{t("{n} to pull", { n: git.behind })}</span>}
 				</div>
 			)}
-			<div className="changes-foot">
-				<button type="button" className="btn primary" style={{ flex: 1 }} disabled={busy} onClick={() => void apply("keep")}>
-					{t("Keep changes")}
-				</button>
-				<button
-					type="button"
-					className={`btn revert${confirmRevert ? " confirm" : ""}`}
-					disabled={busy || view.running}
-					title={view.running ? t("Stop the run before reverting") : t("Restore {files} to how they were before this session changed them", { files })}
-					onClick={() => (confirmRevert ? void apply("revert") : setConfirmRevert(true))}
-				>
-					{confirmRevert ? t("Revert {files}?", { files }) : t("Revert")}
-				</button>
-				{current && current.status !== "deleted" && (
-					<button type="button" className="btn square" aria-label={t("Preview")} title={t("Preview")} onClick={() => void openPreview(view.path, current.path)}>
-						<EyeIcon size={15} />
+			{!current ? (
+				<EmptyBody kind="changes" />
+			) : (
+				<>
+					<div className="change-list">
+						{changes.length > 0 && (
+							<Section
+								label={t("This session")}
+								count={changes.length}
+								folded={Boolean(folded.session)}
+								onFold={() => setFolded({ ...folded, session: !folded.session })}
+							>
+								{changes.map((change) => (
+									<FileRow
+										key={change.path}
+										status={change.status}
+										rel={change.rel}
+										current={current.kind === "session" && current.change === change}
+										tag={areaTag(areas.get(pathKey(change.path)) ?? [])}
+										onSelect={() => setSelected(`session:${change.path}`)}
+									>
+										{change.adds > 0 && <span className="plus">+{change.adds}</span>}
+										{change.dels > 0 && <span className="minus">−{change.dels}</span>}
+									</FileRow>
+								))}
+							</Section>
+						)}
+						{others.length > 0 && (
+							<Section
+								label={t("Other uncommitted changes")}
+								count={others.length}
+								folded={Boolean(folded.other)}
+								onFold={() => setFolded({ ...folded, other: !folded.other })}
+							>
+								{others.map((file) => (
+									<FileRow
+										key={`${file.area}:${file.rel}`}
+										status={file.status}
+										rel={file.rel}
+										title={file.from ? `${file.from} → ${file.rel}` : file.rel}
+										current={current.kind === "git" && current.file === file}
+										tag={areaTag([file.area])}
+										onSelect={() => setSelected(`git:${file.area}:${file.rel}`)}
+									/>
+								))}
+							</Section>
+						)}
+						{git?.truncated && <p className="change-more">{t("Showing the first {n} changes.", { n: git.files.length })}</p>}
+					</div>
+					<div className={`diff${changes.length ? "" : " is-last"}`} role="region" aria-label={t("Diff of {file}", { file: rel })}>
+						<div className="diff-path change-diff-path" title={current.kind === "git" && current.file.from ? `${current.file.from} → ${current.file.rel}` : rel}>
+							<span className="change-name ellipsis">{baseName(rel)}</span>
+							<span className="change-dir ellipsis">{dirName(rel)}</span>
+							{counts && (counts.adds > 0 || counts.dels > 0) && (
+								<span className="change-count">
+									<span className="plus">+{counts.adds}</span> <span className="minus">−{counts.dels}</span>
+								</span>
+							)}
+							{path && status !== "deleted" && (
+								<button type="button" className="icon-btn" aria-label={t("Preview")} title={t("Preview")} onClick={() => void openPreview(view.path, path)}>
+									<EyeIcon size={14} />
+								</button>
+							)}
+							{path && status !== "deleted" && (
+								<button
+									type="button"
+									className="icon-btn"
+									aria-label={t("Open in editor")}
+									title={t("Open in VS Code")}
+									onClick={() => void attempt(() => trivium.openInEditor(path, current.kind === "session" ? firstChangedLine(current.change) : undefined))}
+								>
+									<ExternalIcon size={13} />
+								</button>
+							)}
+						</div>
+						{current.kind === "session" ? (
+							<DiffView lines={current.change.lines} tooLarge={current.change.tooLarge} empty={emptyNote(current.change.status)} />
+						) : gitDiff?.error ? (
+							<p className="diff-note">{gitDiff.error}</p>
+						) : gitDiff?.diff ? (
+							<DiffView lines={gitDiff.diff.lines} tooLarge={gitDiff.diff.tooLarge} empty={emptyNote(current.file.status, gitDiff.diff.binary)} />
+						) : null}
+					</div>
+				</>
+			)}
+			{changes.length > 0 && (
+				<div className="changes-foot">
+					<button type="button" className="btn primary" style={{ flex: 1 }} disabled={busy} onClick={() => void apply("keep")}>
+						{t("Keep changes")}
 					</button>
-				)}
-				{current && current.status !== "deleted" && (
 					<button
 						type="button"
-						className="btn square"
-						aria-label={t("Open in editor")}
-						title={t("Open in VS Code")}
-						onClick={() => void attempt(() => trivium.openInEditor(current.path, firstChangedLine(current)))}
+						className={`btn revert${confirmRevert ? " confirm" : ""}`}
+						disabled={busy || view.running}
+						title={view.running ? t("Stop the run before reverting") : t("Restore {files} to how they were before this session changed them", { files })}
+						onClick={() => (confirmRevert ? void apply("revert") : setConfirmRevert(true))}
 					>
-						<ExternalIcon />
+						{confirmRevert ? t("Revert {files}?", { files }) : t("Revert")}
 					</button>
-				)}
-			</div>
+				</div>
+			)}
 		</>
 	);
 }
 
 const VIEW_ICONS: Record<CodeView, (size: number) => ReactNode> = {
 	session: (size) => <FileIcon size={size} />,
-	git: (size) => <BranchIcon size={size} />,
 	preview: (size) => <EyeIcon size={size} />,
 	services: (size) => <ServerIcon size={size} />,
 };
 
-const VIEW_NAMES: Record<CodeView, string> = { session: "Changes", git: "Git", preview: "Preview", services: "Services" };
+const VIEW_NAMES: Record<CodeView, string> = { session: "Changes", preview: "Preview", services: "Services" };
 
 /** One tab in the panel's head, closed by its own button or a middle click, as a browser's are. */
 function PanelTab({ name, icon, title, current, onSelect, onClose }: {
@@ -164,15 +349,15 @@ function PanelTab({ name, icon, title, current, onSelect, onClose }: {
 
 /**
  * The Code app's side panel. Its head holds the views open in it as tabs, as a browser holds pages: the files
- * this session edited, every change in the working tree when the project is a git repository, the services its
- * commands left running, and each file open to read in a tab of its own. The summary cards open them.
+ * this session edited beside the repository's other uncommitted changes, the services its commands left running,
+ * and each file open to read in a tab of its own. The summary cards open them.
  */
 export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
 	const tabs = useStore((s) => s.panelTabs[view.path]);
 	const previews = useStore((s) => s.previews[view.path]);
-	const views = codeViews(view, git, tabs);
+	const views = codeViews(tabs);
 	const tab = codeTab(views, picked);
 	const files = previews?.files ?? [];
 	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
@@ -263,12 +448,8 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 				<ServicesBody view={view} />
 			) : tab === "preview" ? (
 				<PreviewBody path={view.path} file={file} source={source} />
-			) : tab === "git" && git ? (
-				<GitChanges view={view} git={git} />
-			) : view.changes.length ? (
-				<SessionChanges view={view} />
 			) : (
-				<EmptyBody kind="changes" />
+				<ChangesBody view={view} git={git} />
 			)}
 			{menu && (
 				<ContextMenu

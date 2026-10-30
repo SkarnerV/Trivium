@@ -6,7 +6,7 @@ export function DiffView({ lines, tooLarge, empty }: { lines: DiffLine[]; tooLar
 	if (tooLarge) return <p className="diff-note">{t("This file is too large to show a diff.")}</p>;
 	if (!lines.length) return <p className="diff-note">{empty}</p>;
 	return (
-		<>
+		<div className="diff-lines">
 			{lines.map((line, index) =>
 				line.kind === "hunk" ? (
 					<div key={index} className="diff-hunk">
@@ -19,6 +19,6 @@ export function DiffView({ lines, tooLarge, empty }: { lines: DiffLine[]; tooLar
 					</div>
 				),
 			)}
-		</>
+		</div>
 	);
 }

@@ -317,6 +317,14 @@ body.resizing * {
 }
 
 /*
+ * With a side panel open the card needs room for the conversation and the panel side by side (420px and 340px,
+ * plus its margins), so a wide sidebar gives way, down to its narrowest, rather than squeeze both.
+ */
+.shell:has(.changes, .side-panel) .sidebar {
+	max-width: max(200px, calc(100% - 780px));
+}
+
+/*
  * macOS: the window buttons sit at the top left, centered 25px from the top (see trafficLightPosition).
  * The sidebar's first row shares that line, so it holds the app switcher and the fold button.
  */
@@ -1688,7 +1696,12 @@ body.resizing * {
 .changes {
 	position: relative;
 	flex: 0 1 var(--panel-width, min(46%, 600px));
-	min-width: 340px;
+	/*
+	 * A width saved in a wider window must not squeeze the conversation: leave the pane the 420px the
+	 * resizer keeps (PANE_MIN), and when the card can't fit both, split it rather than collapse the pane.
+	 */
+	max-width: calc(100% - 420px);
+	min-width: min(340px, 45%);
 	display: flex;
 	flex-direction: column;
 	background: #fff;
@@ -1752,6 +1765,7 @@ body.resizing * {
 
 .change-count {
 	font-size: 12px;
+	white-space: nowrap;
 }
 
 .plus {
@@ -2111,6 +2125,13 @@ body.resizing * {
 	color: var(--ink-2);
 }
 
+.change-section-head > span:first-of-type {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .change-section-count {
 	color: var(--ink-4);
 	font-weight: 400;
@@ -2260,26 +2281,43 @@ body.resizing * {
 .diff {
 	flex: 1;
 	min-height: 0;
+	display: flex;
+	flex-direction: column;
 	margin: 0 12px;
 	border-radius: 12px;
 	background: #fff;
 	border: 1px solid var(--line);
-	overflow: auto;
+	overflow: hidden;
 	font-family: var(--mono);
 	font-size: 12px;
 	line-height: 1.7;
 }
 
 .diff-path {
-	position: sticky;
-	top: 0;
+	flex: none;
 	padding: 8px 12px;
 	color: var(--ink-4);
 	background: #fff;
 	border-bottom: 1px solid var(--soft);
 }
 
+.diff-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+/* As wide as the longest line, so every line's color reaches the far edge when scrolled across. */
+.diff-lines {
+	width: max-content;
+	min-width: 100%;
+}
+
+/* The hunk header and the line numbers stay at the left edge while the code scrolls under them. */
 .diff-hunk {
+	position: sticky;
+	left: 0;
+	width: fit-content;
 	padding: 2px 12px;
 	color: var(--ink-4);
 	white-space: pre;
@@ -2288,15 +2326,18 @@ body.resizing * {
 .diff-line {
 	display: grid;
 	grid-template-columns: 44px max-content;
-	min-width: 100%;
 	color: var(--ink-2);
+	background: #fff;
 	white-space: pre;
 }
 
 .diff-line .no {
+	position: sticky;
+	left: 0;
 	padding-right: 10px;
 	text-align: right;
 	color: var(--ink-4);
+	background: inherit;
 	user-select: none;
 }
 
@@ -5280,7 +5321,9 @@ body.resizing * {
 .side-panel {
 	position: relative;
 	flex: 0 1 var(--panel-width, min(50%, 640px));
-	min-width: 360px;
+	/* As .changes: keep the conversation its room. */
+	max-width: calc(100% - 420px);
+	min-width: min(360px, 45%);
 	display: flex;
 	flex-direction: column;
 	background: var(--tray);

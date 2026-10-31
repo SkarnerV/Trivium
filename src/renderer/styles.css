@@ -1072,7 +1072,8 @@ body.resizing * {
 	left: calc(50% - 136px);
 }
 
-/* Too narrow for the cards beside the thread: they go above it, side by side, and scroll away with it. */
+/* Too narrow for the cards beside the thread: they go above it, side by side, and stay in view however far down
+   a long thread is scrolled. */
 @container pane (max-width: 700px) {
 	.scroll-row {
 		flex-direction: column;
@@ -1081,7 +1082,8 @@ body.resizing * {
 
 	.scroll-row > .summary {
 		order: -1;
-		position: static;
+		z-index: 4;
+		background: var(--chrome);
 		flex-direction: row;
 		flex-wrap: wrap;
 		width: 100%;

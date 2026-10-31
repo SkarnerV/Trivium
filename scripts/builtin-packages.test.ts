@@ -76,7 +76,12 @@ test("the starting permission policy is written once and never over the user's o
 });
 
 test("a level is recognized in the config, and anything else is the user's own", () => {
-	for (const level of PERMISSION_LEVELS) assert.equal(permissionLevelOf({ permission: structuredClone(level.permission) })?.id, level.id);
+	for (const level of PERMISSION_LEVELS) {
+		assert.equal(permissionLevelOf({ permission: structuredClone(level.permission), yoloMode: level.yolo })?.id, level.id);
+	}
+	const bypass = PERMISSION_LEVELS.find((level) => level.id === "bypass")!;
+	assert.equal(bypass.yolo, true);
+	assert.equal(permissionLevelOf({ permission: bypass.permission }), undefined);
 	const auto = DEFAULT_PERMISSION_LEVEL.permission;
 	// Surfaces in another order are the same policy; patterns in another order are not, since the last match wins.
 	assert.equal(permissionLevelOf({ permission: Object.fromEntries(Object.entries(auto).reverse()) })?.id, "auto");
@@ -87,7 +92,7 @@ test("a level is recognized in the config, and anything else is the user's own",
 	assert.equal(permissionLevelOf({}), undefined);
 });
 
-test("choosing a level keeps the config's other settings and drops yolo mode", async () => {
+test("choosing a level keeps the config's other settings, and yolo mode only for bypass", async () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "trivium-perm-"));
 	try {
 		assert.deepEqual(readPermissions(agentDir), { path: join(agentDir, "extensions", "pi-permission-system", "config.json"), level: "auto" });
@@ -95,11 +100,16 @@ test("choosing a level keeps the config's other settings and drops yolo mode", a
 		const file = readPermissions(agentDir).path;
 		writeFileSync(file, JSON.stringify({ debugLog: true, yoloMode: true, permission: { "*": "deny" } }));
 		assert.equal(readPermissions(agentDir).level, "custom");
-		await writePermissionLevel(agentDir, "bypass");
+		await writePermissionLevel(agentDir, "auto");
 		const written = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
 		assert.equal(written.debugLog, true);
 		assert.equal("yoloMode" in written, false);
+		assert.equal(readPermissions(agentDir).level, "auto");
+		await writePermissionLevel(agentDir, "bypass");
+		assert.equal((JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>).yoloMode, true);
 		assert.equal(readPermissions(agentDir).level, "bypass");
+		await writePermissionLevel(agentDir, "ask");
+		assert.equal("yoloMode" in (JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>), false);
 		// A file with comments is the user's to edit; Trivium neither reads a level from it nor rewrites it.
 		writeFileSync(file, '{\n  // mine\n  "permission": {}\n}');
 		assert.deepEqual(readPermissions(agentDir), { path: file, level: "custom", unreadable: true });

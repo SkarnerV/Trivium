@@ -11,6 +11,11 @@ export interface PermissionLevel {
 	label: string;
 	hint: string;
 	permission: PermissionPolicy;
+	/**
+	 * Turns on yolo mode. The extension asks before `bash -c`, `xargs`, `find -exec` and commands it can't parse
+	 * whatever the policy says, and only yolo mode approves those. Explicit denies still deny under it.
+	 */
+	yolo?: true;
 }
 
 const ENV_BLOCKED = { "*": "allow", "*.env": "deny", "*.env.*": "deny", "*.env.example": "allow" } as const;
@@ -38,6 +43,7 @@ export const PERMISSION_LEVELS: PermissionLevel[] = [
 		label: "Bypass permissions",
 		hint: "Runs everything without asking; .env files stay blocked",
 		permission: { "*": "allow", path: ENV_BLOCKED, external_directory: "allow" },
+		yolo: true,
 	},
 ];
 
@@ -56,14 +62,18 @@ function sameSurfaces(a: object, b: object): boolean {
 	return keys.length === Object.keys(b).length && keys.every((key) => key in b && sameRules(a[key as keyof typeof a], b[key as keyof typeof b]));
 }
 
-/** Which level a config sets, or undefined when it is the user's own policy or turns on yolo mode. */
+/** Which level a config sets, or undefined when it is the user's own policy or yolo mode doesn't match the level's. */
 export function permissionLevelOf(config: { permission?: unknown; yoloMode?: unknown }): PermissionLevel | undefined {
-	if (config.yoloMode === true || typeof config.permission !== "object" || !config.permission) return undefined;
-	return PERMISSION_LEVELS.find((level) => sameSurfaces(level.permission, config.permission as object));
+	if (typeof config.permission !== "object" || !config.permission) return undefined;
+	const yolo = config.yoloMode === true;
+	return PERMISSION_LEVELS.find((level) => Boolean(level.yolo) === yolo && sameSurfaces(level.permission, config.permission as object));
 }
 
-/** The config with a level's policy, keeping the user's other settings. Yolo mode would approve every ask, so it goes. */
+/**
+ * The config with a level's policy, keeping the user's other settings. Yolo mode would approve every ask, so only a
+ * level that wants it keeps it.
+ */
 export function withPermissionLevel(config: Record<string, unknown>, level: PermissionLevel): Record<string, unknown> {
 	const { yoloMode: _yolo, ...rest } = config;
-	return { ...rest, permission: level.permission };
+	return { ...rest, permission: level.permission, ...(level.yolo && { yoloMode: true }) };
 }

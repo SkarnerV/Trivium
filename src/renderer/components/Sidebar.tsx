@@ -2,9 +2,9 @@ import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary, UpdateStatus } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, SplitIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
-import { IS_MAC, IS_WINDOWS } from "../platform.ts";
+import { commandKey, IS_MAC, IS_WINDOWS, keyName } from "../platform.ts";
 import {
 	askConfirm,
 	attempt,
@@ -12,6 +12,7 @@ import {
 	getState,
 	installUpdate,
 	notify,
+	openInSplit,
 	openMemory,
 	openSession,
 	openSettings,
@@ -22,6 +23,7 @@ import {
 	trivium,
 	useStore,
 } from "../store.ts";
+import { SESSION_DRAG_TYPE, type Split } from "../split.ts";
 import { THEMES } from "../theme.ts";
 import { t } from "../i18n.tsx";
 import { ContextMenu, type MenuEntry } from "./ContextMenu.tsx";
@@ -122,8 +124,17 @@ async function copySessionId(session: SessionSummary): Promise<void> {
 	if (copied) notify(t("Session ID copied"), "info");
 }
 
-function sessionMenu(session: SessionSummary, pinned: boolean): MenuEntry[] {
+function sessionMenu(session: SessionSummary, pinned: boolean, active: boolean): MenuEntry[] {
 	return [
+		{
+			label: t("Open in split view"),
+			icon: <SplitIcon size={14} />,
+			hint: `${keyName("⌘")} ${t("click")}`,
+			// The session on screen has nothing to pair with but itself.
+			disabled: active,
+			onSelect: () => void openInSplit(session.path),
+		},
+		"separator",
 		{
 			label: t(pinned ? "Unpin session" : "Pin session"),
 			icon: pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
@@ -144,23 +155,46 @@ function sessionMenu(session: SessionSummary, pinned: boolean): MenuEntry[] {
 	];
 }
 
-function SessionRow({ session, active, pinned, startedAt }: { session: SessionSummary; active: boolean; pinned: boolean; startedAt?: number }) {
+function SessionRow({
+	session,
+	active,
+	inSplit,
+	pinned,
+	startedAt,
+}: {
+	session: SessionSummary;
+	active: boolean;
+	/** On screen in the split view, beside the focused session. */
+	inSplit: boolean;
+	pinned: boolean;
+	startedAt?: number;
+}) {
 	const now = useNow(session.running ? 1000 : 60_000);
 	const services = useStore((s) => s.services[session.path]?.length ?? 0);
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
 	const closeMenu = useCallback(() => setMenu(undefined), []);
 	return (
-		<div className={`session-item${session.running ? " running" : ""}${menu ? " menu-open" : ""}`}>
+		<div className={`session-item${session.running ? " running" : ""}${menu ? " menu-open" : ""}${inSplit ? " in-split" : ""}`}>
 			<button
 				type="button"
 				className="session-row"
 				aria-current={active ? "page" : undefined}
 				aria-haspopup="menu"
-				onClick={() => void openSession(session.path)}
+				draggable
+				onDragStart={(event) => {
+					event.dataTransfer.setData(SESSION_DRAG_TYPE, session.path);
+					event.dataTransfer.effectAllowed = "move";
+				}}
+				onClick={(event) => void (commandKey(event) ? openInSplit(session.path) : openSession(session.path))}
 				onContextMenu={(event) => setMenu(menuPoint(event))}
 				title={session.title}
 			>
 				<span className="title ellipsis">{session.title}</span>
+				{inSplit && (
+					<span className="split-mark" role="img" aria-label={t("In split view")} title={t("In split view")}>
+						<SplitIcon size={12} />
+					</span>
+				)}
 				{pinned && (
 					<span className="pin-mark" aria-label={t("Pinned")}>
 						<PinIcon size={11} />
@@ -192,7 +226,7 @@ function SessionRow({ session, active, pinned, startedAt }: { session: SessionSu
 					<TrashIcon />
 				</button>
 			)}
-			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session, pinned)} onClose={closeMenu} />}
+			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session, pinned, active)} onClose={closeMenu} />}
 		</div>
 	);
 }
@@ -222,7 +256,7 @@ function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
 	];
 }
 
-function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGroup; selected?: string }) {
+function ProjectSection({ app, group, selected, split }: { app: AppId; group: ProjectGroup; selected?: string; split?: Split }) {
 	const views = useStore((s) => s.views);
 	const pinnedSessions = useStore((s) => s.pinnedSessions);
 	const key = `${app}:${group.cwd}`;
@@ -273,6 +307,7 @@ function ProjectSection({ app, group, selected }: { app: AppId; group: ProjectGr
 						key={session.path}
 						session={session}
 						active={session.path === selected}
+						inSplit={session.path !== selected && !!split?.includes(session.path)}
 						pinned={!!pinnedSessions[session.path]}
 						startedAt={views[session.path]?.runs.at(-1)?.startedAt}
 					/>
@@ -286,6 +321,7 @@ export function SessionGroups() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
 	const selected = useStore((s) => s.selected[s.app]);
+	const split = useStore((s) => s.split[s.app]);
 	const pinnedProjects = useStore((s) => s.pinnedProjects);
 	const pinnedSessions = useStore((s) => s.pinnedSessions);
 	const groups = groupByProject(sessions, app, pinnedProjects, pinnedSessions);
@@ -295,7 +331,7 @@ export function SessionGroups() {
 	return (
 		<>
 			{groups.map((group) => (
-				<ProjectSection key={group.cwd} app={app} group={group} selected={selected} />
+				<ProjectSection key={group.cwd} app={app} group={group} selected={selected} split={split} />
 			))}
 		</>
 	);

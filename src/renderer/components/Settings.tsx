@@ -1136,6 +1136,7 @@ const SHORTCUTS: [title: string, description: string | undefined, rows: Shortcut
 			["New session", [["⌘", "N"]]],
 			["Search sessions in every mode", [["⌘", "K"]]],
 			["Fold or unfold the sidebar", [["⌘", "\\"]]],
+			["Open or close split view", [["⌘", "⇧", "\\"]], "Or drag a session from the sidebar into the window"],
 			["Open or close Settings", [["⌘", ","]]],
 		],
 	],

@@ -680,6 +680,19 @@ body.resizing * {
 	background: var(--tab);
 }
 
+/* The other half of the split: on screen, but not the one focused. */
+.session-item.in-split .session-row {
+	background: var(--soft);
+	color: var(--ink);
+}
+
+.split-mark {
+	flex: none;
+	display: grid;
+	place-items: center;
+	color: var(--accent-text);
+}
+
 .session-row[aria-current="page"] {
 	background: #fff;
 	color: var(--ink);
@@ -870,6 +883,132 @@ body.resizing * {
 	display: flex;
 	flex-direction: column;
 	container: pane / inline-size;
+}
+
+/* Split view: two sessions side by side, or the focused one with tabs when only one fits (SPLIT_PANE_MIN). */
+
+.panes {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	display: flex;
+}
+
+.split-slot {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	display: flex;
+}
+
+.panes.split .split-slot {
+	min-width: 360px;
+}
+
+.panes.split .split-slot:first-child {
+	flex: 0 1 var(--split-width, 50%);
+}
+
+.panes.split .split-slot + .split-slot {
+	border-left: 1px solid var(--line);
+}
+
+.resizer-split {
+	right: -5px;
+}
+
+/* A ring over the focused half, above its content and clear of clicks. */
+.panes.split .split-slot.focused::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	pointer-events: none;
+	box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.panes.split .split-slot:first-child::after {
+	border-radius: 14px 0 0 14px;
+}
+
+.card:not(:has(.changes, .side-panel)) .panes.split .split-slot + .split-slot::after {
+	border-radius: 0 14px 14px 0;
+}
+
+.panes.split .split-slot:not(.focused) .crumb h1 {
+	color: var(--ink-3);
+}
+
+.panes.split .split-slot.focused .composer {
+	border-color: color-mix(in srgb, var(--accent) 45%, var(--edge));
+}
+
+.split-tabs {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 10px;
+	background: var(--tray);
+	box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.split-tabs button {
+	flex: 1 1 0;
+	min-width: 0;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--ink-3);
+	text-align: left;
+}
+
+.split-tabs button:hover {
+	color: var(--ink);
+}
+
+.split-tabs button[aria-selected="true"] {
+	background: #fff;
+	color: var(--ink);
+	font-weight: 600;
+	box-shadow:
+		0 0 0 1px var(--edge),
+		0 1px 2px rgba(19, 20, 43, 0.06);
+}
+
+/* Where a session dragged from the sidebar opens. */
+.drop-half {
+	position: absolute;
+	top: 10px;
+	bottom: 10px;
+	z-index: 6;
+	width: calc(50% - 15px);
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border: 2px dashed var(--accent);
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--soft) 88%, transparent);
+	color: var(--accent-text);
+	font-size: 14px;
+	font-weight: 600;
+	pointer-events: none;
+}
+
+.drop-half.left {
+	left: 10px;
+}
+
+.drop-half.right {
+	right: 10px;
 }
 
 .pane-head {
@@ -6007,7 +6146,8 @@ body.resizing * {
 /* Switch transitions (transition.ts). Regions are named only while one runs, so each animates on its own and
    the rest of the window, such as the accent color of another app, crossfades. */
 
-:root[data-transition] .pane {
+/* In a split only the focused pane moves; two elements can't share one name. */
+:root[data-transition] .split-slot.focused > .pane {
 	view-transition-name: pane;
 }
 

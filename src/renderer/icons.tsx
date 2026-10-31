@@ -69,6 +69,12 @@ export const PanelIcon = (p: IconProps) => (
 		<path d="M9 4v16" />
 	</Svg>
 );
+export const SplitIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<rect x="3" y="4" width="18" height="16" rx="2.5" />
+		<path d="M12 4v16" />
+	</Svg>
+);
 export const PanelRightIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<rect x="3" y="4" width="18" height="16" rx="2.5" />

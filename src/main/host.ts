@@ -187,7 +187,8 @@ export class SessionHost {
 	private summaries: SessionSummary[] = [];
 	private modelRuntime!: ModelRuntime;
 	private readonly agentDir = getAgentDir();
-	private viewing: string | undefined;
+	/** The sessions on screen, as the window last said: their runs finish read, and they are never unloaded for being idle. */
+	private viewing = new Set<string>();
 	private listTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly emit: (event: HostEvent) => void;
 	private readonly broker: DialogBroker;
@@ -305,8 +306,11 @@ export class SessionHost {
 		}));
 	}
 
+	setVisible(paths: string[]): void {
+		this.viewing = new Set(paths);
+	}
+
 	async openSession(path: string): Promise<SessionView> {
-		this.viewing = path;
 		let live = this.live.get(path);
 		if (live) live.lastActive = Date.now();
 		if (!live) {
@@ -333,7 +337,6 @@ export class SessionHost {
 		const cwd = input.cwd ?? chatsDir;
 		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
 		const live = await this.start(input.app, cwd, SessionManager.create(cwd), true);
-		this.viewing = live.path;
 		this.appIndex[live.session.sessionId] = input.app;
 		await this.saveIndex();
 		if (input.message?.trim()) await this.send(live.path, input.message, "prompt");
@@ -417,7 +420,6 @@ export class SessionHost {
 		const forked = await this.start(live.app, manager.getCwd(), manager);
 		this.appIndex[forked.session.sessionId] = live.app;
 		await this.saveIndex();
-		this.viewing = forked.path;
 		this.scheduleList();
 		return { view: this.view(forked, []), ...messageFiles(entry.message.content) };
 	}
@@ -657,7 +659,7 @@ export class SessionHost {
 			if (live) this.unload(live);
 			await this.services.stopSession(path);
 			this.unsaved.delete(path);
-			if (this.viewing === path) this.viewing = undefined;
+			this.viewing.delete(path);
 			// A new session has no file until its first message.
 			if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
 			if (id) {
@@ -687,7 +689,7 @@ export class SessionHost {
 		const cutoff = Date.now() - minutes * 60_000;
 		const paths: string[] = [];
 		for (const live of this.live.values()) {
-			if (live.running || live.path === this.viewing || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
+			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -996,7 +998,7 @@ export class SessionHost {
 				break;
 			case "agent_settled":
 				live.running = false;
-				live.unread = this.viewing !== live.path;
+				live.unread = !this.viewing.has(live.path);
 				this.onDone(live.path, this.titleFor(live));
 				this.flush(live);
 				this.emitStatus(live);

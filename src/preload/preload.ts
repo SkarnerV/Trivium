@@ -19,6 +19,7 @@ const api: TriviumApi = {
 	recentProjects: call("recentProjects") as TriviumApi["recentProjects"],
 	pickFolder: call("pickFolder") as TriviumApi["pickFolder"],
 	openSession: call("openSession") as TriviumApi["openSession"],
+	setVisible: call("setVisible") as TriviumApi["setVisible"],
 	newSession: call("newSession") as TriviumApi["newSession"],
 	editMessage: call("editMessage") as TriviumApi["editMessage"],
 	fork: call("fork") as TriviumApi["fork"],

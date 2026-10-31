@@ -206,6 +206,7 @@ function registerIpc(): void {
 		return result.canceled ? undefined : result.filePaths[0];
 	});
 	handle("trivium:openSession", (path: string) => host.openSession(path));
+	handle("trivium:setVisible", (paths: string[]) => host.setVisible(paths));
 	handle("trivium:newSession", (input: NewSessionInput) => host.newSession(input));
 	// A forked message comes back with its attachments stored again, so it can be sent as it was.
 	const draftOf = (rewound: Rewound | undefined) =>

@@ -225,7 +225,8 @@ function Tray({ view, onEdit }: { view: SessionView; onEdit: (message: QueuedMes
 	);
 }
 
-export function Composer({ view }: { view: SessionView }) {
+/** `focus`: the box takes the keyboard when it shows; in a split, only the focused pane's does. */
+export function Composer({ view, focus = true }: { view: SessionView; focus?: boolean }) {
 	// Takes a draft left for this session, such as from "Open in Write" or an earlier message taken back to edit.
 	const draft = useStore((s) => s.drafts[view.path]);
 	const [text, setText] = useState(() => draft?.text ?? "");
@@ -267,7 +268,7 @@ export function Composer({ view }: { view: SessionView }) {
 	}, [text]);
 
 	useEffect(() => {
-		ref.current?.focus();
+		if (focus) ref.current?.focus();
 	}, [view.path]);
 
 	const send = async (mode: "prompt" | "steer") => {
@@ -341,6 +342,8 @@ export function Composer({ view }: { view: SessionView }) {
 						if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);
 					}}
 					onDrop={(event) => {
+						// A session dragged from the sidebar goes on to the split view.
+						if (!event.dataTransfer.types.includes("Files")) return;
 						event.preventDefault();
 						setDragging(false);
 						files.addFiles([...event.dataTransfer.files]);

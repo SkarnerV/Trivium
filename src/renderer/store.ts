@@ -21,6 +21,7 @@ import type {
 } from "../shared/protocol.ts";
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import { type CodeView, codeTab, codeViews } from "./panels.ts";
+import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
 
 declare global {
@@ -33,8 +34,10 @@ export const trivium = window.trivium;
 
 export interface State {
 	app: AppId;
-	/** The session shown in each app, by session path. */
+	/** The session shown in each app, by session path; in a split, the focused one. */
 	selected: Partial<Record<AppId, string>>;
+	/** The two sessions side by side in each app, left first; unset when the app shows one. */
+	split: Partial<Record<AppId, Split>>;
 	sessions: SessionSummary[];
 	views: Record<string, SessionView>;
 	dialogs: DialogRequest[];
@@ -51,6 +54,8 @@ export interface State {
 	/** Widths the user dragged the sidebar and the right panel to; unset means the default. */
 	sidebarWidth?: number;
 	panelWidth?: number;
+	/** Width the user dragged the left half of a split to; unset means half the room. */
+	splitWidth?: number;
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
 	/** The views open as tabs in each session's Code panel, oldest first; unset opens the one it has most to show in. */
@@ -102,7 +107,7 @@ export type SettingsSection = "general" | "models" | "connectors" | "usage" | "s
 
 const PREFS_KEY = "trivium.prefs";
 
-const PREF_KEYS = ["app", "folded", "selected", "collapsed", "pinnedProjects", "pinnedSessions", "sidebarWidth", "panelWidth"] as const;
+const PREF_KEYS = ["app", "folded", "selected", "split", "collapsed", "pinnedProjects", "pinnedSessions", "sidebarWidth", "panelWidth", "splitWidth"] as const;
 
 function loadPrefs(): Pick<State, (typeof PREF_KEYS)[number]> {
 	try {
@@ -111,14 +116,16 @@ function loadPrefs(): Pick<State, (typeof PREF_KEYS)[number]> {
 			app: parsed.app ?? "code",
 			folded: parsed.folded ?? false,
 			selected: parsed.selected ?? {},
+			split: parsed.split ?? {},
 			collapsed: parsed.collapsed ?? {},
 			pinnedProjects: parsed.pinnedProjects ?? {},
 			pinnedSessions: parsed.pinnedSessions ?? {},
 			sidebarWidth: parsed.sidebarWidth,
 			panelWidth: parsed.panelWidth,
+			splitWidth: parsed.splitWidth,
 		};
 	} catch {
-		return { app: "code", folded: false, selected: {}, collapsed: {}, pinnedProjects: {}, pinnedSessions: {} };
+		return { app: "code", folded: false, selected: {}, split: {}, collapsed: {}, pinnedProjects: {}, pinnedSessions: {} };
 	}
 }
 
@@ -163,7 +170,19 @@ export function setState(patch: Partial<State> | ((current: State) => Partial<St
 			// Preferences are a convenience; the app works without them.
 		}
 	}
+	if ("app" in next || "selected" in next || "split" in next) reportVisible();
 	for (const listener of listeners) listener();
+}
+
+let visibleKey: string | undefined;
+
+/** Tells the host which sessions are on screen, so their runs finish read and they are never unloaded for being idle. */
+function reportVisible(): void {
+	const paths = visibleSessions(state.split[state.app], state.selected[state.app]);
+	const key = paths.join("\n");
+	if (key === visibleKey) return;
+	visibleKey = key;
+	void trivium.setVisible(paths).catch(console.error);
 }
 
 export function useStore<T>(select: (state: State) => T): T {
@@ -301,10 +320,12 @@ function handleEvent(event: HostEvent): void {
 		case "unloaded": {
 			const gone = new Set(event.paths);
 			setState((s) => ({ views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))) }));
-			// The session on screen reloads at once with the new setup.
-			const { selected, app, page } = getState();
+			// The sessions on screen reload at once with the new setup.
+			const { selected, split, app, page } = getState();
 			const current = selected[app];
 			if (current && gone.has(current) && page === "main") void loadSession(current, navigation);
+			const beside = split[app]?.find((path) => path !== current);
+			if (beside && gone.has(beside) && page === "main") void loadBeside(beside);
 			break;
 		}
 	}
@@ -475,6 +496,7 @@ async function loadSession(path: string, ticket: number): Promise<void> {
 		setState((s) => ({
 			views: { ...s.views, [path]: view },
 			selected: { ...s.selected, [view.app]: path },
+			split: withSplit(s.split, view.app, showInSplit(s.split[view.app], s.selected[view.app], path)),
 			app: view.app,
 			peek: false,
 			overlay: null,
@@ -485,6 +507,80 @@ async function loadSession(path: string, ticket: number): Promise<void> {
 	if (shown) show();
 	else transition(before.app === view.app ? "session" : "app", show);
 	void refreshModels();
+}
+
+function withSplit(split: State["split"], app: AppId, pair: Split | undefined): State["split"] {
+	const { [app]: _, ...rest } = split;
+	return pair ? { ...rest, [app]: pair } : rest;
+}
+
+/** Loads a session for the half of the split that is not focused, without moving focus to it. */
+async function loadBeside(path: string): Promise<void> {
+	const view = await attempt(() => trivium.openSession(path));
+	if (view) setState((s) => ({ views: { ...s.views, [path]: view } }));
+}
+
+/** Loads the half of the app's split that is not focused, when it is not loaded yet. */
+function loadSplit(app: AppId): void {
+	const { split, selected, views } = getState();
+	const beside = split[app]?.find((path) => path !== selected[app]);
+	if (beside && !views[beside]) void loadBeside(beside);
+}
+
+/**
+ * Shows a session beside the focused one, or in the given half (0 is the left), and focuses it. A session of
+ * another app, or with no session on screen to pair it with, opens as usual.
+ */
+export async function openInSplit(path: string, side?: 0 | 1): Promise<void> {
+	const before = getState();
+	const app = before.sessions.find((session) => session.path === path)?.app ?? before.views[path]?.app;
+	const pair = app === before.app && before.page === "main" ? placeInSplit(before.split[app], before.selected[app], path, side) : undefined;
+	if (!app || !pair) return openSession(path);
+	const ticket = ++navigation;
+	const view = before.views[path] ?? (await attempt(() => trivium.openSession(path)));
+	if (!view) return;
+	if (ticket !== navigation) {
+		setState((s) => ({ views: { ...s.views, [path]: view } }));
+		return;
+	}
+	transition("session", () =>
+		setState((s) => ({
+			views: { ...s.views, [path]: view },
+			selected: { ...s.selected, [app]: path },
+			split: withSplit(s.split, app, pair),
+			peek: false,
+			overlay: null,
+			sessions: s.sessions.map((session) => (session.path === path ? { ...session, unread: false } : session)),
+		})),
+	);
+}
+
+/** Makes one half of the split the one the keyboard, the sidebar and the side panel act on. */
+export function focusPane(path: string): void {
+	const { app, selected, split } = getState();
+	if (selected[app] !== path && split[app]?.includes(path)) setState((s) => ({ selected: { ...s.selected, [app]: path } }));
+}
+
+/** Closes one half of the split; the other session fills the card. */
+export function closePane(path: string): void {
+	const { app, split } = getState();
+	const other = split[app]?.find((item) => item !== path);
+	if (!other) return;
+	transition("session", () => setState((s) => ({ split: withSplit(s.split, app, undefined), selected: { ...s.selected, [app]: other } })));
+}
+
+/** Closes the split, keeping the focused session, or opens the latest other session beside the one on screen. */
+export function toggleSplit(): void {
+	const { app, selected, split, sessions } = getState();
+	const focused = selected[app];
+	if (!focused) return;
+	const beside = split[app]?.find((path) => path !== focused);
+	if (beside) {
+		closePane(beside);
+		return;
+	}
+	const latest = sessions.find((session) => session.app === app && session.path !== focused);
+	if (latest) void openInSplit(latest.path);
 }
 
 export async function refreshModels(): Promise<void> {
@@ -505,7 +601,13 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 	if (ticket !== navigation) setState(keep);
 	else
 		transition(getState().app === input.app ? "session" : "app", () =>
-			setState((s) => ({ ...keep(s), selected: { ...s.selected, [input.app]: view.path }, app: input.app, overlay: null })),
+			setState((s) => ({
+				...keep(s),
+				selected: { ...s.selected, [input.app]: view.path },
+				split: withSplit(s.split, input.app, showInSplit(s.split[input.app], s.selected[input.app], view.path)),
+				app: input.app,
+				overlay: null,
+			})),
 		);
 	void refreshSessions();
 	void refreshModels();
@@ -610,7 +712,13 @@ export async function forkFrom(path: string, run: number): Promise<void> {
 	if (ticket !== navigation) setState(keep);
 	else
 		transition("session", () =>
-			setState((s) => ({ ...keep(s), selected: { ...s.selected, [view.app]: view.path }, app: view.app, overlay: null })),
+			setState((s) => ({
+				...keep(s),
+				selected: { ...s.selected, [view.app]: view.path },
+				split: withSplit(s.split, view.app, showInSplit(s.split[view.app], s.selected[view.app], view.path)),
+				app: view.app,
+				overlay: null,
+			})),
 		);
 	void refreshSessions();
 }
@@ -622,6 +730,7 @@ export function switchApp(app: AppId): void {
 	transition(page === "main" ? "app" : "page", () => setState({ app, peek: false, page: "main" }));
 	const path = getState().selected[app];
 	if (path && !getState().views[path]) void loadSession(path, ticket);
+	loadSplit(app);
 }
 
 /** Shows a confirm dialog and resolves with the answer. */
@@ -655,7 +764,7 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		queued: Object.fromEntries(Object.entries(s.queued).filter(([path]) => !gone.has(path))),
 		sessions: s.sessions.filter((session) => !gone.has(session.path)),
 		views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))),
-		selected: Object.fromEntries(Object.entries(s.selected).filter(([, path]) => !gone.has(path ?? ""))),
+		...withoutSessions(s.split, s.selected, (path) => gone.has(path)),
 		dialogs: s.dialogs.filter((dialog) => !gone.has(dialog.sessionPath)),
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
 		panelTabs: Object.fromEntries(Object.entries(s.panelTabs).filter(([path]) => !gone.has(path))),
@@ -691,6 +800,7 @@ export function closeSettings(): void {
 	const { selected, app, views } = getState();
 	const path = selected[app];
 	if (path && !views[path]) void loadSession(path, navigation);
+	loadSplit(app);
 }
 
 /** Installs the release found and restarts, or opens its page when Trivium can't install it itself. */
@@ -747,17 +857,20 @@ export async function init(): Promise<void> {
 	const sessions = await refreshSessions();
 	// Forget remembered sessions that are gone or filed under another app, so switching apps never opens them.
 	if (sessions) {
-		setState((s) => ({
-			selected: Object.fromEntries(
-				Object.entries(s.selected).filter(([app, path]) => sessions.some((session) => session.path === path && session.app === app)),
-			),
-		}));
+		setState((s) => {
+			const elsewhere = (app: string) => (path: string) => !sessions.some((session) => session.path === path && session.app === app);
+			const selected = Object.fromEntries(Object.entries(s.selected).filter(([app, path]) => path && !elsewhere(app)(path)));
+			const split = Object.fromEntries(Object.entries(s.split).filter(([app, pair]) => pair && !pair.some(elsewhere(app))));
+			return withoutSessions(split, selected, () => false);
+		});
 	}
+	reportVisible();
 	await refreshModels();
 	const { app, selected } = getState();
 	const path = selected[app];
 	if (path && getState().sessions.some((session) => session.path === path)) await openSession(path);
+	loadSplit(app);
 }
 
 // Lets development scripts (TRIVIUM_EVAL) drive the UI the same way the components do.
-Object.assign(window, { triviumDebug: { getState, setState, openSession, startSession, switchApp, openSettings, openPreview } });
+Object.assign(window, { triviumDebug: { getState, setState, openSession, openInSplit, closePane, startSession, switchApp, openSettings, openPreview } });

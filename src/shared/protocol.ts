@@ -763,6 +763,8 @@ export interface TriviumApi {
 	recentProjects(): Promise<string[]>;
 	pickFolder(): Promise<string | undefined>;
 	openSession(path: string): Promise<SessionView>;
+	/** Says which sessions are on screen: one, or both halves of a split. */
+	setVisible(paths: string[]): Promise<void>;
 	newSession(input: NewSessionInput): Promise<SessionView>;
 	/** Sends a new version of a run's message, in place of it and the replies that followed. */
 	editMessage(path: string, run: number, text: string): Promise<void>;

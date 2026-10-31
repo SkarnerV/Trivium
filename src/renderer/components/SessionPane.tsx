@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName, duration } from "../format.ts";
-import { AppIcon, BranchIcon, CheckIcon, Chevron, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
-import { attempt, editMessage, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
+import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
+import { attempt, closePane, editMessage, focusPane, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
@@ -333,7 +333,28 @@ function ServicesButton({ view }: { view: SessionView }) {
 	);
 }
 
-export function SessionPane({ view }: { view: SessionView }) {
+/** Where a pane sits in a split view. */
+export interface PaneSplit {
+	/** The pane the keyboard, the sidebar and the side panel act on. */
+	focused: boolean;
+	/** Too narrow for both halves: the two sessions, left first, as tabs in this pane's header. */
+	tabs?: readonly [SessionView, SessionView];
+}
+
+/** Switches between the halves of a split when only one fits. */
+function SplitTabs({ tabs, current }: { tabs: readonly [SessionView, SessionView]; current: string }) {
+	return (
+		<div className="split-tabs" role="tablist" aria-label={t("Sessions in split view")}>
+			{tabs.map((tab) => (
+				<button key={tab.path} type="button" role="tab" aria-selected={tab.path === current} title={tab.title} onClick={() => focusPane(tab.path)}>
+					<span className="ellipsis">{tab.title}</span>
+				</button>
+			))}
+		</div>
+	);
+}
+
+export function SessionPane({ view, split }: { view: SessionView; split?: PaneSplit }) {
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
@@ -345,15 +366,19 @@ export function SessionPane({ view }: { view: SessionView }) {
 	const preview = useMemo(() => (app === "code" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	return (
-		<main className={`pane${summary ? " has-summary" : ""}`}>
+		<main className={`pane${summary ? " has-summary" : ""}`} aria-label={split ? view.title : undefined}>
 			<header className="pane-head drag">
-				<div className="crumb">
-					<span className="project-name" title={view.cwd}>
-						{view.chat ? t("Chats") : baseName(view.cwd)}
-					</span>
-					<span className="project-name">/</span>
-					<h1 className="ellipsis">{view.title}</h1>
-				</div>
+				{split?.tabs ? (
+					<SplitTabs tabs={split.tabs} current={view.path} />
+				) : (
+					<div className="crumb">
+						<span className="project-name" title={view.cwd}>
+							{view.chat ? t("Chats") : baseName(view.cwd)}
+						</span>
+						<span className="project-name">/</span>
+						<h1 className="ellipsis">{view.title}</h1>
+					</div>
+				)}
 				<ServicesButton view={view} />
 				{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 				{app === "code" ? (
@@ -368,6 +393,18 @@ export function SessionPane({ view }: { view: SessionView }) {
 					>
 						<PanelRightIcon size={15} />
 						<span>{t({ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)])}</span>
+					</button>
+				)}
+				{split && (
+					<button
+						type="button"
+						className="icon-btn pane-close"
+						aria-label={t(split.tabs ? "Close split view" : "Close this pane")}
+						title={t(split.tabs ? "Close split view" : "Close this pane")}
+						// With tabs, closing keeps the session showing.
+						onClick={() => closePane(split.tabs?.find((tab) => tab.path !== view.path)?.path ?? view.path)}
+					>
+						<CloseIcon size={14} />
 					</button>
 				)}
 			</header>
@@ -402,7 +439,7 @@ export function SessionPane({ view }: { view: SessionView }) {
 					</button>
 				)}
 			</div>
-			<Composer key={view.path} view={view} />
+			<Composer key={view.path} view={view} focus={!split || split.focused} />
 		</main>
 	);
 }

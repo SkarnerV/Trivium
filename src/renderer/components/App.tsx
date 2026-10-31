@@ -3,7 +3,7 @@ import { appIconFilename } from "../../shared/branding.ts";
 import type { AppId, Notice } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
-import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, trivium, useStore } from "../store.ts";
+import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, toggleSplit, trivium, useStore } from "../store.ts";
 import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
 import { panelFor, panelKind, panelOpen } from "../panels.ts";
 import { commandKey, IS_WINDOWS } from "../platform.ts";
@@ -14,7 +14,8 @@ import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
-import { EmptyPane, SessionPane } from "./SessionPane.tsx";
+import { Panes } from "./Panes.tsx";
+import { EmptyPane } from "./SessionPane.tsx";
 import { MemoryPage } from "./Memory.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { AppSwitcher, PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
@@ -120,7 +121,9 @@ function useShortcuts() {
 				return;
 			}
 			if (state.page !== "main") return;
-			if (/^[1-3]$/.test(event.key) && !state.overlay) {
+			if (event.code === "Backslash" && event.shiftKey) {
+				toggleSplit();
+			} else if (/^[1-3]$/.test(event.key) && !state.overlay) {
 				switchApp(APP_IDS[Number(event.key) - 1]!);
 			} else if (event.key === "n") {
 				setState({ overlay: "new" });
@@ -142,10 +145,10 @@ function useShortcuts() {
 function useDialogAlerts() {
 	const dialogs = useStore((s) => s.dialogs);
 	useEffect(() => {
-		const { selected, app, sessions, views } = getState();
+		const { selected, split, app, sessions, views } = getState();
 		for (const dialog of dialogs) {
 			// A session not on screen yet asks in StartingSessionDialog instead.
-			if (dialog.sessionPath === selected[app] || !views[dialog.sessionPath]) continue;
+			if (dialog.sessionPath === selected[app] || split[app]?.includes(dialog.sessionPath) || !views[dialog.sessionPath]) continue;
 			const session = sessions.find((s) => s.path === dialog.sessionPath);
 			notify(session ? t("“{title}” is waiting for your answer", { title: session.title }) : t("A session is waiting for your answer"), "warning");
 		}
@@ -172,10 +175,12 @@ export function App() {
 	const iconApp = page === "settings" ? sectionApp ?? "code" : app;
 	const sidebarWidth = useStore((s) => s.sidebarWidth);
 	const panelWidth = useStore((s) => s.panelWidth);
+	const splitWidth = useStore((s) => s.splitWidth);
 	const vars = page === "settings" ? themeVars(sectionApp ?? sectionTheme(section)) : themeVars(app);
 	const widths: Record<string, string> = {};
 	if (sidebarWidth) widths["--sidebar-width"] = `${sidebarWidth}px`;
 	if (panelWidth) widths["--panel-width"] = `${panelWidth}px`;
+	if (splitWidth) widths["--split-width"] = `${splitWidth}px`;
 	useEffect(() => {
 		const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 		if (favicon) favicon.href = appIconFilename(iconApp);
@@ -214,7 +219,7 @@ export function App() {
 			<div className="workspace">
 				<div className="card">
 					{folded && peek && <PeekPanel />}
-					{view ? <SessionPane view={view} /> : <EmptyPane />}
+					{view ? <Panes view={view} /> : <EmptyPane />}
 					{/* The Code panel has its own empty state, beside the repository's changes. */}
 					{view && open && app === "code" && <ChangesPanel view={view} />}
 					{view && panel === "note" && <NotePanel view={view} />}

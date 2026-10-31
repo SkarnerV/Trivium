@@ -20,6 +20,7 @@ import type {
 	UpdateStatus,
 } from "../shared/protocol.ts";
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
+import type { PermissionModeId } from "../shared/permissions.ts";
 import { type CodeView, codeTab, codeViews } from "./panels.ts";
 import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
@@ -721,6 +722,13 @@ export async function forkFrom(path: string, run: number): Promise<void> {
 			})),
 		);
 	void refreshSessions();
+}
+
+/** Code's permission mode is one for every Code session, so each open one shows the new mode. */
+export function showPermissionMode(level: PermissionModeId): void {
+	setState((s) => ({
+		views: Object.fromEntries(Object.entries(s.views).map(([path, view]) => [path, view.permissions ? { ...view, permissions: { level } } : view])),
+	}));
 }
 
 export function switchApp(app: AppId): void {

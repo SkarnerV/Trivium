@@ -5,7 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 import { getLocale, resolveLocale, setLocale, t, TABLES } from "../src/shared/i18n.ts";
 import { EXPOSURES } from "../src/shared/connectors.ts";
-import { PERMISSION_LEVELS } from "../src/shared/permissions.ts";
+import { PERMISSION_MODES } from "../src/shared/permissions.ts";
 import { RECOMMENDED } from "../src/shared/recommended.ts";
 
 const SRC = join(import.meta.dirname, "..", "src");
@@ -66,7 +66,7 @@ test("every text the code translates has a translation in each language", () => 
 test("text the shared lists hand to t() has a translation in each language", () => {
 	const texts = [
 		...EXPOSURES.flatMap((entry) => [entry.label, entry.hint]),
-		...PERMISSION_LEVELS.flatMap((level) => [level.label, level.hint]),
+		...PERMISSION_MODES.flatMap((mode) => [mode.label, mode.hint]),
 		...Object.values(RECOMMENDED).flatMap((list) => list.flatMap((item) => [item.adds, item.why, ...(item.note ? [item.note] : [])])),
 	];
 	for (const [locale, table] of Object.entries(TABLES)) {

@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
+import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type { ContextInfo, PermissionSettings, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { MoreIcon, PaperclipIcon, PenIcon, QueueIcon, SendIcon, ShieldIcon, SteerIcon, StopIcon, TrashIcon } from "../icons.tsx";
@@ -12,6 +12,7 @@ import {
 	resumeQueue,
 	sendQueuedNow,
 	setState,
+	showPermissionMode,
 	trivium,
 	unqueueMessage,
 	useStore,
@@ -106,30 +107,20 @@ function ModelPicker({ view }: { view: SessionView }) {
 	return <ModelMenu value={view.model} level={view.thinkingLevel} onChange={(k, l) => void change(k, l)} />;
 }
 
-/** pi-permission-system's level. Its config is shared, so the choice reaches every session that loads it. */
+/** Code's permission mode. Every Code session shares it, running ones included, from their next tool call. */
 function PermissionPicker({ permissions }: { permissions: PermissionSettings }) {
-	// A config Trivium can't parse is the user's to edit by hand.
-	if (permissions.unreadable) return null;
-	const known = PERMISSION_LEVELS.some((entry) => entry.id === permissions.level);
-	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: t(entry.label) }));
-	if (!known) options.push({ value: "custom", label: t("Your own rules") });
-	const change = async (level: string) => {
-		const next = await attempt(() => trivium.setSessionPermissions(level));
-		if (!next) return;
-		setState((s) => ({
-			views: Object.fromEntries(
-				Object.entries(s.views).map(([path, view]) => [path, view.permissions ? { ...view, permissions: next } : view]),
-			),
-		}));
+	const options: DropdownOption[] = PERMISSION_MODES.map((entry) => ({ value: entry.id, label: t(entry.label) }));
+	const change = async (level: PermissionModeId) => {
+		if (await attempt(() => trivium.setSessionPermissions(level))) showPermissionMode(level);
 	};
 	return (
 		<Dropdown
 			label={t("Permission mode")}
-			value={known ? permissions.level : "custom"}
+			value={permissions.level}
 			options={options}
 			variant="ghost"
 			icon={<ShieldIcon size={13} />}
-			onChange={(value) => value !== "custom" && void change(value)}
+			onChange={(value) => isPermissionMode(value) && void change(value)}
 		/>
 	);
 }

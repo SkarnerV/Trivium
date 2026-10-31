@@ -28,7 +28,8 @@ import { triviumDir, profileInfo } from "./apps.ts";
 import { AttachmentStore } from "./attachments.ts";
 import { ConnectorStore } from "./connectors.ts";
 import { LoginFlow, listProviders } from "./auth.ts";
-import { writePermissionLevel } from "./builtin-packages.ts";
+import { legacyPermissionMode } from "./builtin-packages.ts";
+import { isPermissionMode, type PermissionModeId } from "../shared/permissions.ts";
 import {
 	fetchModels,
 	fetchPresetModels,
@@ -72,6 +73,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: READER_SCHEME, privileges: { sta
 
 mkdirSync(triviumDir, { recursive: true });
 const settings = new SettingsStore(join(triviumDir, "settings.json"));
+// Trivium used to ship pi-permission-system; its own gate starts in the mode closest to the policy that one ran.
+if (!settings.get().permissionMode) void settings.update({ permissionMode: legacyPermissionMode(getAgentDir()) });
 
 /** Menus, dialogs and notifications from this process speak the language the window does. */
 function applyLanguage(): void {
@@ -263,11 +266,18 @@ function registerIpc(): void {
 		await host.installPackage(packageSource(source));
 		return host.describeApp(id);
 	});
-	handle("trivium:setPermissionLevel", async (id: AppId, level: string) => {
-		await writePermissionLevel(getAgentDir(), level);
+	const setPermissionMode = async (level: PermissionModeId) => {
+		if (!isPermissionMode(level)) throw new Error(`Unknown permission mode: ${level}`);
+		await settings.update({ permissionMode: level });
+	};
+	handle("trivium:setPermissionLevel", async (id: AppId, level: PermissionModeId) => {
+		await setPermissionMode(level);
 		return host.describeApp(id);
 	});
-	handle("trivium:setSessionPermissions", (level: string) => writePermissionLevel(getAgentDir(), level));
+	handle("trivium:setSessionPermissions", async (level: PermissionModeId) => {
+		await setPermissionMode(level);
+		return { level };
+	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
 	handle("trivium:exportSession", async (path: string) => {
 		const info = host.exportInfo(path);

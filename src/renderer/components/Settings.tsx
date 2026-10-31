@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { PERMISSION_LEVELS } from "../../shared/permissions.ts";
+import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type {
 	AppDetails,
 	AppId,
@@ -46,6 +46,7 @@ import {
 	refreshModels,
 	type SettingsSection,
 	setState,
+	showPermissionMode,
 	showSettings,
 	trivium,
 	updateSettings,
@@ -892,42 +893,20 @@ function ExtensionRow({
 	);
 }
 
-/** pi-permission-system's level, written to its own config file, which the pi CLI shares. */
-function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSettings; onChange: (level: string) => void }) {
-	const level = PERMISSION_LEVELS.find((entry) => entry.id === permissions.level);
-	const options: DropdownOption[] = PERMISSION_LEVELS.map((entry) => ({ value: entry.id, label: t(entry.label) }));
-	if (!level) options.push({ value: "custom", label: t("Your own rules") });
+/** Code's permission mode. Trivium's own gate reads it on every tool call, so running sessions follow it too. */
+function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSettings; onChange: (level: PermissionModeId) => void }) {
+	const mode = PERMISSION_MODES.find((entry) => entry.id === permissions.level);
+	const options: DropdownOption[] = PERMISSION_MODES.map((entry) => ({ value: entry.id, label: t(entry.label) }));
 	return (
-		<Group
-			title={t("Permissions")}
-			description={t("What pi-permission-system asks you about before it runs. .env files are always blocked.")}
-			footer={tx("Saved in {path}, which the pi CLI also uses. Changes apply when a session loads.", {
-				path: <span className="mono">{shortPath(permissions.path)}</span>,
-			})}
-		>
-			<Item
-				label={t("Mode")}
-				hint={t(
-					level?.hint ??
-						(permissions.unreadable
-							? "The config has comments or isn't plain JSON, so Trivium leaves it to you."
-							: "The config has rules of its own. Choosing a level replaces them."),
-				)}
-			>
-				{permissions.unreadable ? (
-					<button type="button" className="s-btn soft" onClick={() => openFolder(permissions.path.replace(/[\\/][^\\/]+$/, ""))}>
-						<FolderIcon size={14} />
-						{t("Open folder")}
-					</button>
-				) : (
-					<Dropdown
-						label={t("Permission mode")}
-						value={level?.id ?? "custom"}
-						options={options}
-						align="right"
-						onChange={(value) => value !== "custom" && onChange(value)}
-					/>
-				)}
+		<Group title={t("Permissions")} description={t("What Code asks you about before it runs. .env files are always blocked.")}>
+			<Item label={t("Mode")} hint={mode && t(mode.hint)}>
+				<Dropdown
+					label={t("Permission mode")}
+					value={permissions.level}
+					options={options}
+					align="right"
+					onChange={(value) => isPermissionMode(value) && onChange(value)}
+				/>
 			</Item>
 		</Group>
 	);
@@ -1037,7 +1016,7 @@ function AppPage({ app }: { app: AppId }) {
 						const next = await attempt(() => trivium.setPermissionLevel(app, level));
 						if (!next) return;
 						setDetails(next);
-						setTouched(true);
+						showPermissionMode(level);
 					}}
 				/>
 			)}

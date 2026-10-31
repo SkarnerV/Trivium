@@ -21,13 +21,6 @@ export interface Recommendation {
 export const RECOMMENDED: Record<AppId, Recommendation[]> = {
 	code: [
 		{
-			name: "@gotgenes/pi-permission-system",
-			builtIn: true,
-			adds: "Allow, ask or deny rules for tools, bash commands and file paths",
-			why: "Code runs bash and edits files without asking. This asks first for what you choose and blocks files like .env.",
-			note: "Starts with a policy that blocks .env files and asks before rm -rf, sudo, git push and folders outside the project. Edit it in ~/.pi/agent/extensions/pi-permission-system/config.json.",
-		},
-		{
 			name: "@pify/memory",
 			builtIn: true,
 			adds: "memory_write, memory_search, memory_read and /memory",

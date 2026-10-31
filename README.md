@@ -132,8 +132,8 @@ login show "Plan" instead of a cost.
 </p>
 
 - **Per-mode extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that mode. The Add extension dialog recommends pi packages for each mode.
-- **Packages built in.** Each mode ships with pi packages you can remove: memory and subagents everywhere, plus `/plan` and a permission system in Code, document parsing in Research, and PDF export in Write.
-- **Permission levels in Code.** Choose what asks first: risky commands (the default: `rm -rf`, `sudo`, `git push` and folders outside the project), every command, every command and edit, or nothing. `.env` files stay blocked.
+- **Packages built in.** Each mode ships with pi packages you can remove: memory and subagents everywhere, plus `/plan` in Code, document parsing in Research, and PDF export in Write.
+- **Permission modes in Code.** Trivium's own gate, with no rules beyond what each mode says: **Always ask** (every edit and command, except ones that only read), **Accept edits** (edits in the project run; commands ask), **Approve for me** (the default: asks only before `rm -r`, `sudo`, `git push` and changing files outside the project) or **Bypass permissions**. A change applies to running sessions from their next step, and `.env` files stay blocked in every mode.
 - **Per-mode model.** Research on a fast model, Code on your strongest one.
 - **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes. Each provider shows its logo.
 - **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. Built-in providers get the same model list, for a proxy base URL, per-model overrides or models added by ID. It all goes to pi's `models.json`, so the pi CLI offers them too.

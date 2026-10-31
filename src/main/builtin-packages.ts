@@ -1,12 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, sep } from "node:path";
+import { join, sep } from "node:path";
 import type { LoadExtensionsResult, PackageSource } from "@earendil-works/pi-coding-agent";
 import { packageName } from "../shared/packages.ts";
-import { DEFAULT_PERMISSION_LEVEL, PERMISSION_LEVELS, permissionLevelOf, withPermissionLevel } from "../shared/permissions.ts";
-import type { AppId, PermissionSettings } from "../shared/protocol.ts";
-import { t } from "../shared/i18n.ts";
+import { DEFAULT_PERMISSION_MODE, type PermissionModeId } from "../shared/permissions.ts";
+import type { AppId } from "../shared/protocol.ts";
 import { builtInPackages } from "../shared/recommended.ts";
 
 const require = createRequire(import.meta.url);
@@ -68,53 +66,20 @@ export function dropClashingBuiltIns(result: LoadExtensionsResult, builtInDirs: 
 	};
 }
 
-export const PERMISSION_PACKAGE = "@gotgenes/pi-permission-system";
-
-export const permissionConfigPath = (agentDir: string): string => join(agentDir, "extensions", "pi-permission-system", "config.json");
-
-const format = (config: unknown) => `${JSON.stringify(config, null, "\t")}\n`;
-
 /**
- * With no config, pi-permission-system asks before every tool call. The default level keeps Code working as it
- * did and gates what is hard to undo; it is written only when the user has no config of their own.
+ * The mode closest to the pi-permission-system policy Trivium wrote before it had its own gate, so an upgrade keeps
+ * the user's choice: yolo mode was Bypass, a bash policy of "ask" was Always ask, and anything else Approve for me.
  */
-export function ensurePermissionConfig(agentDir: string): void {
-	const file = permissionConfigPath(agentDir);
-	if (existsSync(file)) return;
-	mkdirSync(dirname(file), { recursive: true });
-	writeFileSync(file, format({ permission: DEFAULT_PERMISSION_LEVEL.permission }), { flag: "wx" });
-}
-
-/**
- * The level the config sets. A missing file reads as the default, which the next Code session writes. A file
- * Trivium can't parse as plain JSON, such as one with comments, is left to the user.
- */
-export function readPermissions(agentDir: string): PermissionSettings {
-	const path = permissionConfigPath(agentDir);
-	if (!existsSync(path)) return { path, level: DEFAULT_PERMISSION_LEVEL.id };
+export function legacyPermissionMode(agentDir: string): PermissionModeId {
 	try {
-		const config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-		return { path, level: permissionLevelOf(config)?.id ?? "custom" };
+		const config = JSON.parse(readFileSync(join(agentDir, "extensions", "pi-permission-system", "config.json"), "utf8")) as {
+			yoloMode?: unknown;
+			permission?: { bash?: unknown };
+		};
+		if (config.yoloMode === true) return "bypass";
+		if (config.permission?.bash === "ask") return "ask";
 	} catch {
-		return { path, level: "custom", unreadable: true };
+		// No config, or one Trivium can't read: the default.
 	}
-}
-
-/** Sets a level's policy, keeping the config's other settings. Refuses a file it can't parse rather than lose it. */
-export async function writePermissionLevel(agentDir: string, id: string): Promise<PermissionSettings> {
-	const level = PERMISSION_LEVELS.find((entry) => entry.id === id);
-	if (!level) throw new Error(`Unknown permission level: ${id}`);
-	const path = permissionConfigPath(agentDir);
-	let config: Record<string, unknown> = {};
-	if (existsSync(path)) {
-		try {
-			config = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-		} catch {
-			throw new Error(t("{path} isn't plain JSON, so Trivium won't rewrite it. Edit it directly.", { path }));
-		}
-	}
-	await mkdir(dirname(path), { recursive: true });
-	await writeFile(`${path}.tmp`, format(withPermissionLevel(config, level)));
-	await rename(`${path}.tmp`, path);
-	return { path, level: level.id };
+	return DEFAULT_PERMISSION_MODE;
 }

@@ -42,6 +42,7 @@ import type {
 	HostEvent,
 	ModelOption,
 	NewSessionInput,
+	PermissionSettings,
 	QueueInfo,
 	SessionSummary,
 	SessionView,
@@ -52,7 +53,9 @@ import { APP_IDS } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
 import type { ServiceTracker } from "./services.ts";
-import { activeBuiltIns, dropClashingBuiltIns, ensurePermissionConfig, PERMISSION_PACKAGE, readPermissions } from "./builtin-packages.ts";
+import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
+import { permissionGate } from "./permission-gate.ts";
+import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitDiff, readGitStatus } from "./git.ts";
@@ -82,8 +85,6 @@ interface Live {
 	gitTimer?: ReturnType<typeof setTimeout>;
 	/** When the reply being written sent its first token. */
 	firstTokenAt?: number;
-	/** pi-permission-system loaded, so the composer offers its level. */
-	gated: boolean;
 }
 
 /** A session forked before a message, and that message taken back out to edit and send. */
@@ -845,9 +846,7 @@ export class SessionHost {
 				.listConfiguredPackages()
 				.filter((entry) => entry.scope === "user")
 				.map((entry) => entry.source),
-			permissions: extensions.some((extension) => extension.on && /pi-permission-system/.test(extension.display))
-				? readPermissions(this.agentDir)
-				: undefined,
+			permissions: this.permissionsOf(app),
 		};
 	}
 
@@ -871,8 +870,6 @@ export class SessionHost {
 		const profile = profileFor(app);
 		const appSettings = this.settings.app(app);
 		const builtIns = activeBuiltIns(app, appSettings.removed, settingsManager.getPackages());
-		// Only a session gets a starting policy; looking at Settings writes nothing.
-		if (!options.keepDisabled && builtIns.some((entry) => entry.name === PERMISSION_PACKAGE)) ensurePermissionConfig(this.agentDir);
 		const extensions = [
 			...profile.extensions,
 			...builtIns.map((entry) => entry.dir),
@@ -925,6 +922,7 @@ export class SessionHost {
 						}
 					});
 				},
+				...(app === "code" ? [{ name: "permissions", factory: permissionGate(() => this.permissionMode()) }] : []),
 			],
 		});
 		// Global extensions load first; project resources only once the project is trusted.
@@ -972,7 +970,6 @@ export class SessionHost {
 			unsubscribe: () => {},
 			sentRuns: 0,
 			lastActive: Date.now(),
-			gated: resourceLoader.getExtensions().extensions.some((extension) => /pi-permission-system/.test(extension.resolvedPath)),
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
@@ -1119,8 +1116,17 @@ export class SessionHost {
 			context: this.contextOf(live),
 			queue: this.queueOf(live),
 			changes,
-			permissions: live.gated ? readPermissions(this.agentDir) : undefined,
+			permissions: this.permissionsOf(live.app),
 		};
+	}
+
+	private permissionMode() {
+		return this.settings.get().permissionMode ?? DEFAULT_PERMISSION_MODE;
+	}
+
+	/** Code's sessions run behind the permission gate; the other apps have no bash and keep pi's own behavior. */
+	private permissionsOf(app: AppId): PermissionSettings | undefined {
+		return app === "code" ? { level: this.permissionMode() } : undefined;
 	}
 
 	private titleFor(live: Live): string {

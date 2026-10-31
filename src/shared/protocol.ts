@@ -1,6 +1,7 @@
 // Types shared by the main process, the preload bridge and the renderer.
 
 import type { Language } from "./i18n.ts";
+import type { PermissionModeId } from "./permissions.ts";
 
 export type AppId = "code" | "research" | "write";
 
@@ -299,7 +300,7 @@ export interface SessionView {
 	context?: ContextInfo;
 	queue: QueueInfo;
 	changes: FileChange[];
-	/** Set while pi-permission-system loads in this session. */
+	/** Set in Code, whose sessions run behind the permission gate. */
 	permissions?: PermissionSettings;
 }
 
@@ -427,6 +428,8 @@ export interface TriviumSettings {
 	apps: Record<AppId, AppSettings>;
 	/** Catalog models, as "provider/id", left out of the model picker: the provider doesn't serve them to this login. */
 	hiddenModels: string[];
+	/** Code's permission mode. Unset until Trivium first starts with its own gate, which carries over the old policy. */
+	permissionMode?: PermissionModeId;
 }
 
 export type ExtensionSource = "App" | "Added" | "Trivium" | "Global" | "Project" | "Package" | "Built-in" | "Dev";
@@ -448,13 +451,9 @@ export interface ExtensionInfo {
 	builtIn?: string;
 }
 
-/** pi-permission-system's policy level, from its config file. */
+/** The mode Trivium's permission gate runs Code in, shared by every Code session. */
 export interface PermissionSettings {
-	path: string;
-	/** A level id from PERMISSION_LEVELS, or "custom" for the user's own policy. */
-	level: string;
-	/** The file isn't plain JSON (it may have comments), so Trivium leaves it to the user. */
-	unreadable?: boolean;
+	level: PermissionModeId;
 }
 
 export interface AppDetails {
@@ -471,7 +470,7 @@ export interface AppDetails {
 	loaded: number;
 	/** pi packages installed for every app and the pi CLI, as their sources, such as "npm:pi-web-access". */
 	packages: string[];
-	/** Set while pi-permission-system loads in this app. */
+	/** Set in Code, whose sessions run behind the permission gate. */
 	permissions?: PermissionSettings;
 }
 
@@ -833,10 +832,10 @@ export interface TriviumApi {
 	addExtension(app: AppId): Promise<AppDetails | undefined>;
 	/** Installs a pi package from npm, git or a URL for every app, then describes this app again. */
 	installPackage(app: AppId, source: string): Promise<AppDetails>;
-	/** Writes a permission level to pi-permission-system's config, then describes this app again. */
-	setPermissionLevel(app: AppId, level: string): Promise<AppDetails>;
-	/** Writes a permission level to pi-permission-system's config, which every session reads, from the composer. */
-	setSessionPermissions(level: string): Promise<PermissionSettings>;
+	/** Sets Code's permission mode from Settings, then describes this app again. */
+	setPermissionLevel(app: AppId, level: PermissionModeId): Promise<AppDetails>;
+	/** Sets Code's permission mode from the composer. Every Code session, running ones too, follows it from its next tool call. */
+	setSessionPermissions(level: PermissionModeId): Promise<PermissionSettings>;
 	reloadApp(app: AppId): Promise<string[]>;
 	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */
 	exportSession(path: string): Promise<string | undefined>;

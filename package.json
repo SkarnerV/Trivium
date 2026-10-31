@@ -37,7 +37,6 @@
 		"@earendil-works/pi-agent-core": "1.4.0",
 		"@earendil-works/pi-ai": "1.4.0",
 		"@earendil-works/pi-coding-agent": "1.4.0",
-		"@gotgenes/pi-permission-system": "41.0.0",
 		"@narumitw/pi-plan-mode": "0.59.4",
 		"@pify/memory": "0.14.0",
 		"diff": "8.0.4",

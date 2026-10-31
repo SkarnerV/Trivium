@@ -2,6 +2,25 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-31
+
+### Added
+
+- **Split view.** A session can open beside the one on screen: from **Open in split view** in its sidebar menu, by Ctrl/Cmd-clicking it, by dragging it onto either half of the window, or with Ctrl/Cmd+Shift+\, which also closes the split. The focused half has a ring and is the one the keyboard, the sidebar and the side panel act on. A handle resizes the halves, each has a close button, and each mode remembers its split across restarts. In a window too narrow for both, the focused session shows alone with tabs for both.
+- **Message queue.** A message sent while the agent runs waits in a queue above the message box and goes out when the run ends, one per run. Each queued message can be steered into the running turn, deleted, or taken back into the message box to edit. Stopping a run holds the queue until you send again.
+- **Accept edits** permission mode in Code: edits in the project run without asking; commands ask, except ones that only read.
+
+### Changed
+
+- **Trivium's own permission gate in Code.** Code no longer ships pi-permission-system. Its modes are **Always ask**, **Accept edits**, **Approve for me** (the default) and **Bypass permissions**, and each asks about nothing beyond what its description says. The mode is kept in Trivium's settings and a change reaches running sessions from their next step. `.env` files stay blocked in every mode. On first start Trivium picks the mode closest to the pi-permission-system policy you had.
+- **One Changes view.** Code's Git and Changes views are combined: the session's own changes are listed under **This session**, and in a git repository the view also shows the branch, commits to push or pull, and everything else git reports under **Other uncommitted changes**.
+- Fetching a built-in provider's models turns on the ones its server lists and turns off the rest, so the model picker offers only models your login is served. Models turned off stay listed in the pi CLI.
+- A side panel always leaves the conversation room to read, and a wide sidebar gives way while it is open. In a diff only the lines scroll, so the file's name and buttons stay in view.
+
+### Fixed
+
+- Deleting one queued message no longer clears the whole queue.
+
 ## [0.3.1] - 2026-10-29
 
 ### Fixed
@@ -93,6 +112,7 @@ First preview release: coding, research and writing in one desktop workspace, po
 - Review code diffs, preview research notes with sources, and accept or reject tracked writing changes.
 - Built-in provider logins, custom model endpoints, MCP support and project trust.
 
+[0.4.0]: https://github.com/SkarnerV/Trivium/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/SkarnerV/Trivium/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/SkarnerV/Trivium/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/SkarnerV/Trivium/compare/v0.2.0...v0.2.5

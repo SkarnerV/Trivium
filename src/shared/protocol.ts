@@ -400,6 +400,7 @@ export interface AppProfileInfo {
 	tools: string[];
 	extensionDir: string;
 	extensions: string[];
+	skillDir: string;
 }
 
 export interface AppSettings {
@@ -412,6 +413,8 @@ export interface AppSettings {
 	added: string[];
 	/** Packages Trivium ships for this app that the user removed, by npm name. */
 	removed: string[];
+	/** Skill files pi would load that this app leaves out. */
+	disabledSkills: string[];
 }
 
 export interface TriviumSettings {
@@ -451,6 +454,42 @@ export interface ExtensionInfo {
 	builtIn?: string;
 }
 
+/** Where a skill comes from. "App" is the mode's own folder, whose skills win over others of the same name. */
+export type SkillSource = "App" | "Trivium" | "Global" | "Project" | "Package";
+
+export interface SkillInfo {
+	name: string;
+	description: string;
+	/** Its SKILL.md, or the .md file it is; the key used to turn it off. */
+	path: string;
+	/** Path as shown, shortened. */
+	display: string;
+	source: SkillSource;
+	on: boolean;
+	/** Only runs as /skill:name; the agent isn't told about it. */
+	manual: boolean;
+	/** pi's complaints about it, such as a name that breaks the naming rules. It still loads. */
+	warnings: string[];
+	/** The skill of the same name it replaces in this mode, shortened. */
+	replaces?: string;
+}
+
+/** A skill as the user writes it in Settings. */
+export interface SkillDraft {
+	name: string;
+	description: string;
+	/** The instructions below the frontmatter. */
+	body: string;
+}
+
+/** A skill about to be added from a folder, file or archive. */
+export interface SkillImport {
+	name: string;
+	description: string;
+	/** This mode already has a skill with this name, which adding it would replace. */
+	exists: boolean;
+}
+
 /** The mode Trivium's permission gate runs Code in, shared by every Code session. */
 export interface PermissionSettings {
 	level: PermissionModeId;
@@ -463,7 +502,10 @@ export interface AppDetails {
 	projectDir: string;
 	extensions: ExtensionInfo[];
 	tools: string[];
-	skills: number;
+	/** This mode's own skills folder. */
+	skillDir: string;
+	/** Every skill pi finds for this mode, on or off. Skills extensions add at session start aren't known here. */
+	skills: SkillInfo[];
 	prompts: number;
 	systemPrompt?: string;
 	running: number;
@@ -837,6 +879,24 @@ export interface TriviumApi {
 	/** Sets Code's permission mode from the composer. Every Code session, running ones too, follows it from its next tool call. */
 	setSessionPermissions(level: PermissionModeId): Promise<PermissionSettings>;
 	reloadApp(app: AppId): Promise<string[]>;
+	/** Writes a new skill into this mode's folder, then describes this app again. */
+	createSkill(app: AppId, draft: SkillDraft): Promise<AppDetails>;
+	/** The text of one of this mode's skills. */
+	readSkill(app: AppId, path: string): Promise<string>;
+	/** Replaces the text of one of this mode's skills, then describes this app again. */
+	saveSkill(app: AppId, path: string, text: string): Promise<AppDetails>;
+	/** Asks for a skill to add: a .md file, or a .zip or .skill archive; a folder too on macOS. */
+	pickSkill(): Promise<string | undefined>;
+	/** What adding the skill at this path would add. */
+	inspectSkill(app: AppId, path: string): Promise<SkillImport>;
+	/** Copies a skill from a folder, file or archive into this mode's folder, then describes this app again. */
+	importSkill(app: AppId, path: string, replace: boolean): Promise<AppDetails>;
+	/** Copies a skill this mode can't edit, such as one a package ships, into its folder to edit there. */
+	customizeSkill(app: AppId, path: string): Promise<AppDetails>;
+	/** Shows one of this mode's skills in the system's file manager. */
+	revealSkill(app: AppId, path: string): Promise<void>;
+	/** Moves a skill in this mode's folder to the system Trash, then describes this app again. */
+	deleteSkill(app: AppId, path: string): Promise<AppDetails>;
 	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */
 	exportSession(path: string): Promise<string | undefined>;
 	copyText(text: string): Promise<void>;

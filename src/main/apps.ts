@@ -5,7 +5,7 @@ import type { AppId, AppProfileInfo } from "../shared/protocol.ts";
 
 /**
  * Each app is a separate agent profile: its own tool set, an addition to the
- * system prompt, and an extension folder loaded on top of the shared ~/.pi/agent setup.
+ * system prompt, and extension and skill folders loaded on top of the shared ~/.pi/agent setup.
  */
 interface AppProfile {
 	id: AppId;
@@ -46,6 +46,13 @@ function extensionDir(app: AppId): string {
 	return join(triviumDir, "apps", app, "extensions");
 }
 
+/** Skills only this app loads. One wins over a skill of the same name from pi's own folders. */
+export function skillDir(app: AppId): string {
+	const dir = join(triviumDir, "apps", app, "skills");
+	mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 function extensionFiles(app: AppId): string[] {
 	const dir = extensionDir(app);
 	mkdirSync(dir, { recursive: true });
@@ -66,8 +73,8 @@ function resolveTools(changes: string[] | undefined): string[] {
 	return [...tools];
 }
 
-export function profileFor(app: AppId): AppProfile & { extensions: string[] } {
-	return { ...PROFILES[app], extensions: extensionFiles(app) };
+export function profileFor(app: AppId): AppProfile & { extensions: string[]; skillDir: string } {
+	return { ...PROFILES[app], extensions: extensionFiles(app), skillDir: skillDir(app) };
 }
 
 export function profileInfo(app: AppId): AppProfileInfo {
@@ -77,5 +84,6 @@ export function profileInfo(app: AppId): AppProfileInfo {
 		tools: resolveTools(profile.tools),
 		extensionDir: extensionDir(app),
 		extensions: profile.extensions,
+		skillDir: profile.skillDir,
 	};
 }

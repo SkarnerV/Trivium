@@ -46,12 +46,16 @@ import type {
 	QueueInfo,
 	SessionSummary,
 	SessionView,
+	SkillDraft,
+	SkillImport,
+	SkillInfo,
 	SlashCommand,
 	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
-import { chatsDir, profileFor, profileInfo, triviumDir } from "./apps.ts";
+import { chatsDir, profileFor, profileInfo, skillDir, triviumDir } from "./apps.ts";
+import * as skillFiles from "./skills.ts";
 import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { permissionGate } from "./permission-gate.ts";
@@ -830,6 +834,26 @@ export class SessionHost {
 		}
 		const order: ExtensionSource[] = ["App", "Added", "Trivium", "Global", "Package", "Project", "Built-in", "Dev"];
 		extensions.sort((a, b) => order.indexOf(a.source) - order.indexOf(b.source));
+		const skillDiagnostics = loader.getSkills().diagnostics;
+		const disabledSkills = new Set(appSettings.disabledSkills);
+		const skillOrder = ["App", "Global", "Trivium", "Package", "Project"];
+		const skills: SkillInfo[] = loader
+			.getSkills()
+			.skills.map((skill) => {
+				const replaced = skillDiagnostics.find((d) => d.collision?.resourceType === "skill" && d.collision.winnerPath === skill.filePath);
+				return {
+					name: skill.name,
+					description: skill.description,
+					path: skill.filePath,
+					display: shortPath(skill.filePath),
+					source: skillFiles.skillSource(skill, profile.skillDir, builtIns.map((entry) => entry.dir)),
+					on: !disabledSkills.has(skill.filePath),
+					manual: skill.disableModelInvocation,
+					warnings: skillDiagnostics.filter((d) => d.type === "warning" && d.path === skill.filePath).map((d) => d.message),
+					replaces: replaced?.collision && shortPath(replaced.collision.loserPath),
+				};
+			})
+			.sort((a, b) => skillOrder.indexOf(a.source) - skillOrder.indexOf(b.source) || a.name.localeCompare(b.name));
 		const lives = [...this.live.values()].filter((live) => live.app === app);
 		return {
 			id: app,
@@ -837,7 +861,8 @@ export class SessionHost {
 			projectDir,
 			extensions,
 			tools: profile.tools,
-			skills: loader.getSkills().skills.length,
+			skillDir: profile.skillDir,
+			skills,
 			prompts: loader.getPrompts().prompts.length,
 			systemPrompt: profileFor(app).appendSystemPrompt,
 			running: lives.filter((live) => live.running).length,
@@ -848,6 +873,60 @@ export class SessionHost {
 				.map((entry) => entry.source),
 			permissions: this.permissionsOf(app),
 		};
+	}
+
+	async createSkill(app: AppId, draft: SkillDraft): Promise<AppDetails> {
+		await skillFiles.createSkill(skillDir(app), draft);
+		return this.describeApp(app);
+	}
+
+	async readSkill(app: AppId, path: string): Promise<string> {
+		return skillFiles.readSkill(await this.skillPath(app, path));
+	}
+
+	async saveSkill(app: AppId, path: string, text: string): Promise<AppDetails> {
+		await skillFiles.saveSkill(await this.skillPath(app, path), text);
+		return this.describeApp(app);
+	}
+
+	async inspectSkill(app: AppId, path: string): Promise<SkillImport> {
+		const found = await skillFiles.findSkill(path);
+		await found.dispose();
+		return { name: found.name, description: found.description, exists: existsSync(join(skillDir(app), found.name)) };
+	}
+
+	async importSkill(app: AppId, path: string, replace: boolean, trash: (path: string) => Promise<void>): Promise<AppDetails> {
+		const found = await skillFiles.findSkill(path);
+		try {
+			await skillFiles.addSkill(skillDir(app), found, replace ? trash : undefined);
+		} finally {
+			await found.dispose();
+		}
+		return this.describeApp(app);
+	}
+
+	/** A copy in the app's folder replaces the original in this app only, and updating its package leaves the copy alone. */
+	async customizeSkill(app: AppId, path: string): Promise<AppDetails> {
+		const file = await this.skillPath(app, path);
+		return this.importSkill(app, basename(file) === "SKILL.md" ? dirname(file) : file, false, async () => {});
+	}
+
+	async deleteSkill(app: AppId, path: string, trash: (path: string) => Promise<void>): Promise<AppDetails> {
+		const target = skillFiles.skillTarget(await this.skillPath(app, path), skillDir(app));
+		await trash(target);
+		const appSettings = this.settings.app(app);
+		if (appSettings.disabledSkills.includes(path)) {
+			const disabledSkills = appSettings.disabledSkills.filter((entry) => entry !== path);
+			await this.settings.update({ apps: { ...this.settings.get().apps, [app]: { ...appSettings, disabledSkills } } });
+		}
+		return this.describeApp(app);
+	}
+
+	/** Only a skill this app loads, so the renderer cannot read or write arbitrary files. */
+	async skillPath(app: AppId, path: string): Promise<string> {
+		const details = await this.describeApp(app);
+		if (!details.skills.some((skill) => skill.path === path)) throw new Error(t("That skill is no longer in this mode."));
+		return path;
 	}
 
 	dispose(): void {
@@ -878,6 +957,7 @@ export class SessionHost {
 		// First, so its scripted subagent tool wins over pi-subagents' own, which registers the same name.
 		if (process.env.TRIVIUM_DEV_FAUX) extensions.unshift(devFaux);
 		const disabled = new Set(appSettings.disabled);
+		const disabledSkills = new Set(appSettings.disabledSkills);
 		const appendPrompt = profile.appendSystemPrompt;
 		return new DefaultResourceLoader({
 			cwd,
@@ -886,6 +966,7 @@ export class SessionHost {
 			additionalExtensionPaths: extensions,
 			appendSystemPromptOverride: appendPrompt ? (base) => [...base, appendPrompt] : undefined,
 			extensionFactories: [...builtinExtensions(), ...(options.factories ?? [])],
+			skillsOverride: (loaded) => skillFiles.appSkills(loaded, profile.skillDir, disabledSkills, options.keepDisabled),
 			extensionsOverride: (loaded) => {
 				// A shipped package gives way to the user's own extension with the same tools, unless that one is off here.
 				const base = dropClashingBuiltIns(loaded, builtIns.map((entry) => entry.dir), disabled);

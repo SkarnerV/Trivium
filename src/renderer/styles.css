@@ -4959,6 +4959,48 @@ body.resizing * {
 	min-height: 180px;
 }
 
+.cm-textarea.skill-editor {
+	min-height: 260px;
+}
+
+.s-group-head .btn-row {
+	flex-shrink: 0;
+}
+
+.s-skill-from {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.s-skill-from .s-path {
+	flex: 1;
+	min-width: 0;
+}
+
+.s-skill-from .s-btn {
+	flex-shrink: 0;
+	gap: 5px;
+	background: #fff;
+}
+
+.s-skills .s-card {
+	transition: box-shadow 0.12s ease;
+}
+
+.s-skills.dropping .s-card {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+
+.s-empty.s-skill-none {
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--line);
+	font-size: 12.5px;
+	line-height: 1.45;
+	text-align: left;
+}
+
 .s-chips {
 	display: flex;
 	flex-wrap: wrap;

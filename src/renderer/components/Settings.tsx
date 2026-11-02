@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type DragEvent, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type {
 	AppDetails,
@@ -13,6 +13,8 @@ import type {
 	PermissionSettings,
 	ProviderInfo,
 	SessionUsage,
+	SkillInfo,
+	SkillSource,
 	UsageReport,
 } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
@@ -35,8 +37,9 @@ import { keyName } from "../platform.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
-import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon, TriviumIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon, TriviumIcon, UploadIcon } from "../icons.tsx";
 import {
+	askConfirm,
 	attempt,
 	closeSettings,
 	installUpdate,
@@ -62,6 +65,7 @@ import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 import { PresetModelsDialog } from "./PresetModelsDialog.tsx";
+import { SkillDialog } from "./SkillDialog.tsx";
 
 /* Building blocks */
 
@@ -893,6 +897,116 @@ function ExtensionRow({
 	);
 }
 
+const SKILL_SOURCE_HINT: Record<SkillSource, string> = {
+	App: "In this mode's folder. Only this mode loads it.",
+	Trivium: "Comes with Trivium in one of its packages. Updating Trivium replaces it.",
+	Global: "From ~/.pi/agent/skills or ~/.agents/skills, loaded by every mode and the pi CLI",
+	Project: "From the project's .pi or .agents folder",
+	Package: "From a pi package. Updating the package replaces it.",
+};
+
+/** Skills an update would overwrite; a mode edits its own copy instead. */
+const readOnly = (skill: SkillInfo) => skill.source === "Package" || skill.source === "Trivium";
+
+function SkillRow({
+	skill,
+	mode,
+	onToggle,
+	onEdit,
+	onCustomize,
+	onReveal,
+}: {
+	skill: SkillInfo;
+	/** The mode's name, as shown. */
+	mode: string;
+	onToggle: () => void;
+	onEdit?: () => void;
+	/** For a skill this mode can't edit in place: copies it into the mode's folder to edit there. */
+	onCustomize?: () => void;
+	onReveal: () => void;
+}) {
+	const [open, setOpen] = useState(false);
+	return (
+		<div className={`s-row s-ext${skill.on ? "" : " off"}`}>
+			<div className="s-row-text">
+				<div className="s-ext-title">
+					<span className="s-label mono">{skill.name}</span>
+					<span className={`s-tag src-${skill.source.toLowerCase()}`} title={t(SKILL_SOURCE_HINT[skill.source])}>
+						{t(skill.source === "App" ? "Mode" : skill.source)}
+					</span>
+					{skill.manual && (
+						<span className="s-tag" title={t("The agent isn't told about it; it runs only when you type /skill:{name}.", { name: skill.name })}>
+							{t("Manual")}
+						</span>
+					)}
+					{skill.warnings.length > 0 && (
+						<span className="s-tag warn" title={skill.warnings.join("\n")}>
+							{t(skill.warnings.length === 1 ? "{n} warning" : "{n} warnings", { n: skill.warnings.length })}
+						</span>
+					)}
+				</div>
+				<span className="s-ext-desc">{skill.description}</span>
+				<button type="button" className="s-ext-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+					{t("Details")}
+					<Chevron open={open} size={10} />
+				</button>
+				{open && (
+					<dl className="s-ext-details">
+						<div>
+							<dt>{t("Command")}</dt>
+							<dd className="mono">/skill:{skill.name}</dd>
+						</div>
+						<div>
+							<dt>{t("From")}</dt>
+							<dd className="s-skill-from">
+								<span className="mono s-path" title={skill.path}>
+									{skill.display}
+								</span>
+								<button type="button" className="s-btn s-ext-remove" onClick={onReveal}>
+									<FolderIcon size={13} />
+									{t("Show in folder")}
+								</button>
+							</dd>
+						</div>
+						{skill.replaces && (
+							<div>
+								<dt>{t("Replaces")}</dt>
+								<dd className="mono s-path" title={skill.replaces}>
+									{skill.replaces}
+								</dd>
+							</div>
+						)}
+						{skill.warnings.map((warning) => (
+							<div key={warning}>
+								<dt>{t("Warning")}</dt>
+								<dd>{warning}</dd>
+							</div>
+						))}
+					</dl>
+				)}
+			</div>
+			<div className="s-row-control">
+				{onEdit && (
+					<button type="button" className="s-btn s-ext-remove" onClick={onEdit}>
+						{t("Edit")}
+					</button>
+				)}
+				{onCustomize && (
+					<button
+						type="button"
+						className="s-btn s-ext-remove"
+						title={t("Copies it into {mode}'s skills folder to edit. Your copy replaces this one in {mode} only, and updates leave it alone.", { mode })}
+						onClick={onCustomize}
+					>
+						{t("Customize")}
+					</button>
+				)}
+				<Switch on={skill.on} label={t("Load {name}", { name: skill.name })} onChange={onToggle} />
+			</div>
+		</div>
+	);
+}
+
 /** Code's permission mode. Trivium's own gate reads it on every tool call, so running sessions follow it too. */
 function PermissionsGroup({ permissions, onChange }: { permissions: PermissionSettings; onChange: (level: PermissionModeId) => void }) {
 	const mode = PERMISSION_MODES.find((entry) => entry.id === permissions.level);
@@ -961,9 +1075,59 @@ function AppPage({ app }: { app: AppId }) {
 		setTouched(false);
 		load();
 	};
+	const [editing, setEditing] = useState<SkillInfo | "new">();
+	const toggleSkill = async (skill: SkillInfo) => {
+		const disabledSkills = skill.on
+			? [...appSettings.disabledSkills, skill.path]
+			: appSettings.disabledSkills.filter((path) => path !== skill.path);
+		setDetails((current) => current && { ...current, skills: current.skills.map((s) => (s.path === skill.path ? { ...s, on: !s.on } : s)) });
+		await saveApp({ disabledSkills });
+	};
+	const skillSaved = async (next: AppDetails) => {
+		setDetails(next);
+		setTouched(true);
+		// Deleting a skill that was off also drops it from the settings.
+		showSettings(await trivium.getSettings());
+	};
+	/** Adds a skill from a folder, .md file or archive, asking before it replaces one of the same name. */
+	const uploadSkill = async (path: string) => {
+		const found = await attempt(() => trivium.inspectSkill(app, path));
+		if (!found) return;
+		if (found.exists) {
+			const ok = await askConfirm({
+				title: t("Replace {name}?", { name: found.name }),
+				message: t("{mode} already has a skill named {name}. The one there now goes to the Trash.", { mode: t(THEMES[app].name), name: found.name }),
+				confirmLabel: t("Replace"),
+			});
+			if (!ok) return;
+		}
+		const next = await attempt(() => trivium.importSkill(app, path, found.exists));
+		if (!next) return;
+		await skillSaved(next);
+		notify(t("Added {name}", { name: found.name }), "info");
+	};
+	const pickSkill = async () => {
+		const path = await attempt(() => trivium.pickSkill());
+		if (path) await uploadSkill(path);
+	};
+	const customizeSkill = async (skill: SkillInfo) => {
+		const next = await attempt(() => trivium.customizeSkill(app, skill.path));
+		if (!next) return;
+		await skillSaved(next);
+		const copy = next.skills.find((s) => s.source === "App" && s.name === skill.name);
+		if (copy) setEditing(copy);
+	};
+	const [dropping, setDropping] = useState(false);
+	const dropSkills = async (event: DragEvent) => {
+		event.preventDefault();
+		setDropping(false);
+		const paths = [...event.dataTransfer.files].map((file) => trivium.pathForFile(file)).filter(Boolean);
+		for (const path of paths) await uploadSkill(path);
+	};
 	const theme = THEMES[app];
 	const extensions = details?.extensions ?? [];
 	const onCount = extensions.filter((e) => e.on).length;
+	const skills = details?.skills ?? [];
 	return (
 		<>
 			<PageHeader
@@ -985,7 +1149,7 @@ function AppPage({ app }: { app: AppId }) {
 				<div className="s-stats">
 					<span>{tx("{on} of {total} extensions on", { on: <strong>{onCount}</strong>, total: extensions.length })}</span>
 					<span>{tx("{n} tools", { n: <strong>{details.tools.length}</strong> })}</span>
-					<span>{tx("{n} skills", { n: <strong>{details.skills}</strong> })}</span>
+					<span>{tx("{on} of {total} skills on", { on: <strong>{skills.filter((s) => s.on).length}</strong>, total: skills.length })}</span>
 					<span>{tx("{n} prompts", { n: <strong>{details.prompts}</strong> })}</span>
 					<span>{details.running ? tx("{n} running", { n: <strong>{details.running}</strong> }) : t("Nothing running")}</span>
 				</div>
@@ -1064,6 +1228,92 @@ function AppPage({ app }: { app: AppId }) {
 					onRestore={(name) => setRemoved(name, false)}
 					onClose={() => setAdding(false)}
 					onAdded={(next) => void added(next)}
+				/>
+			)}
+
+			<div
+				className={`s-skills${dropping ? " dropping" : ""}`}
+				onDragOver={(event) => {
+					if (!details || !event.dataTransfer.types.includes("Files")) return;
+					event.preventDefault();
+					event.dataTransfer.dropEffect = "copy";
+					setDropping(true);
+				}}
+				onDragLeave={(event) => {
+					if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+				}}
+				onDrop={(event) => void dropSkills(event)}
+			>
+				<Group
+					title={t("Skills")}
+					description={t("Instructions the agent follows when a task calls for them. This mode's own skills replace pi's skills of the same name.")}
+					aside={
+						details && (
+							<span className="btn-row">
+								<button
+									type="button"
+									className="s-btn soft"
+									title={t("Skills only {mode} loads. The others stay where they come from.", { mode: t(theme.name) })}
+									onClick={() => openFolder(details.skillDir)}
+								>
+									<FolderIcon size={14} />
+									{t("{mode} skills folder", { mode: t(theme.name) })}
+								</button>
+								<button
+									type="button"
+									className="s-btn soft"
+									title={t("A skill's .md file, or a .zip or .skill archive of its folder. Drop a folder here to add it as it is.")}
+									onClick={() => void pickSkill()}
+								>
+									<UploadIcon size={14} />
+									{t("Upload")}
+								</button>
+								<button type="button" className="s-btn accent" onClick={() => setEditing("new")}>
+									<PlusIcon size={12} width={2.6} />
+									{t("New skill")}
+								</button>
+							</span>
+						)
+					}
+					footer={
+						details &&
+						tx("Drop a skill's folder, .md file or .zip here to add it. Turning a skill off here leaves it on in other modes. Project skills come from {path}.", {
+							path: <span className="mono">{shortPath(details.projectDir)}</span>,
+						})
+					}
+				>
+					{!details && <div className="s-empty">{t("Loading…")}</div>}
+					{details && !skills.length && (
+						<div className="s-empty">
+							{tx("No skills yet. Create one, upload one, or drop a folder with a {file} here.", { file: <span className="mono">SKILL.md</span> })}
+						</div>
+					)}
+					{skills.length > 0 && !skills.some((skill) => skill.source === "App") && (
+						<div className="s-empty s-skill-none">
+							{t("{mode} has no skills of its own yet, so its skills folder is empty. The skills below come from pi and Trivium's packages: Show in folder under Details opens each one's file, and Customize copies one here to edit.", {
+								mode: t(theme.name),
+							})}
+						</div>
+					)}
+					{skills.map((skill) => (
+						<SkillRow
+							key={skill.path}
+							skill={skill}
+							onToggle={() => void toggleSkill(skill)}
+							onReveal={() => void attempt(() => trivium.revealSkill(app, skill.path))}
+							mode={t(theme.name)}
+							onEdit={readOnly(skill) ? undefined : () => setEditing(skill)}
+							onCustomize={readOnly(skill) ? () => void customizeSkill(skill) : undefined}
+						/>
+					))}
+				</Group>
+			</div>
+			{editing && (
+				<SkillDialog
+					app={app}
+					skill={editing === "new" ? undefined : editing}
+					onClose={() => setEditing(undefined)}
+					onSaved={(next) => void skillSaved(next)}
 				/>
 			)}
 

@@ -19,6 +19,7 @@ import type {
 	McpExposure,
 	NewSessionInput,
 	PresetProviderChanges,
+	SkillDraft,
 	TriviumSettings,
 	TrustChoice,
 } from "../shared/protocol.ts";
@@ -279,6 +280,25 @@ function registerIpc(): void {
 		return { level };
 	});
 	handle("trivium:reloadApp", (id: AppId) => host.reloadApp(id));
+	handle("trivium:createSkill", (id: AppId, draft: SkillDraft) => host.createSkill(id, draft));
+	handle("trivium:readSkill", (id: AppId, path: string) => host.readSkill(id, path));
+	handle("trivium:saveSkill", (id: AppId, path: string, text: string) => host.saveSkill(id, path, text));
+	handle("trivium:pickSkill", async () => {
+		const result = await dialog.showOpenDialog(window!, {
+			title: t("Upload a skill"),
+			// Windows and Linux can't pick files and folders in one dialog; a folder can be dropped instead.
+			properties: process.platform === "darwin" ? ["openFile", "openDirectory"] : ["openFile"],
+			filters: [{ name: t("Skills"), extensions: ["md", "zip", "skill"] }],
+		});
+		return result.canceled ? undefined : result.filePaths[0];
+	});
+	handle("trivium:inspectSkill", (id: AppId, path: string) => host.inspectSkill(id, path));
+	handle("trivium:importSkill", (id: AppId, path: string, replace: boolean) =>
+		host.importSkill(id, path, replace, (target) => shell.trashItem(target)),
+	);
+	handle("trivium:customizeSkill", (id: AppId, path: string) => host.customizeSkill(id, path));
+	handle("trivium:revealSkill", async (id: AppId, path: string) => shell.showItemInFolder(await host.skillPath(id, path)));
+	handle("trivium:deleteSkill", (id: AppId, path: string) => host.deleteSkill(id, path, (target) => shell.trashItem(target)));
 	handle("trivium:exportSession", async (path: string) => {
 		const info = host.exportInfo(path);
 		const result = await dialog.showSaveDialog(window!, {

@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from
 import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type { ContextInfo, PermissionSettings, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
-import { MoreIcon, PaperclipIcon, PenIcon, QueueIcon, SendIcon, ShieldIcon, SteerIcon, StopIcon, TrashIcon } from "../icons.tsx";
+import { PaperclipIcon, PenIcon, QueueIcon, SendIcon, ShieldIcon, SteerIcon, StopIcon, TrashIcon } from "../icons.tsx";
 import {
 	attempt,
 	deleteQueued,
@@ -19,7 +19,6 @@ import {
 } from "../store.ts";
 import { AttachmentChips, useAttachments } from "./Attachments.tsx";
 import { CommandMenu, useCommandMenu } from "./CommandMenu.tsx";
-import { ContextMenu } from "./ContextMenu.tsx";
 import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { ModelMenu } from "./ModelSelect.tsx";
 import { keyCombo, keyName } from "../platform.ts";
@@ -126,9 +125,6 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 }
 
 function QueuedRow({ path, message, running, onEdit }: { path: string; message: QueuedMessage; running: boolean; onEdit: () => void }) {
-	const [menu, setMenu] = useState<{ x: number; y: number }>();
-	// The click that closes the menu also reaches the button; it should not open the menu again.
-	const closed = useRef(0);
 	const files = message.attachments.map((item) => item.name).join(", ");
 	return (
 		<div className="tray-row">
@@ -151,36 +147,12 @@ function QueuedRow({ path, message, running, onEdit }: { path: string; message: 
 				<SteerIcon />
 				{t(running ? "Steer" : "Send")}
 			</button>
+			<button type="button" className="mini-btn" aria-label={t("Edit")} title={t("Edit")} onClick={onEdit}>
+				<PenIcon size={13} />
+			</button>
 			<button type="button" className="mini-btn" aria-label={t("Delete queued message")} title={t("Delete")} onClick={() => deleteQueued(path, message.id)}>
 				<TrashIcon size={13} />
 			</button>
-			<button
-				type="button"
-				className="mini-btn"
-				aria-label={t("More")}
-				title={t("More")}
-				aria-expanded={Boolean(menu)}
-				onClick={(event) => {
-					if (Date.now() - closed.current < 300) return;
-					const rect = event.currentTarget.getBoundingClientRect();
-					setMenu({ x: rect.right, y: rect.top - 6 });
-				}}
-			>
-				<MoreIcon size={14} />
-			</button>
-			{menu && (
-				<ContextMenu
-					x={menu.x}
-					y={menu.y}
-					align="right"
-					label={t("More")}
-					entries={[{ label: t("Edit"), icon: <PenIcon size={14} />, onSelect: onEdit }]}
-					onClose={() => {
-						closed.current = Date.now();
-						setMenu(undefined);
-					}}
-				/>
-			)}
 		</div>
 	);
 }

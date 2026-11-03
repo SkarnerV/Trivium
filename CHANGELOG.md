@@ -2,6 +2,21 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-03
+
+### Added
+
+- **Diagrams in the Markdown preview.** Fenced `mermaid` blocks, and `plantuml`, `puml` or `uml` blocks, in a Markdown file open in Preview show as diagrams. Mermaid draws inside Trivium and loads only when a document has a Mermaid diagram. PlantUML uses the PlantUML on your computer: the jar `PLANTUML_JAR` names, run with Java, or a `plantuml` command on your PATH. It can use its standard library, such as C4, but not other files or the network. Diagrams show as images, so they never run scripts. A diagram that can't be drawn shows its code and the reason, such as PlantUML not being installed.
+- **Skills in Settings.** Each mode's Settings page lists the skills it loads, with where each comes from, its `/skill:` command and any warnings, and a switch that turns one off for that mode only. Create a skill from a name, description and instructions, edit its SKILL.md, delete it to the Trash, or upload a folder, a `.md` file or a `.zip`/`.skill` archive by button or by dropping it on the section. A mode's own skills live in `~/.trivium/apps/<mode>/skills` and replace pi's skill of the same name; **Customize** copies a built-in or package skill there to edit.
+
+### Changed
+
+- A queued message has its own edit button, instead of being edited from a menu.
+
+### Fixed
+
+- The summary cards stay in view above a long conversation in a narrow pane.
+
 ## [0.4.0] - 2026-10-31
 
 ### Added

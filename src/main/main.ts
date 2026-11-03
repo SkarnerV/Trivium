@@ -49,6 +49,7 @@ import { installNodeHost } from "./node-host.ts";
 import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
+import { renderPlantUml } from "./plantuml.ts";
 import { READER_SCHEME, ReaderStore } from "./reader.ts";
 import { ServiceTracker } from "./services.ts";
 import { SettingsStore } from "./settings.ts";
@@ -427,6 +428,7 @@ function registerIpc(): void {
 	handle("trivium:reloadReader", (id: string) => reader.reload(id));
 	handle("trivium:setReaderScripts", (id: string, on: boolean) => reader.setScripts(id, Boolean(on)));
 	handle("trivium:closeReader", (id: string) => reader.close(id));
+	handle("trivium:renderPlantUml", (code: string) => renderPlantUml(String(code)));
 	handle("trivium:imageData", (path: string, id: string) => {
 		const image = host.image(path, id);
 		return `data:${image.mimeType};base64,${image.data}`;

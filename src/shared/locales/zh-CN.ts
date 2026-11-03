@@ -1053,4 +1053,11 @@ export default {
 	"Drop a skill's folder, .md file or .zip here to add it. Turning a skill off here leaves it on in other modes. Project skills come from {path}.": "把技能的文件夹、.md 文件或 .zip 拖到这里即可添加。在这里关闭技能不会影响其他模式。项目技能来自 {path}。",
 	"No skills yet. Create one, upload one, or drop a folder with a {file} here.": "还没有技能。新建、上传，或把包含 {file} 的文件夹拖到这里。",
 	"{mode} has no skills of its own yet, so its skills folder is empty. The skills below come from pi and Trivium's packages: Show in folder under Details opens each one's file, and Customize copies one here to edit.": "{mode}还没有自己的技能，所以它的技能文件夹是空的。下面的技能来自 pi 和 Trivium 的包：在“详情”中点“在文件夹中显示”可打开对应文件，点“自定义”可复制到此模式中编辑。",
+	"PlantUML isn't installed or isn't on your PATH. Install it, or set PLANTUML_JAR to a plantuml.jar and have Java installed.": "未安装 PlantUML，或它不在 PATH 中。请安装 PlantUML，或将 PLANTUML_JAR 设为 plantuml.jar 的路径并安装 Java。",
+	"PlantUML took too long to draw this diagram.": "PlantUML 绘制此图表的时间过长。",
+	"PlantUML couldn't draw this diagram.": "PlantUML 无法绘制此图表。",
+	"The diagram came back empty.": "图表绘制结果为空。",
+	"{name} diagram": "{name} 图表",
+	"Couldn't draw this {name} diagram: {error}": "无法绘制此 {name} 图表：{error}",
+	"Drawing diagram…": "正在绘制图表…",
 } satisfies Record<string, string>;

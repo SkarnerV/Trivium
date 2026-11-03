@@ -57,6 +57,7 @@ const api: TriviumApi = {
 	reloadReader: call("reloadReader") as TriviumApi["reloadReader"],
 	setReaderScripts: call("setReaderScripts") as TriviumApi["setReaderScripts"],
 	closeReader: call("closeReader") as TriviumApi["closeReader"],
+	renderPlantUml: call("renderPlantUml") as TriviumApi["renderPlantUml"],
 	imageData: call("imageData") as TriviumApi["imageData"],
 	saveImage: call("saveImage") as TriviumApi["saveImage"],
 	reviewFile: call("reviewFile") as TriviumApi["reviewFile"],

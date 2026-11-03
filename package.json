@@ -51,6 +51,7 @@
 		"electron": "45.0.0",
 		"electron-builder": "26.18.0",
 		"esbuild": "0.28.2",
+		"mermaid": "12.2.0",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
 		"resedit": "3.1.0",

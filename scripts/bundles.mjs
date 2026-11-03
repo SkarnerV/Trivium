@@ -25,9 +25,12 @@ export const bundles = {
 		format: "cjs",
 		external: ["electron"],
 	},
+	// Split so a heavy library the renderer imports on demand, such as Mermaid, loads only when needed.
 	renderer: {
-		entryPoints: [`${root}src/renderer/main.tsx`],
-		outfile: `${dist}renderer.js`,
+		entryPoints: { renderer: `${root}src/renderer/main.tsx` },
+		outdir: dist,
+		chunkNames: "chunks/[name]-[hash]",
+		splitting: true,
 		bundle: true,
 		platform: "browser",
 		format: "esm",

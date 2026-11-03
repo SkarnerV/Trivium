@@ -855,6 +855,8 @@ export interface TriviumApi {
 	/** Lets a page run its scripts, or stops it. The file comes back under a new id. */
 	setReaderScripts(id: string, on: boolean): Promise<ReaderFile>;
 	closeReader(id: string): Promise<void>;
+	/** Draws a PlantUML diagram as SVG text with the PlantUML installed on this computer. */
+	renderPlantUml(code: string): Promise<string>;
 	/** A transcript image at full size, as a data URL. */
 	imageData(path: string, id: string): Promise<string>;
 	/** Asks where to save a transcript image and writes it; false when cancelled. */

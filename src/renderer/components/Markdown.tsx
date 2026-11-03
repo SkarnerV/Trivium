@@ -1,10 +1,12 @@
 import { Fragment, type ReactNode } from "react";
 import { filePath, usePreviewOpener } from "../preview.ts";
 import { t } from "../i18n.tsx";
+import { Diagram, diagramLanguage } from "./Diagram.tsx";
 
 // A small Markdown subset rendered straight to React elements, so model output
 // never reaches the DOM as HTML. Covers what agents write most: paragraphs,
-// headings, lists, quotes, fenced code, inline code, emphasis and links.
+// headings, lists, quotes, fenced code, inline code, emphasis and links. With
+// `diagrams`, fenced Mermaid and PlantUML blocks are drawn.
 
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*|_[^_\n]+_)|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
 
@@ -52,7 +54,7 @@ function withBreaks(lines: string[], key: string, open?: Opener): ReactNode[] {
 	});
 }
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, diagrams = false }: { text: string; diagrams?: boolean }) {
 	const open = usePreviewOpener();
 	const lines = text.replace(/\r\n/g, "\n").split("\n");
 	const blocks: ReactNode[] = [];
@@ -66,10 +68,15 @@ export function Markdown({ text }: { text: string }) {
 			i++;
 			while (i < lines.length && !lines[i]!.trimStart().startsWith(fence[1]!)) body.push(lines[i++]!);
 			i++;
+			const language = diagrams ? diagramLanguage(fence[2]!) : undefined;
 			blocks.push(
-				<pre key={key}>
-					<code>{body.join("\n")}</code>
-				</pre>,
+				language ? (
+					<Diagram key={key} language={language} code={body.join("\n")} />
+				) : (
+					<pre key={key}>
+						<code>{body.join("\n")}</code>
+					</pre>
+				),
 			);
 			continue;
 		}

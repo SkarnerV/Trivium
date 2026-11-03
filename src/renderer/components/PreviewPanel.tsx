@@ -105,7 +105,7 @@ function FileView({ file, source }: { file: ReaderFile; source: boolean }) {
 			return (
 				<div className="preview-scroll">
 					<article className="doc answer">
-						<Markdown text={file.text ?? ""} />
+						<Markdown text={file.text ?? ""} diagrams />
 					</article>
 				</div>
 			);

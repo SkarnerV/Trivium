@@ -5740,6 +5740,38 @@ body.resizing * {
 	border-bottom: 0;
 }
 
+/* Diagrams sit on white whatever the surface, as drawn, and shrink to fit the column. */
+.md-diagram {
+	margin: 0 0 18px;
+	padding: 14px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: #fff;
+	overflow-x: auto;
+	text-align: center;
+}
+
+.md-diagram img {
+	max-width: 100%;
+	height: auto;
+	vertical-align: top;
+}
+
+.md-diagram-source {
+	margin: 0 0 18px;
+}
+
+.md-diagram-source pre {
+	margin-bottom: 6px;
+}
+
+.md-diagram-note {
+	margin: 0;
+	font-family: var(--sans);
+	font-size: 12px;
+	color: var(--muted);
+}
+
 .sources {
 	margin: 0;
 	padding: 18px 20px 18px 40px;

@@ -9,6 +9,7 @@ files:
   - dist/main.mjs
   - dist/preload.cjs
   - dist/renderer.js
+  - dist/chunks/**
   - dist/index.html
   - dist/styles.css
   - dist/trivium-icon*.png

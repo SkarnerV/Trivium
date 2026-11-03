@@ -1053,4 +1053,11 @@ export default {
 	"Drop a skill's folder, .md file or .zip here to add it. Turning a skill off here leaves it on in other modes. Project skills come from {path}.": "スキルのフォルダ、.md ファイル、.zip をここにドロップすると追加できます。ここでスキルをオフにしても、ほかのモードではオンのままです。プロジェクトのスキルは {path} から読み込まれます。",
 	"No skills yet. Create one, upload one, or drop a folder with a {file} here.": "スキルはまだありません。作成するか、アップロードするか、{file} を含むフォルダをここにドロップしてください。",
 	"{mode} has no skills of its own yet, so its skills folder is empty. The skills below come from pi and Trivium's packages: Show in folder under Details opens each one's file, and Customize copies one here to edit.": "{mode}独自のスキルはまだないため、スキルフォルダは空です。以下のスキルは pi と Trivium のパッケージから読み込まれています。「詳細」の「フォルダで表示」で各ファイルを開け、「カスタマイズ」でこのモードにコピーして編集できます。",
+	"PlantUML isn't installed or isn't on your PATH. Install it, or set PLANTUML_JAR to a plantuml.jar and have Java installed.": "PlantUML がインストールされていないか、PATH にありません。PlantUML をインストールするか、PLANTUML_JAR に plantuml.jar のパスを設定して Java をインストールしてください。",
+	"PlantUML took too long to draw this diagram.": "PlantUML でこの図を描くのに時間がかかりすぎました。",
+	"PlantUML couldn't draw this diagram.": "PlantUML でこの図を描けませんでした。",
+	"The diagram came back empty.": "図の描画結果が空でした。",
+	"{name} diagram": "{name} の図",
+	"Couldn't draw this {name} diagram: {error}": "この {name} の図を描けませんでした: {error}",
+	"Drawing diagram…": "図を描いています…",
 } satisfies Record<string, string>;

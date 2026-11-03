@@ -264,7 +264,8 @@ test("a command that leaves a process running becomes a service until it is stop
 		assert.deepEqual(emitted.at(-1), {});
 	} finally {
 		tracker.dispose();
-		rmSync(dir, { recursive: true, force: true });
+		// The tracker may still be saving services.json, so the folder can be briefly not empty.
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 	}
 });
 
@@ -312,7 +313,8 @@ test("a command that leaves two programs running lists two services, each stoppe
 		assert.equal(tracker.count(), 1);
 	} finally {
 		tracker.dispose();
-		rmSync(dir, { recursive: true, force: true });
+		// The tracker may still be saving services.json, so the folder can be briefly not empty.
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 	}
 });
 
@@ -329,7 +331,8 @@ test("a stopped or timed-out command ends with everything it started", { skip: !
 		assert.equal(failed.exitCode, 3);
 	} finally {
 		tracker.dispose();
-		rmSync(dir, { recursive: true, force: true });
+		// The tracker may still be saving services.json, so the folder can be briefly not empty.
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 	}
 });
 
@@ -374,6 +377,7 @@ test("a real server left running shows with its port, and Stop frees the port", 
 		assert.equal(free, true, "the port is free again");
 	} finally {
 		tracker.dispose();
-		rmSync(dir, { recursive: true, force: true });
+		// The tracker may still be saving services.json, so the folder can be briefly not empty.
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 	}
 });

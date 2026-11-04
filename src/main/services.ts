@@ -53,6 +53,8 @@ function leftBehind(row: ProcessRow, service: ServiceKey, alive: Set<number>): b
 	const detached = service.detached;
 	if (!detached || alive.has(row.ppid) || row.created === undefined) return false;
 	if (row.created < service.startedAt - 1000 || row.created > detached.endedAt + 1000) return false;
+	// A batch file, or a shim such as npm's or pnpm's, runs in cmd, which the command need not name.
+	if (/^cmd$/i.test(row.name)) return true;
 	const name = row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	return name !== "" && new RegExp(`\\b${name}\\b`, "i").test(detached.command);
 }
@@ -458,6 +460,9 @@ export class ServiceTracker {
 	private pending = new Map<string, Tracked>();
 	private refreshing: Promise<void> | undefined;
 	private again = false;
+	/** Another read after one failed, for commands that just ended; services already listed have the poll. */
+	private retry: ReturnType<typeof setTimeout> | undefined;
+	private retries = 0;
 
 	constructor(options: { file: string; emit: (services: Record<string, ServiceInfo[]>) => void; probe?: ProcessProbe; pollMs?: number }) {
 		this.file = options.file;
@@ -636,6 +641,7 @@ export class ServiceTracker {
 	dispose(): void {
 		clearInterval(this.poll);
 		clearTimeout(this.outputTimer);
+		clearTimeout(this.retry);
 		this.probe.killSync([...this.services.values()].flatMap((service) => service.processes));
 		this.services.clear();
 		void this.save().catch(() => {});
@@ -653,8 +659,20 @@ export class ServiceTracker {
 			return this.refreshing;
 		}
 		this.refreshing = this.scan()
+			.then(() => {
+				this.retries = 0;
+			})
 			.catch(() => {
-				// A failed read keeps what was last known; the next poll tries again.
+				// A failed read keeps what was last known; the next poll tries again. Commands that just ended are
+				// tried again too, a few times, since no poll may be running for them.
+				if (this.pending.size && this.retries < 3 && !this.retry) {
+					this.retries++;
+					this.retry = setTimeout(() => {
+						this.retry = undefined;
+						void this.refresh();
+					}, this.pollMs);
+					this.retry.unref?.();
+				}
 			})
 			.finally(() => {
 				this.refreshing = undefined;
@@ -669,15 +687,22 @@ export class ServiceTracker {
 	private async scan(): Promise<void> {
 		let pending = [...this.pending.values()];
 		this.pending.clear();
-		// Most commands leave nothing running; on Windows a quick look for their ids saves reading every process.
-		// A detached command's programs carry no id that can be read, so it is always checked.
-		if (!this.services.size && pending.length && this.probe.markers) {
-			const ids = await this.probe.markers(this.shell);
-			pending = pending.filter((service) => ids.has(service.id) || service.detached);
+		let rows: ProcessRow[];
+		try {
+			// Most commands leave nothing running; on Windows a quick look for their ids saves reading every process.
+			// A detached command's programs carry no id that can be read, so it is always checked.
+			if (!this.services.size && pending.length && this.probe.markers) {
+				const ids = await this.probe.markers(this.shell);
+				pending = pending.filter((service) => ids.has(service.id) || service.detached);
+			}
+			if (!this.services.size && !pending.length) return;
+			rows = await this.probe.list(this.shell);
+		} catch (error) {
+			// Not read, so not known to have ended: they wait for the next read instead of being dropped.
+			for (const service of pending) if (!this.pending.has(service.id)) this.pending.set(service.id, service);
+			throw error;
 		}
 		const all = [...this.services.values(), ...pending];
-		if (!all.length) return;
-		const rows = await this.probe.list(this.shell);
 		const groups = groupProcesses(rows, all);
 		const live = all.filter((service) => groups.has(service.id));
 		const ports = live.length ? await this.probe.listening().catch(() => new Map<number, number[]>()) : new Map<number, number[]>();
@@ -756,8 +781,9 @@ export class ServiceTracker {
 	}
 
 	private async save(): Promise<void> {
-		// Not the shell's process id: after a restart another process may have it.
-		const saved: Saved[] = [...this.services.values()].map(({ id, sessionPath, command, cwd, startedAt, detached }) => ({ id, sessionPath, command, cwd, startedAt, detached }));
+		// Not the shell's process id: after a restart another process may have it. Commands a failed read left
+		// unchecked are kept too.
+		const saved: Saved[] = [...this.services.values(), ...this.pending.values()].map(({ id, sessionPath, command, cwd, startedAt, detached }) => ({ id, sessionPath, command, cwd, startedAt, detached }));
 		if (!saved.length && !existsSync(this.file)) return;
 		const tmp = `${this.file}.tmp`;
 		await writeFile(tmp, JSON.stringify(saved, null, 2), { mode: 0o600 });

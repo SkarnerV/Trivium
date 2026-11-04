@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -73,6 +73,12 @@ test("a detached command's programs count once their launcher has exited", () =>
 	assert.deepEqual(groups.get("a")?.map((r) => r.pid), [10, 11, 20, 21]);
 	// Without the detached launch, the same processes are not the command's.
 	assert.equal(groupProcesses(rows, [{ id: "a", startedAt: 5000 }]).has("a"), false);
+});
+
+test("a shim a detached command starts by its bare name runs in cmd, and counts", () => {
+	const command = 'powershell -Command \'Start-Process npm -ArgumentList "run","dev" -WindowStyle Hidden\'';
+	const rows = [row(20, 99, { name: "cmd", created: 5150 }), row(21, 20, { name: "node", created: 5300 }), row(30, 98, { name: "updater", created: 5100 })];
+	assert.deepEqual(groupProcesses(rows, [{ id: "a", startedAt: 5000, detached: { command, endedAt: 6000 } }]).get("a")?.map((r) => r.pid), [20, 21]);
 });
 
 test("Start-Process and cmd's start launch detached; npm start does not", () => {
@@ -201,6 +207,34 @@ function fakeProbe() {
 	} satisfies ProcessProbe & Record<string, unknown>;
 	return probe;
 }
+
+test("a failed read of the process list leaves what it was checking to be checked again", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "trivium-services-"));
+	const file = join(dir, "services.json");
+	writeFileSync(file, JSON.stringify([{ id: "a", sessionPath: "s", command: "npm run dev", cwd: dir, startedAt: 5000 }]));
+	const probe = fakeProbe();
+	probe.rows = [row(500, 1, { marker: "a", name: "node", created: 5100 })];
+	let fail = true;
+	probe.list = async () => {
+		if (fail) {
+			fail = false;
+			throw new Error("timed out");
+		}
+		return probe.rows;
+	};
+	const tracker = new ServiceTracker({ file, emit: () => {}, probe, pollMs: 60_000 });
+	try {
+		await tracker.init();
+		assert.equal(tracker.count(), 0, "the first read failed");
+		assert.deepEqual((JSON.parse(readFileSync(file, "utf8")) as { id: string }[]).map((entry) => entry.id), ["a"], "the saved list keeps it");
+		await tracker.refresh();
+		assert.deepEqual(tracker.list().s?.map((service) => [service.id, service.processes.map((p) => p.pid)]), [["a", [500]]]);
+	} finally {
+		tracker.dispose();
+		// The tracker may still be saving services.json, so the folder can be briefly not empty.
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+	}
+});
 
 function hasShell(): boolean {
 	try {

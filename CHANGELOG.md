@@ -2,6 +2,22 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-04
+
+### Added
+
+- **Archive sessions.** A session's sidebar menu now archives it instead of deleting it. Archived sessions leave the sidebar and search and wait under **Archived**, the one place to restore or delete a session.
+- **Conversation width.** **Settings → General → Appearance** sets how wide the conversation and message box can grow: Standard, Wide, Extra wide or Full width.
+
+### Changed
+
+- Write's panel shows the document as soon as the session reads a Markdown or text file, edits any file, or a path is opened, instead of staying empty until the first change. It uses Code's tabbed panel, with a Review tab while there are edits. File paths in Write's conversation open in the panel, Open in Write opens the note it was sent from, and a panel you closed stays closed while the agent works.
+
+### Fixed
+
+- A dev server left running by a command that just ended still shows as a service when a read of the process list fails.
+- On Windows, programs started with `Start-Process` through npm, npx, pnpm, yarn or a `.bat` file now show as services.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

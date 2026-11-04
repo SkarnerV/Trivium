@@ -73,7 +73,7 @@ export interface State {
 	git: Record<string, GitStatus | null>;
 	/** What each session's commands left running, by session path, whether or not the session is loaded. */
 	services: Record<string, ServiceInfo[]>;
-	overlay: "new" | "search" | null;
+	overlay: "new" | "search" | "archived" | null;
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
@@ -103,6 +103,8 @@ export interface ConfirmRequest {
 	title: string;
 	message: string;
 	confirmLabel: string;
+	/** The action can be undone, so its button isn't the red one. */
+	safe?: boolean;
 	resolve: (ok: boolean) => void;
 }
 
@@ -606,7 +608,7 @@ export function toggleSplit(): void {
 		closePane(beside);
 		return;
 	}
-	const latest = sessions.find((session) => session.app === app && session.path !== focused);
+	const latest = sessions.find((session) => session.app === app && session.path !== focused && !session.archived);
 	if (latest) void openInSplit(latest.path);
 }
 
@@ -807,6 +809,18 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));
 	notify(deleted.length === 1 ? t("Session moved to the Trash") : t("{n} sessions moved to the Trash", { n: deleted.length }), "info");
+}
+
+/** Moves sessions to the Archived panel, off the screen, or back to the sidebar. Their drafts and pins wait for them. */
+export async function archiveSessions(paths: string[], archived: boolean): Promise<void> {
+	const moved = await attempt(() => trivium.archiveSessions(paths, archived));
+	if (!moved?.length) return;
+	const changed = new Set(moved);
+	setState((s) => ({
+		sessions: s.sessions.map((session) => (changed.has(session.path) ? { ...session, archived } : session)),
+		...(archived ? withoutSessions(s.split, s.selected, (path) => changed.has(path)) : {}),
+	}));
+	if (archived) notify(moved.length === 1 ? t("Session archived") : t("{n} sessions archived", { n: moved.length }), "info");
 }
 
 /** Pins or unpins a project group ("app:cwd") or a session (its path) in the sidebar. */

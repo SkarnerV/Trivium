@@ -256,6 +256,7 @@ export class SessionHost {
 	async listSessions(): Promise<SessionSummary[]> {
 		const infos = await SessionManager.listAll();
 		const onDisk = new Set(infos.map((info) => info.path));
+		const archived = new Set(this.settings.get().archivedSessions);
 		const summaries: SessionSummary[] = infos.map((info) => {
 			const live = this.live.get(info.path);
 			return {
@@ -269,6 +270,7 @@ export class SessionHost {
 				running: live?.running ?? false,
 				unread: live?.unread ?? false,
 				chat: isChat(info.cwd),
+				archived: archived.has(info.id),
 			};
 		});
 		for (const live of this.live.values()) {
@@ -284,6 +286,7 @@ export class SessionHost {
 				running: live.running,
 				unread: live.unread,
 				chat: isChat(live.cwd),
+				archived: archived.has(live.session.sessionId),
 			});
 		}
 		summaries.sort((a, b) => b.modified - a.modified);
@@ -648,6 +651,31 @@ export class SessionHost {
 		return { title, id: manager.getSessionId(), cwd: manager.getCwd(), messages: branchMessages(manager.getBranch()) };
 	}
 
+	private idOf(path: string): string | undefined {
+		return this.live.get(path)?.session.sessionId ?? this.summaries.find((summary) => summary.path === path)?.id;
+	}
+
+	/**
+	 * Moves sessions to the Archived panel, or back to the sidebar. Their files, changes and services stay.
+	 * Refuses to archive while any of them is running.
+	 */
+	async archiveSessions(paths: string[], archived: boolean): Promise<string[]> {
+		const ids = new Set(this.settings.get().archivedSessions);
+		const moved: string[] = [];
+		for (const path of paths) {
+			const live = this.live.get(path);
+			if (archived && live?.running) throw new Error(t("“{title}” is still running. Stop it before archiving.", { title: this.titleFor(live) }));
+			const id = this.idOf(path);
+			if (!id) continue;
+			if (archived) ids.add(id);
+			else ids.delete(id);
+			moved.push(path);
+		}
+		await this.settings.update({ archivedSessions: [...ids] });
+		this.scheduleList();
+		return moved;
+	}
+
 	/**
 	 * Deletes sessions: unloads them, stops the services they left running, moves their files with `trash`
 	 * (the system Trash), and drops Trivium's own records of them. Refuses while any of them is running.
@@ -658,9 +686,10 @@ export class SessionHost {
 			if (live?.running) throw new Error(t("“{title}” is still running. Stop it before deleting.", { title: this.titleFor(live) }));
 		}
 		const deleted: string[] = [];
+		const ids = new Set<string>();
 		for (const path of paths) {
 			const live = this.live.get(path);
-			const id = live?.session.sessionId ?? this.summaries.find((summary) => summary.path === path)?.id;
+			const id = this.idOf(path);
 			if (live) this.unload(live);
 			await this.services.stopSession(path);
 			this.unsaved.delete(path);
@@ -668,12 +697,14 @@ export class SessionHost {
 			// A new session has no file until its first message.
 			if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
 			if (id) {
+				ids.add(id);
 				delete this.appIndex[id];
 				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
 			}
 			deleted.push(path);
 		}
 		await this.saveIndex();
+		await this.settings.update({ archivedSessions: this.settings.get().archivedSessions.filter((id) => !ids.has(id)) });
 		this.scheduleList();
 		return deleted;
 	}

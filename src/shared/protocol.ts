@@ -19,6 +19,8 @@ export interface SessionSummary {
 	unread: boolean;
 	/** Started without a project, in Trivium's own chats folder. */
 	chat: boolean;
+	/** Out of the sidebar, in the Archived panel. */
+	archived: boolean;
 }
 
 export interface ModelOption {
@@ -431,6 +433,8 @@ export interface TriviumSettings {
 	apps: Record<AppId, AppSettings>;
 	/** Catalog models, as "provider/id", left out of the model picker: the provider doesn't serve them to this login. */
 	hiddenModels: string[];
+	/** Ids of the sessions in the Archived panel. */
+	archivedSessions: string[];
 	/** Code's permission mode. Unset until Trivium first starts with its own gate, which carries over the old policy. */
 	permissionMode?: PermissionModeId;
 }
@@ -813,6 +817,8 @@ export interface TriviumApi {
 	fork(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
 	/** Moves session files to the Trash. Returns the paths that were deleted. */
 	deleteSessions(paths: string[]): Promise<string[]>;
+	/** Moves sessions to the Archived panel, or back to the sidebar. Returns the paths that moved. */
+	archiveSessions(paths: string[], archived: boolean): Promise<string[]>;
 	send(path: string, text: string, mode: "prompt" | "steer" | "followUp", attachments?: string[]): Promise<void>;
 	/** Shows the file picker and prepares what was chosen. */
 	pickAttachments(): Promise<AttachmentInfo[]>;

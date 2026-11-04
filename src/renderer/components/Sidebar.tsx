@@ -2,10 +2,11 @@ import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary, UpdateStatus } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, SplitIcon, TrashIcon } from "../icons.tsx";
+import { AppIcon, ArchiveIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, SplitIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
 import { commandKey, IS_MAC, IS_WINDOWS, keyName } from "../platform.ts";
 import {
+	archiveSessions,
 	askConfirm,
 	attempt,
 	deleteSessions,
@@ -53,7 +54,7 @@ function groupByProject(
 ): ProjectGroup[] {
 	const groups = new Map<string, ProjectGroup>();
 	for (const session of sessions) {
-		if (session.app !== app) continue;
+		if (session.app !== app || session.archived) continue;
 		let group = groups.get(session.cwd);
 		if (!group) {
 			group = {
@@ -81,7 +82,7 @@ function menuPoint(event: MouseEvent<HTMLElement>): { x: number; y: number } {
 	return fromKeyboard ? { x: rect.left + 12, y: rect.bottom } : { x: event.clientX, y: event.clientY };
 }
 
-function confirmDelete(sessions: SessionSummary[], what: string, title?: string): void {
+export function confirmDelete(sessions: SessionSummary[], what: string): void {
 	const running = sessions.filter((session) => session.running);
 	if (running.length) {
 		notify(t("Stop “{title}” before deleting it.", { title: running[0]!.title }), "warning");
@@ -103,7 +104,7 @@ function confirmDelete(sessions: SessionSummary[], what: string, title?: string)
 		? ` ${t(services === 1 ? "{services} left running stops too." : "{services} left running stop too.", { services: serviceCount(services) })}`
 		: "";
 	void askConfirm({
-		title: title ?? (sessions.length === 1 ? t("Delete this session?") : t("Delete {n} sessions?", { n: sessions.length })),
+		title: sessions.length === 1 ? t("Delete this session?") : t("Delete {n} sessions?", { n: sessions.length }),
 		message: `${t("{what} moves to the Trash, so you can still restore it from there. Files in the project folder are not touched.", { what })}${changesNote}${servicesNote}`,
 		confirmLabel: sessions.length === 1 ? t("Delete session") : t("Delete {n} sessions", { n: sessions.length }),
 	}).then((ok) => {
@@ -145,12 +146,11 @@ function sessionMenu(session: SessionSummary, pinned: boolean, active: boolean):
 		{ label: t("Copy session ID"), icon: <CopyIcon size={14} />, hint: session.id.slice(0, 8), onSelect: () => void copySessionId(session) },
 		"separator",
 		{
-			label: t("Delete session"),
-			icon: <TrashIcon size={14} />,
-			danger: true,
+			label: t("Archive session"),
+			icon: <ArchiveIcon size={14} />,
 			disabled: session.running,
-			title: session.running ? t("Stop the session before deleting it") : undefined,
-			onSelect: () => confirmDelete([session], t("“{title}”", { title: session.title })),
+			title: session.running ? t("Stop the session before archiving it") : undefined,
+			onSelect: () => void archiveSessions([session.path], true),
 		},
 	];
 }
@@ -219,11 +219,11 @@ function SessionRow({
 				<button
 					type="button"
 					className="row-action"
-					aria-label={t("Delete {title}", { title: session.title })}
-					title={t("Delete session")}
-					onClick={() => confirmDelete([session], t("“{title}”", { title: session.title }))}
+					aria-label={t("Archive {title}", { title: session.title })}
+					title={t("Archive session")}
+					onClick={() => void archiveSessions([session.path], true)}
 				>
-					<TrashIcon />
+					<ArchiveIcon size={13} />
 				</button>
 			)}
 			{menu && <ContextMenu x={menu.x} y={menu.y} label={session.title} entries={sessionMenu(session, pinned, active)} onClose={closeMenu} />}
@@ -231,16 +231,23 @@ function SessionRow({
 	);
 }
 
-function deleteProject(app: AppId, group: ProjectGroup): void {
-	confirmDelete(
-		group.sessions,
-		t(group.sessions.length === 1 ? "The {mode} session in {project}" : "Every {mode} session in {project} ({n})", {
-			mode: t(THEMES[app].name),
-			project: group.name,
-			n: group.sessions.length,
-		}),
-		t("Delete {project} from {mode}?", { project: group.name, mode: t(THEMES[app].name) }),
-	);
+function archiveProject(app: AppId, group: ProjectGroup): void {
+	const running = group.sessions.find((session) => session.running);
+	if (running) {
+		notify(t("Stop “{title}” before archiving it.", { title: running.title }), "warning");
+		return;
+	}
+	const mode = t(THEMES[app].name);
+	const n = group.sessions.length;
+	const what = t(n === 1 ? "The {mode} session in {project}" : "Every {mode} session in {project} ({n})", { mode, project: group.name, n });
+	void askConfirm({
+		title: t("Archive {project} in {mode}?", { project: group.name, mode }),
+		message: t("{what} moves to Archived, so you can restore it from there.", { what }),
+		confirmLabel: n === 1 ? t("Archive session") : t("Archive {n} sessions", { n }),
+		safe: true,
+	}).then((ok) => {
+		if (ok) void archiveSessions(group.sessions.map((session) => session.path), true);
+	});
 }
 
 function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
@@ -252,7 +259,7 @@ function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
 		},
 		{ label: t("New session"), icon: <PlusIcon size={14} />, onSelect: () => void startSession({ app, cwd: group.cwd }) },
 		"separator",
-		{ label: t("Delete all sessions"), icon: <TrashIcon size={14} />, danger: true, onSelect: () => deleteProject(app, group) },
+		{ label: t("Archive all sessions"), icon: <ArchiveIcon size={14} />, onSelect: () => archiveProject(app, group) },
 	];
 }
 
@@ -285,11 +292,11 @@ function ProjectSection({ app, group, selected, split }: { app: AppId; group: Pr
 				<button
 					type="button"
 					className="project-action"
-					aria-label={t("Delete all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
-					title={t("Delete all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
-					onClick={() => deleteProject(app, group)}
+					aria-label={t("Archive all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
+					title={t("Archive all {mode} sessions in {project}", { mode: t(THEMES[app].name), project: group.name })}
+					onClick={() => archiveProject(app, group)}
 				>
-					<TrashIcon size={12} />
+					<ArchiveIcon size={12} />
 				</button>
 				<button
 					type="button"
@@ -430,6 +437,10 @@ export function Sidebar() {
 					<MemoryIcon />
 					<span className="label">{t("Memory")}</span>
 				</button>
+				<button type="button" className="sb-row" onClick={() => setState({ overlay: "archived" })}>
+					<ArchiveIcon />
+					<span className="label">{t("Archived")}</span>
+				</button>
 			</div>
 			<div className="sb-label" aria-hidden="true">{t("Projects")}</div>
 			<div className="sb-sessions">
@@ -551,6 +562,9 @@ export function Rail() {
 			</button>
 			<button type="button" className="rail-btn" aria-label={t("Memory")} title={t("Memory")} onClick={openMemory}>
 				<MemoryIcon size={17} />
+			</button>
+			<button type="button" className="rail-btn" aria-label={t("Archived")} title={t("Archived")} onClick={() => setState({ overlay: "archived" })}>
+				<ArchiveIcon size={17} />
 			</button>
 			<span style={{ flex: 1 }} />
 			<UpdateRailButton />

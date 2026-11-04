@@ -12,7 +12,7 @@ import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
-import { ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
+import { ArchivedPanel, ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
 import { Panes } from "./Panes.tsx";
 import { EmptyPane } from "./SessionPane.tsx";
 import { MemoryPage } from "./Memory.tsx";
@@ -228,6 +228,7 @@ export function App() {
 			</div>
 			{overlay === "new" && <NewSessionDialog />}
 			{overlay === "search" && <SearchOverlay />}
+			{overlay === "archived" && <ArchivedPanel />}
 			<ConfirmDialog />
 			<ImageLightbox />
 			<TrustDialog />

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionSummary, TrustChoice } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
-import { AppIcon, CloseIcon, FolderIcon } from "../icons.tsx";
-import { attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
+import { AppIcon, ArchiveIcon, CloseIcon, FolderIcon, TrashIcon, UndoIcon } from "../icons.tsx";
+import { archiveSessions, attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { commandKey } from "../platform.ts";
 import { t } from "../i18n.tsx";
 import { AskCard, answer } from "./AskCard.tsx";
+import { serviceCount } from "./ServicesPanel.tsx";
+import { confirmDelete } from "./Sidebar.tsx";
 
 const close = () => setState({ overlay: null });
 
@@ -118,7 +120,7 @@ export function SearchOverlay() {
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const results = useMemo(
-		() => (query.trim() ? sessions.filter((s) => matches(s, query.trim())) : sessions).slice(0, 12),
+		() => sessions.filter((s) => !s.archived && (!query.trim() || matches(s, query.trim()))).slice(0, 12),
 		[sessions, query],
 	);
 	const pick = (session: SessionSummary | undefined) => {
@@ -169,6 +171,88 @@ export function SearchOverlay() {
 	);
 }
 
+/** The current mode's archived sessions, and the one place to delete a session. */
+export function ArchivedPanel() {
+	const app = useStore((s) => s.app);
+	const sessions = useStore((s) => s.sessions);
+	const services = useStore((s) => s.services);
+	const archived = sessions.filter((session) => session.app === app && session.archived);
+	const mode = t(THEMES[app].name);
+	// On the window, because focus leaves the panel with each row that goes. Esc in the delete dialog answers that first.
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && !event.defaultPrevented) close();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
+	return (
+		<div className="scrim" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+			<div className="modal" role="dialog" aria-modal="true" aria-labelledby="archived-title">
+				<div className="modal-head">
+					<span className="app-badge">
+						<ArchiveIcon />
+					</span>
+					<h2 id="archived-title">{t("Archived {mode} sessions", { mode })}</h2>
+					<button type="button" className="icon-btn" aria-label={t("Close")} onClick={close}>
+						<CloseIcon size={15} width={2} />
+					</button>
+				</div>
+				{archived.length ? (
+					<div className="archived-list">
+						{archived.map((session) => (
+							<div key={session.path} className="archived-row" title={session.title}>
+								<span className="title ellipsis">{session.title}</span>
+								{(services[session.path]?.length ?? 0) > 0 && (
+									<span
+										className="service-dot"
+										role="img"
+										aria-label={serviceCount(services[session.path]!.length)}
+										title={t("{services} running", { services: serviceCount(services[session.path]!.length) })}
+									/>
+								)}
+								<span className="session-meta">{session.chat ? t("Chats") : baseName(session.cwd)}</span>
+								<span className="session-meta">{relativeTime(session.modified)}</span>
+								<button
+									type="button"
+									className="icon-btn"
+									aria-label={t("Restore {title}", { title: session.title })}
+									title={t("Restore session")}
+									onClick={() => void archiveSessions([session.path], false)}
+								>
+									<UndoIcon size={14} />
+								</button>
+								<button
+									type="button"
+									className="icon-btn archived-delete"
+									aria-label={t("Delete {title}", { title: session.title })}
+									title={t("Delete session")}
+									onClick={() => confirmDelete([session], t("“{title}”", { title: session.title }))}
+								>
+									<TrashIcon size={14} />
+								</button>
+							</div>
+						))}
+					</div>
+				) : (
+					<p className="sb-empty">{t("No archived {mode} sessions.", { mode })}</p>
+				)}
+				{archived.length > 1 && (
+					<div className="modal-foot">
+						<button
+							type="button"
+							className="btn ghost archived-delete"
+							onClick={() => confirmDelete(archived, t("Every archived {mode} session ({n})", { mode, n: archived.length }))}
+						>
+							{t("Delete all")}
+						</button>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export function ConfirmDialog() {
 	const request = useStore((s) => s.confirm);
 	const confirmButton = useRef<HTMLButtonElement>(null);
@@ -196,7 +280,7 @@ export function ConfirmDialog() {
 					<button type="button" className="btn ghost" onClick={() => request.resolve(false)}>
 						{t("Cancel")}
 					</button>
-					<button ref={confirmButton} type="button" className="btn danger" onClick={() => request.resolve(true)}>
+					<button ref={confirmButton} type="button" className={`btn ${request.safe ? "primary" : "danger"}`} onClick={() => request.resolve(true)}>
 						{request.confirmLabel}
 					</button>
 				</div>

@@ -657,10 +657,6 @@ body.resizing * {
 	color: var(--ink);
 }
 
-.project-action[aria-label^="Delete"]:hover {
-	color: var(--del);
-}
-
 .session-row {
 	display: flex;
 	align-items: center;
@@ -712,7 +708,7 @@ body.resizing * {
 	position: relative;
 }
 
-/* The delete button takes the place of the time while the row is hovered. */
+/* The archive button takes the place of the time while the row is hovered. */
 .row-action {
 	position: absolute;
 	top: 50%;
@@ -743,7 +739,7 @@ body.resizing * {
 
 .row-action:hover {
 	background: var(--tab);
-	color: var(--del);
+	color: var(--ink);
 }
 
 .peek .row-action:hover {
@@ -3444,6 +3440,34 @@ body.resizing * {
 
 .search-results .session-row.active {
 	background: var(--soft);
+}
+
+.archived-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.archived-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	padding: 0 4px 0 10px;
+	border-radius: 9px;
+	color: var(--secondary);
+}
+
+.archived-row:hover {
+	background: var(--soft);
+}
+
+.archived-row .title {
+	flex: 1;
+}
+
+.archived-delete:hover {
+	color: var(--del);
 }
 
 /* Empty state */

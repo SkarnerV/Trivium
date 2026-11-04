@@ -111,6 +111,13 @@ export const MaximizeIcon = (p: IconProps) => (
 		<rect x="5" y="5" width="14" height="14" rx="1.5" />
 	</Svg>
 );
+export const ArchiveIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<rect x="2" y="3" width="20" height="5" rx="1" />
+		<path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+		<path d="M10 12h4" />
+	</Svg>
+);
 export const RestoreIcon = (p: IconProps) => (
 	<Svg size={12} {...p}>
 		<rect x="4.5" y="8" width="11.5" height="11.5" rx="1.5" />

@@ -24,6 +24,7 @@ const api: TriviumApi = {
 	editMessage: call("editMessage") as TriviumApi["editMessage"],
 	fork: call("fork") as TriviumApi["fork"],
 	deleteSessions: call("deleteSessions") as TriviumApi["deleteSessions"],
+	archiveSessions: call("archiveSessions") as TriviumApi["archiveSessions"],
 	pickAttachments: call("pickAttachments") as TriviumApi["pickAttachments"],
 	attachPaths: call("attachPaths") as TriviumApi["attachPaths"],
 	attachImageData: call("attachImageData") as TriviumApi["attachImageData"],

@@ -318,6 +318,7 @@ function registerIpc(): void {
 	});
 	handle("trivium:copyText", (text: string) => clipboard.writeText(text));
 	handle("trivium:deleteSessions", (paths: string[]) => host.deleteSessions(paths, (path) => shell.trashItem(path)));
+	handle("trivium:archiveSessions", (paths: string[], archived: boolean) => host.archiveSessions(paths, archived));
 	handle("trivium:providers", () =>
 		listProviders(host.runtime, new Set(readCustomProviders(getAgentDir()).map((provider) => provider.id)), isBuiltIn),
 	);

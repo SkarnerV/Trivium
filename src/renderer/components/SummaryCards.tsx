@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { SessionView } from "../../shared/protocol.ts";
-import { BranchIcon, CheckIcon, Chevron, CloudDownIcon, CloudUpIcon, FileIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
+import { BranchIcon, CheckIcon, Chevron, CloudDownIcon, CloudUpIcon, FileIcon, HistoryIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
 import { type PanelView, panelOpen, panelViews, shownView } from "../panels.ts";
 import { setState, showPanelView, useStore } from "../store.ts";
 import { transition } from "../transition.ts";
@@ -54,8 +54,8 @@ function Row({ icon, children, value, tone }: { icon: ReactNode; children: React
 
 /**
  * The summary cards beside the conversation, under the header's button: a few facts about the services running,
- * and about the branch, this session's edits and any other uncommitted changes. Picking one opens its view, with
- * the details, in a tab of the panel.
+ * about the branch, this session's edits and any other uncommitted changes, and the repository's history. Picking
+ * one opens its view, with the details, in a tab of the panel.
  */
 export function SummaryCards({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
@@ -110,6 +110,11 @@ export function SummaryCards({ view }: { view: SessionView }) {
 					<Row icon={<FileIcon size={14} />}>{t("No changes yet")}</Row>
 				))}
 			</Card>
+			{!view.chat && (
+				<Card title={t("History")} current={showing === "history"} onOpen={open("history")}>
+					<Row icon={<HistoryIcon size={14} />}>{t("Commits and the files they changed")}</Row>
+				</Card>
+			)}
 		</aside>
 	);
 }

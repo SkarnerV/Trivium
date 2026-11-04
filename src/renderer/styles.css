@@ -2289,6 +2289,28 @@ body.resizing * {
 	text-align: left;
 }
 
+/* A session file's row has its revert button at the end, beside the row's own button rather than in it. */
+.change-row {
+	position: relative;
+}
+
+.change-row .change-file {
+	padding-right: 36px;
+}
+
+.change-revert {
+	position: absolute;
+	top: 2px;
+	right: 8px;
+	width: 22px;
+	height: 22px;
+	color: var(--ink-4);
+}
+
+.change-revert:hover:not(:disabled) {
+	color: var(--del);
+}
+
 .change-file:hover {
 	background: var(--tab);
 }
@@ -2520,6 +2542,203 @@ body.resizing * {
 
 .changes-foot .btn {
 	min-height: 36px;
+}
+
+.changes-foot .btn:only-child {
+	flex: 1;
+}
+
+.history-list {
+	flex: 1;
+	min-height: 0;
+	margin: 0 12px 10px;
+	padding: 4px 0;
+	border-radius: 12px;
+	background: #fff;
+	border: 1px solid var(--line);
+	overflow: auto;
+}
+
+/* The list gives way to a file's diff, as the Changes view's does. */
+.history-list:has(+ .diff) {
+	flex: 0 1 auto;
+	max-height: 45%;
+}
+
+.history-list.is-last {
+	margin-bottom: 12px;
+}
+
+.commit-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	height: 28px;
+	padding: 0 10px 0 0;
+	border: 0;
+	background: transparent;
+	color: var(--ink-2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.commit-row:hover {
+	background: var(--tab);
+}
+
+.commit-row[aria-expanded="true"] {
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.commit-graph {
+	flex: none;
+	display: block;
+	overflow: hidden;
+}
+
+/* One color for each of GRAPH_COLORS in graph.ts. */
+.c0 { --graph: #2f6fde; }
+.c1 { --graph: #1a8f5a; }
+.c2 { --graph: #c2571a; }
+.c3 { --graph: #8a4fd0; }
+.c4 { --graph: #c23a7a; }
+.c5 { --graph: #0f8a9c; }
+
+.graph-line {
+	fill: none;
+	stroke: var(--graph);
+	stroke-width: 1.5;
+}
+
+.graph-dot {
+	fill: var(--graph);
+	stroke: var(--graph);
+	stroke-width: 1.5;
+}
+
+.graph-dot.is-merge {
+	fill: #fff;
+}
+
+/* Rings the commit HEAD is on. */
+.graph-head {
+	fill: none;
+	stroke: var(--graph);
+	stroke-width: 1.25;
+}
+
+.graph-rail {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1.5px;
+	background: var(--graph);
+}
+
+.commit-refs {
+	flex: 0 1 auto;
+	display: flex;
+	gap: 3px;
+	min-width: 0;
+	max-width: 55%;
+	overflow: hidden;
+}
+
+.commit-ref {
+	flex: 0 1 auto;
+	min-width: 28px;
+	padding: 0 5px;
+	border: 1px solid var(--edge);
+	border-radius: 5px;
+	color: var(--ink-3);
+	font-family: var(--mono);
+	font-size: 10.5px;
+	line-height: 16px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.commit-ref.is-current {
+	flex: none;
+	border-color: var(--accent);
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.commit-ref.is-tag {
+	border-style: dashed;
+}
+
+.commit-ref.is-remote {
+	color: var(--ink-4);
+}
+
+.commit-subject {
+	flex: 1 1 0;
+	min-width: 40px;
+}
+
+.commit-time {
+	flex: none;
+	color: var(--ink-4);
+	font-size: 11px;
+}
+
+.commit-detail {
+	display: flex;
+	min-width: 0;
+	border-bottom: 1px solid var(--soft);
+}
+
+.commit-rail {
+	position: relative;
+	flex: none;
+}
+
+.commit-body {
+	flex: 1;
+	min-width: 0;
+	padding: 4px 0 6px;
+}
+
+.commit-meta {
+	margin: 0;
+	padding: 2px 10px 2px 6px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+	overflow-wrap: anywhere;
+}
+
+.commit-message {
+	margin: 2px 0 4px;
+	padding: 0 10px 0 6px;
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.commit-body .change-file {
+	padding-left: 6px;
+	padding-right: 10px;
+}
+
+.history-more {
+	width: 100%;
+	padding: 6px 12px;
+	border: 0;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.history-more:hover {
+	background: var(--tab);
+	color: var(--ink-2);
 }
 
 .btn.revert {

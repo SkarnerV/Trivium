@@ -52,6 +52,13 @@ export const BranchIcon = (p: IconProps) => (
 		<path d="M18 8.5a9.5 9.5 0 0 1-9.5 9.5" />
 	</Svg>
 );
+export const HistoryIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+		<path d="M3 3v5h5" />
+		<path d="M12 7v5l3 2" />
+	</Svg>
+);
 export const ChatIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z" />

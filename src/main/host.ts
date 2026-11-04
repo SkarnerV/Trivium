@@ -36,8 +36,11 @@ import type {
 	ExtensionSource,
 	FileChange,
 	FileReview,
+	GitCommitDetail,
+	GitCommitFile,
 	GitDiff,
 	GitFile,
+	GitHistory,
 	GitStatus,
 	HostEvent,
 	ModelOption,
@@ -62,7 +65,7 @@ import { permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
-import { readGitDiff, readGitStatus } from "./git.ts";
+import { readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "./git.ts";
 import { isInside } from "./reader.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
@@ -609,6 +612,7 @@ export class SessionHost {
 
 	async gitStatus(path: string): Promise<GitStatus | null> {
 		const live = this.require(path);
+		await this.dropCommitted(live);
 		const git = this.hasGit(live) ? await readGitStatus(live.cwd) : null;
 		live.git = JSON.stringify(git);
 		return git;
@@ -626,13 +630,33 @@ export class SessionHost {
 		return readGitDiff(git.root, listed);
 	}
 
+	async gitHistory(path: string, limit: number): Promise<GitHistory> {
+		const live = this.require(path);
+		return this.hasGit(live) ? readGitHistory(live.cwd, limit) : { commits: [], more: false };
+	}
+
+	async gitCommit(path: string, id: string): Promise<GitCommitDetail> {
+		return readGitCommit(this.require(path).cwd, id);
+	}
+
+	async gitCommitDiff(path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">): Promise<GitDiff> {
+		return readGitCommitDiff(this.require(path).cwd, id, file);
+	}
+
+	/** Takes files committed since the last look off the session's list. A run's commit waits for the run to end, when its edits have settled. */
+	private async dropCommitted(live: Live): Promise<void> {
+		if (!this.hasGit(live) || live.running) return;
+		if (await live.changes.dropCommitted()) await this.emitChanges(live);
+	}
+
 	/** Reads git again once files may have changed, and sends the status when it differs from the last one. */
 	private scheduleGit(live: Live): void {
 		if (!this.hasGit(live) || live.gitTimer) return;
 		live.gitTimer = setTimeout(() => {
 			live.gitTimer = undefined;
 			if (!this.live.has(live.path)) return;
-			readGitStatus(live.cwd)
+			this.dropCommitted(live)
+				.then(() => readGitStatus(live.cwd))
 				.then((git) => {
 					const text = JSON.stringify(git);
 					if (text === live.git) return;

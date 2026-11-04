@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { diffLines as lineParts, structuredPatch } from "diff";
 import type { DiffLine, FileChange, FileReview, ReviewSegment } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
+import { committedSince, readHead } from "./git.ts";
 
 /** Files bigger than this are listed without a diff. */
 const MAX_DIFF_BYTES = 512 * 1024;
@@ -19,6 +20,12 @@ export function resolveToolPath(path: string, cwd: string): string {
 
 async function readOrNull(path: string): Promise<string | null> {
 	return existsSync(path) ? await readFile(path, "utf8") : null;
+}
+
+/** A path relative to the project, to compare with what git prints. Windows paths differ in slashes, and may in case. */
+function gitPathKey(rel: string): string {
+	const slashed = rel.replaceAll("\\", "/");
+	return process.platform === "win32" ? slashed.toLowerCase() : slashed;
 }
 
 function diffLines(rel: string, before: string, after: string): DiffLine[] {
@@ -42,7 +49,7 @@ function diffLines(rel: string, before: string, after: string): DiffLine[] {
 /**
  * Remembers what each file looked like before the agent first edited or wrote it,
  * so the panel can show the net change and undo it. Baselines persist next to the
- * app's other state, keyed by session, and are dropped on Keep or Revert.
+ * app's other state, keyed by session, and are dropped on Keep or Revert, or once the file is committed.
  *
  * Only edit and write are tracked. Changes made through bash are not seen.
  */
@@ -50,6 +57,8 @@ export class ChangeTracker {
 	private baselines = new Map<string, string | null>();
 	/** Folders that did not exist before the agent wrote a file into them, deepest first per file. */
 	private createdDirs = new Map<string, string[]>();
+	/** Where HEAD was when the first of the baselines was taken, or last checked: commits after it are the session's to clear. */
+	private since: string | null = null;
 	private readonly file: string;
 	readonly cwd: string;
 	private loaded: Promise<void>;
@@ -67,7 +76,9 @@ export class ChangeTracker {
 			const saved = JSON.parse(await readFile(this.file, "utf8")) as {
 				files: Record<string, string | null>;
 				dirs: Record<string, string[]>;
+				since?: string | null;
 			};
+			this.since = saved.since ?? null;
 			for (const [path, content] of Object.entries(saved.files)) this.baselines.set(path, content);
 			for (const [path, dirs] of Object.entries(saved.dirs)) this.createdDirs.set(path, dirs);
 		} catch {
@@ -79,6 +90,7 @@ export class ChangeTracker {
 		const contents = JSON.stringify({
 			files: Object.fromEntries(this.baselines),
 			dirs: Object.fromEntries(this.createdDirs),
+			since: this.since,
 		});
 		this.saving = this.saving
 			.catch(() => {})
@@ -99,6 +111,7 @@ export class ChangeTracker {
 		await this.loaded;
 		const path = resolveToolPath(toolPath, this.cwd);
 		if (this.baselines.has(path)) return;
+		if (!this.baselines.size) this.since = await readHead(this.cwd);
 		const before = await readOrNull(path);
 		this.baselines.set(path, before);
 		if (before === null) {
@@ -200,6 +213,23 @@ export class ChangeTracker {
 			this.createdDirs.delete(path);
 		}
 		await this.save();
+	}
+
+	/**
+	 * Forgets the files committed since the last check, so the session stops listing them and Revert leaves them
+	 * alone: git holds them now. Says whether it forgot any. A file changed again after its commit stays.
+	 */
+	async dropCommitted(): Promise<boolean> {
+		await this.loaded;
+		if (!this.baselines.size) return false;
+		const head = await readHead(this.cwd);
+		if (!head || head === this.since) return false;
+		// A commit that is gone, as after a rebase and a clean-up, only means nothing more is learned this time.
+		const committed = new Set((await committedSince(this.cwd, this.since, head).catch(() => [])).map(gitPathKey));
+		const paths = [...this.baselines.keys()].filter((path) => committed.has(gitPathKey(relative(this.cwd, path))));
+		this.since = head;
+		await this.keep(paths);
+		return paths.length > 0;
 	}
 
 	/** Restores each file to its baseline, deleting files the agent created. */

@@ -11,6 +11,7 @@ import type {
 	ConnectorInput,
 	CustomProvider,
 	DialogAnswer,
+	GitCommitFile,
 	GitFile,
 	HostEvent,
 	MemoryCategory,
@@ -455,6 +456,9 @@ function registerIpc(): void {
 		await shell.openExternal(url);
 	});
 	handle("trivium:gitDiff", (path: string, file: Pick<GitFile, "rel" | "area">) => host.gitDiff(path, file));
+	handle("trivium:gitHistory", (path: string, limit: number) => host.gitHistory(path, limit));
+	handle("trivium:gitCommit", (path: string, id: string) => host.gitCommit(path, id));
+	handle("trivium:gitCommitDiff", (path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">) => host.gitCommitDiff(path, id, file));
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		// VS Code's URL handler opens the file at a line; fall back to the system default app.
 		const url = `vscode://file${encodeURI(file)}${line ? `:${line}` : ""}`;

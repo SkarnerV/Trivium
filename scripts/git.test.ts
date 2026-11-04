@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { parseDiff, parseLog, parseStatus, readGitDiff, readGitStatus } from "../src/main/git.ts";
+import { parseCommitFiles, parseDiff, parseHistory, parseLog, parseRefs, parseStatus, readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "../src/main/git.ts";
 
 /** A repository in a temporary folder with one commit, which git outside it is never asked about. */
 function setup() {
@@ -225,4 +225,114 @@ test("log lines become commits, keeping subjects that hold odd characters", () =
 		{ id: "7be20d4", subject: 'Say "hi" — again' },
 	]);
 	assert.deepEqual(parseLog(""), []);
+});
+
+test("a decoration names the current branch, others, remotes and tags, without the remote's HEAD", () => {
+	assert.deepEqual(parseRefs("HEAD -> refs/heads/main, tag: refs/tags/v1, refs/remotes/origin/main, refs/remotes/origin/HEAD, refs/heads/fix/cart"), [
+		{ name: "main", kind: "branch", current: true },
+		{ name: "v1", kind: "tag" },
+		{ name: "origin/main", kind: "remote" },
+		{ name: "fix/cart", kind: "branch" },
+	]);
+	assert.deepEqual(parseRefs("HEAD"), [{ name: "HEAD", kind: "head" }]);
+	assert.deepEqual(parseRefs(""), []);
+});
+
+test("history lines give each commit's parents, author, time and subject", () => {
+	const line = (...fields: string[]) => fields.join("\0");
+	const commits = parseHistory(`${line("aaa", "bbb ccc", "Ada", "100", "", "Merge fix")}\n${line("bbb", "", "Ada", "50", "tag: refs/tags/v1", "First")}\n`);
+	assert.deepEqual(commits[0], { id: "aaa", parents: ["bbb", "ccc"], author: "Ada", time: 100_000, refs: [], subject: "Merge fix" });
+	assert.deepEqual(commits[1]!.parents, []);
+	assert.deepEqual(commits[1]!.refs, [{ name: "v1", kind: "tag" }]);
+});
+
+test("a commit's files take their counts from the numstat records, renames and binary files too", () => {
+	const text = [
+		":100644 100644 aaa bbb M",
+		"a b.txt",
+		":100644 100644 aaa aaa R100",
+		"old.txt",
+		"new.txt",
+		":000000 100644 000 ccc A",
+		"bin.dat",
+		"3\t1\ta b.txt",
+		"0\t0\t",
+		"old.txt",
+		"new.txt",
+		"-\t-\tbin.dat",
+		"",
+	].join("\0");
+	assert.deepEqual(parseCommitFiles(text), [
+		{ rel: "a b.txt", status: "modified", adds: 3, dels: 1 },
+		{ rel: "new.txt", from: "old.txt", status: "renamed", adds: 0, dels: 0 },
+		{ rel: "bin.dat", status: "added", adds: 0, dels: 0 },
+	]);
+});
+
+test("history reads a real repository's branches, a merge's parents and the files of each commit", async () => {
+	const { repo, git, cleanup } = setup();
+	try {
+		git("checkout", "-q", "-b", "feature");
+		writeFileSync(join(repo, "README.md"), "# Shop\n\nNew line\n");
+		git("mv", "old name.txt", "new name.txt");
+		git("add", ".");
+		git("commit", "-q", "-m", "Feature", "-m", "Why it was needed.");
+		git("checkout", "-q", "main");
+		writeFileSync(join(repo, "src", "cart.ts"), "export const items = [1];\n");
+		git("add", ".");
+		git("commit", "-q", "-m", "Main");
+		git("merge", "-q", "--no-ff", "--no-edit", "feature");
+		git("tag", "v1");
+
+		const history = await readGitHistory(join(repo, "src"), 10);
+		assert.equal(history.more, false);
+		const [merge, ...rest] = history.commits;
+		assert.equal(merge!.parents.length, 2);
+		assert.deepEqual(merge!.refs, [{ name: "main", kind: "branch", current: true }, { name: "v1", kind: "tag" }]);
+		const feature = rest.find((commit) => commit.subject === "Feature")!;
+		const first = rest.find((commit) => commit.subject === "First")!;
+		assert.equal(rest.indexOf(first), rest.length - 1, "parents come after their children");
+		assert.equal((await readGitHistory(repo, 2)).more, true);
+
+		const detail = await readGitCommit(join(repo, "src"), feature.id);
+		assert.equal(detail.body, "Why it was needed.");
+		const renamed = detail.files.find((file) => file.status === "renamed")!;
+		assert.deepEqual([renamed.from, renamed.rel], ["old name.txt", "new name.txt"]);
+		assert.deepEqual(detail.files.find((file) => file.rel === "README.md"), { rel: "README.md", status: "modified", adds: 2, dels: 0 });
+
+		// The first commit has no parent to compare with, and a merge compares with its first.
+		assert.equal((await readGitCommit(repo, first.id)).files.length, 3);
+		assert.deepEqual((await readGitCommit(repo, merge!.id)).files.map((file) => file.rel).sort(), ["README.md", "new name.txt"]);
+
+		const diff = await readGitCommitDiff(repo, feature.id, { rel: "README.md" });
+		assert.deepEqual([diff.adds, diff.dels], [2, 0]);
+		const moved = await readGitCommitDiff(repo, feature.id, { rel: renamed.rel, from: renamed.from });
+		assert.deepEqual(moved.lines, [], "a pure rename has no lines, not a whole new file");
+		const root = await readGitCommitDiff(repo, first.id, { rel: "README.md" });
+		assert.equal(root.adds, 1);
+	} finally {
+		cleanup();
+	}
+});
+
+test("history is empty before the first commit and outside a repository", async () => {
+	const { repo, git, cleanup } = setup();
+	try {
+		rmSync(join(repo, ".git"), { recursive: true, force: true });
+		assert.deepEqual(await readGitHistory(repo, 10), { commits: [], more: false });
+		git("init", "-q", "-b", "main");
+		assert.deepEqual(await readGitHistory(repo, 10), { commits: [], more: false });
+	} finally {
+		cleanup();
+	}
+});
+
+test("only a full commit id reaches git", async () => {
+	const { repo, cleanup } = setup();
+	try {
+		await assert.rejects(readGitCommit(repo, "--output=/tmp/x"));
+		await assert.rejects(readGitCommitDiff(repo, "HEAD", { rel: "README.md" }));
+	} finally {
+		cleanup();
+	}
 });

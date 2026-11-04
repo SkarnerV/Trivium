@@ -239,6 +239,53 @@ export interface GitCommit {
 	subject: string;
 }
 
+/** What points at a commit: a branch, a remote's branch, a tag, or a detached HEAD. */
+export interface GitRef {
+	name: string;
+	kind: "head" | "branch" | "remote" | "tag";
+	/** The branch HEAD is on. */
+	current?: boolean;
+}
+
+/** A commit in the History view's graph. */
+export interface GitHistoryCommit {
+	/** Full commit id. */
+	id: string;
+	/** Full ids; a merge has more than one, and the first commit none. */
+	parents: string[];
+	author: string;
+	/** When it was written, in milliseconds. */
+	time: number;
+	refs: GitRef[];
+	subject: string;
+}
+
+/** The newest commits of a repository, children before parents. */
+export interface GitHistory {
+	commits: GitHistoryCommit[];
+	/** There are older commits than the ones asked for. */
+	more: boolean;
+}
+
+/** A file a commit changed, against its first parent. */
+export interface GitCommitFile {
+	/** Path relative to the repository root, with forward slashes, as git prints it. */
+	rel: string;
+	/** The old path of a rename or copy. */
+	from?: string;
+	status: GitFile["status"];
+	adds: number;
+	dels: number;
+}
+
+export interface GitCommitDetail {
+	/** The message below its subject; empty when it has none. */
+	body: string;
+	files: GitCommitFile[];
+	/** It changed more files than are listed. */
+	truncated: boolean;
+}
+
 export interface GitDiff {
 	lines: DiffLine[];
 	adds: number;
@@ -844,6 +891,12 @@ export interface TriviumApi {
 	gitStatus(path: string): Promise<GitStatus | null>;
 	/** One changed file's diff, as the session's latest git status lists it. */
 	gitDiff(path: string, file: Pick<GitFile, "rel" | "area">): Promise<GitDiff>;
+	/** The newest `limit` commits of the repository a Code session works in, on every branch. */
+	gitHistory(path: string, limit: number): Promise<GitHistory>;
+	/** A commit's message and the files it changed. */
+	gitCommit(path: string, id: string): Promise<GitCommitDetail>;
+	/** What a commit changed in one file. */
+	gitCommitDiff(path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">): Promise<GitDiff>;
 	openInEditor(file: string, line?: number): Promise<void>;
 	/** The services every session's commands left running, by session path. */
 	services(): Promise<Record<string, ServiceInfo[]>>;

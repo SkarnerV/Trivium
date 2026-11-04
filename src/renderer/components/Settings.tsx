@@ -195,6 +195,20 @@ function General() {
 						onChange={(value) => void updateSettings({ textSize: Number(value) })}
 					/>
 				</Item>
+				<Item label={t("Conversation width")} hint={t("The widest the conversation and message box can grow")}>
+					<Dropdown
+						label={t("Conversation width")}
+						value={String(settings.conversationWidth)}
+						options={[
+							{ value: "720", label: t("Standard") },
+							{ value: "900", label: t("Wide") },
+							{ value: "1100", label: t("Extra wide") },
+							{ value: "0", label: t("Full width") },
+						]}
+						align="right"
+						onChange={(value) => void updateSettings({ conversationWidth: Number(value) })}
+					/>
+				</Item>
 			</Group>
 			<Group title={t("Sessions")}>
 				<Item label={t("Unload idle sessions")} hint={t("Frees memory. An unloaded session reloads from disk when you open it.")}>

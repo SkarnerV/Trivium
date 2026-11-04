@@ -8,6 +8,7 @@ const emptyApp = (): AppSettings => ({ disabled: [], added: [], removed: [], dis
 const DEFAULTS: TriviumSettings = {
 	language: "system",
 	textSize: 1,
+	conversationWidth: 720,
 	idleMinutes: 30,
 	notifyDone: true,
 	notifyWaiting: true,

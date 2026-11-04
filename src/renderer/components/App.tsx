@@ -176,7 +176,9 @@ export function App() {
 	const panelWidth = useStore((s) => s.panelWidth);
 	const splitWidth = useStore((s) => s.splitWidth);
 	const vars = page === "settings" ? themeVars(sectionApp ?? sectionTheme(section)) : themeVars(app);
+	const conversationWidth = useStore((s) => s.settings?.conversationWidth);
 	const widths: Record<string, string> = {};
+	if (conversationWidth !== undefined) widths["--conversation-width"] = conversationWidth ? `${conversationWidth}px` : "none";
 	if (sidebarWidth) widths["--sidebar-width"] = `${sidebarWidth}px`;
 	if (panelWidth) widths["--panel-width"] = `${panelWidth}px`;
 	if (splitWidth) widths["--split-width"] = `${splitWidth}px`;

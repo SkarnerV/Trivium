@@ -1083,7 +1083,7 @@ body.resizing * {
 		flex-direction: row;
 		flex-wrap: wrap;
 		width: 100%;
-		max-width: 720px;
+		max-width: var(--conversation-width, 720px);
 		margin: 0 auto;
 		padding: 2px 24px 6px;
 	}
@@ -1182,7 +1182,7 @@ body.resizing * {
 	flex-direction: column;
 	gap: 22px;
 	width: 100%;
-	max-width: 720px;
+	max-width: var(--conversation-width, 720px);
 	margin: 0 auto;
 	padding: 8px 24px 24px;
 }
@@ -2686,7 +2686,7 @@ body.resizing * {
 .dock-inner {
 	position: relative;
 	width: 100%;
-	max-width: 720px;
+	max-width: var(--conversation-width, 720px);
 	margin: 0 auto;
 	display: flex;
 	flex-direction: column;

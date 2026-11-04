@@ -424,6 +424,8 @@ export interface TriviumSettings {
 	language: Language;
 	/** Window zoom factor, 1 = 100%. */
 	textSize: number;
+	/** The widest the conversation and message box grow, in pixels. 0 fills the pane. */
+	conversationWidth: number;
 	/** Minutes before an idle, unviewed session is unloaded. 0 keeps sessions loaded. */
 	idleMinutes: number;
 	notifyDone: boolean;

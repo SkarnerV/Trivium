@@ -24,7 +24,7 @@ The Code panel shows one of three views, picked from a small menu:
 
 The segmented "This session · Git" control goes away. In its place is a views button in the panel header that opens a **Show in panel** menu: a rounded card listing Changes (N files), Git (N files) and Preview (N open), with a check on the current one. `codeTab` in [panels.ts](../src/renderer/panels.ts) becomes `"session" | "git" | "preview"`, and the pick is remembered per session as it is today.
 
-Research and Write can add Preview next to their Note and Review views the same way. The mockups only cover Code.
+Write uses this panel too, with Preview and Review as its views. Research can add Preview next to its Note view the same way. The mockups only cover Code.
 
 ### Layout
 

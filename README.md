@@ -104,7 +104,7 @@ not pushed and on the remote, what is staged or changed, and a button to ask the
 ### Notes and tracked changes
 
 - **Research shows the note it writes.** A panel renders the Markdown note as a document, tables included, and a Sources tab lists every link it cites. **Open in Write** starts a Write session in the same project, ready to revise the note.
-- **Write shows its edits as tracked changes.** The document appears with each change in place: deleted text struck through, new text underlined. Accept or reject each change, or all at once. Rejecting puts your original text back in the file.
+- **Write shows the document as it works.** The panel renders the file as soon as the session reads it or you click its path, before any edits. When edits land, Review shows each change in place: deleted text struck through, new text underlined. Accept or reject each change, or all at once. Rejecting puts your original text back in the file.
 
 ### Memory
 

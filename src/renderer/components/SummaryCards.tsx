@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { SessionView } from "../../shared/protocol.ts";
 import { BranchIcon, CheckIcon, Chevron, CloudDownIcon, CloudUpIcon, FileIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
-import { type CodeView, codeTab, codeViews, panelOpen } from "../panels.ts";
+import { type PanelView, panelOpen, panelViews, shownView } from "../panels.ts";
 import { setState, showPanelView, useStore } from "../store.ts";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
@@ -61,10 +61,10 @@ export function SummaryCards({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const services = useServices(view.path);
 	const showing = useStore((s) =>
-		panelOpen(s.app, view, s.changesHidden[view.path]) ? codeTab(codeViews(s.panelTabs[view.path]), s.panelTab[view.path]) : undefined,
+		panelOpen(s.app, view, s.changesHidden[view.path]) ? shownView(panelViews(view, s.panelTabs[view.path]), s.panelTab[view.path]) : undefined,
 	);
 
-	const open = (name: CodeView) => () => transition("tab", () => showPanelView(view.path, name));
+	const open = (name: PanelView) => () => transition("tab", () => showPanelView(view.path, name));
 	const others = otherChanges(view.changes, git).length;
 	const ports = services.flatMap((service) => service.ports.map((port) => `:${port}`));
 	return (

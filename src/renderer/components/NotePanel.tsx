@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FileChange, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
 import { CloseIcon, ExternalIcon, PenIcon } from "../icons.tsx";
-import { attempt, setState, startSession, trivium } from "../store.ts";
+import { attempt, setState, showDocument, startSession, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { transition } from "../transition.ts";
@@ -62,7 +62,8 @@ export function NotePanel({ view }: { view: SessionView }) {
 	if (!note) return null;
 
 	const openInWrite = async () => {
-		await startSession({ app: "write", cwd: view.cwd }, t("Revise {file}: ", { file: note.rel }));
+		const opened = await startSession({ app: "write", cwd: view.cwd }, t("Revise {file}: ", { file: note.rel }));
+		if (opened) await showDocument(opened.path, note.path);
 	};
 
 	return (

@@ -2,12 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
-import { attempt, closePane, editMessage, focusPane, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
+import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
 import { PreviewOpener } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
-import { panelKind, panelOpen } from "../panels.ts";
+import { panelKind, panelOpen, workingDocument } from "../panels.ts";
 import { Composer } from "./Composer.tsx";
 import { serviceCount, useServices } from "./ServicesPanel.tsx";
 import { ImageTile } from "./ImageTile.tsx";
@@ -309,6 +309,15 @@ function useGitStatus(view: SessionView, app: AppId) {
 	}, [view.path, enabled]);
 }
 
+/** Keeps a Write session's panel on the document it is working on, from the moment it reads or writes one. */
+function useWorkingDocument(view: SessionView, app: AppId): void {
+	const noneOpen = useStore((s) => !s.previews[view.path]?.files.length);
+	const working = app === "write" ? workingDocument(view.runs, noneOpen) : undefined;
+	useEffect(() => {
+		if (working) followDocument(view.path, working);
+	}, [view.path, working]);
+}
+
 /** Says the session has services running, and opens the panel on them. */
 function ServicesButton({ view }: { view: SessionView }) {
 	const services = useServices(view.path);
@@ -360,10 +369,11 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
 	const summary = useStore((s) => s.app === "code" && Boolean(s.summaryShown[view.path]));
 	useGitStatus(view, app);
+	useWorkingDocument(view, app);
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
 	const lastRun = view.runs.at(-1);
-	// Only the Code panel has a Preview view so far.
-	const preview = useMemo(() => (app === "code" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
+	// Research's panel has no Preview view.
+	const preview = useMemo(() => (app !== "research" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	return (
 		<main className={`pane${summary ? " has-summary" : ""}`} aria-label={split ? view.title : undefined}>
@@ -392,7 +402,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
 					>
 						<PanelRightIcon size={15} />
-						<span>{t({ changes: "Changes", note: "Note", review: "Review" }[panelKind(app)])}</span>
+						<span>{t({ changes: "Changes", note: "Note", document: "Document" }[panelKind(app)])}</span>
 					</button>
 				)}
 				{split && (

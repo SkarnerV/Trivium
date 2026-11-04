@@ -1,8 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { FileChange, GitArea, GitDiff, GitFile, GitStatus, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { BranchIcon, Chevron, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, ServerIcon } from "../icons.tsx";
-import { type CodeView, codeTab, codeViews } from "../panels.ts";
+import { BranchIcon, Chevron, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, MoreIcon, PenIcon, ServerIcon } from "../icons.tsx";
+import { liveChanges, type PanelView, panelViews, shownView } from "../panels.ts";
 import { IS_WINDOWS } from "../platform.ts";
 import { attempt, closePanelView, closePreview, errorText, openPreview, selectPreview, trivium, setState, useStore } from "../store.ts";
 import { ContextMenu } from "./ContextMenu.tsx";
@@ -10,6 +10,7 @@ import { DiffView } from "./DiffView.tsx";
 import { EmptyBody } from "./EmptyPanel.tsx";
 import { hasSource, PreviewBody, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
+import { ReviewBody } from "./ReviewPanel.tsx";
 import { ServicesBody } from "./ServicesPanel.tsx";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
@@ -311,22 +312,23 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 	);
 }
 
-const VIEW_ICONS: Record<CodeView, (size: number) => ReactNode> = {
+const VIEW_ICONS: Record<PanelView, (size: number) => ReactNode> = {
 	session: (size) => <FileIcon size={size} />,
 	preview: (size) => <EyeIcon size={size} />,
 	services: (size) => <ServerIcon size={size} />,
+	review: (size) => <PenIcon size={size} />,
 };
 
-const VIEW_NAMES: Record<CodeView, string> = { session: "Changes", preview: "Preview", services: "Services" };
+const VIEW_NAMES: Record<PanelView, string> = { session: "Changes", preview: "Preview", services: "Services", review: "Review" };
 
-/** One tab in the panel's head, closed by its own button or a middle click, as a browser's are. */
+/** One tab in the panel's head, closed by its own button or a middle click, as a browser's are. One with no `onClose` stays. */
 function PanelTab({ name, icon, title, current, onSelect, onClose }: {
 	name: string;
 	icon: ReactNode;
 	title?: string;
 	current: boolean;
 	onSelect: () => void;
-	onClose: () => void;
+	onClose?: () => void;
 }) {
 	return (
 		<div
@@ -336,32 +338,35 @@ function PanelTab({ name, icon, title, current, onSelect, onClose }: {
 			onAuxClick={(event) => {
 				if (event.button !== 1) return;
 				event.preventDefault();
-				onClose();
+				onClose?.();
 			}}
 		>
 			<button type="button" role="tab" aria-selected={current} className="panel-tab-name" onClick={onSelect}>
 				{icon}
 				<span className="ellipsis">{name}</span>
 			</button>
-			<button type="button" className="panel-tab-close" aria-label={t("Close {name}", { name })} title={t("Close")} onClick={onClose}>
-				<CloseIcon size={10} width={2.4} />
-			</button>
+			{onClose && (
+				<button type="button" className="panel-tab-close" aria-label={t("Close {name}", { name })} title={t("Close")} onClick={onClose}>
+					<CloseIcon size={10} width={2.4} />
+				</button>
+			)}
 		</div>
 	);
 }
 
 /**
- * The Code app's side panel. Its head holds the views open in it as tabs, as a browser holds pages: the files
- * this session edited beside the repository's other uncommitted changes, the services its commands left running,
- * and each file open to read in a tab of its own. The summary cards open them.
+ * The Code and Write apps' side panel. Its head holds the views open in it as tabs, as a browser holds pages. In
+ * Code, the files this session edited beside the repository's other uncommitted changes, the services its commands
+ * left running, and each file open to read in a tab of its own; the summary cards open them. In Write, the
+ * documents rendered, and their edits to review once there are any.
  */
 export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
 	const tabs = useStore((s) => s.panelTabs[view.path]);
 	const previews = useStore((s) => s.previews[view.path]);
-	const views = codeViews(tabs);
-	const tab = codeTab(views, picked);
+	const views = panelViews(view, tabs);
+	const tab = shownView(views, picked);
 	const files = previews?.files ?? [];
 	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
 	// Rendered or source, by file path, for as long as the panel is open.
@@ -370,7 +375,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
 	// A click on the More button closes its menu on mousedown; the click that follows must not open it again.
 	const closed = useRef(0);
-	const pick = (next: CodeView, then?: () => void) =>
+	const pick = (next: PanelView, then?: () => void) =>
 		transition("tab", () => {
 			setState((s) => ({ panelTab: { ...s.panelTab, [view.path]: next } }));
 			then?.();
@@ -400,7 +405,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 										icon={VIEW_ICONS[name](13)}
 										current={tab === name}
 										onSelect={() => pick(name)}
-										onClose={() => closePanelView(view.path, name)}
+										onClose={name === "review" ? undefined : () => closePanelView(view.path, name)}
 									/>,
 								],
 					)}
@@ -449,6 +454,8 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 			</div>
 			{tab === "services" ? (
 				<ServicesBody view={view} />
+			) : tab === "review" ? (
+				<ReviewBody view={view} current={liveChanges(view).find((change) => file && pathKey(change.path) === pathKey(file.path))?.path} />
 			) : tab === "preview" ? (
 				<PreviewBody path={view.path} file={file} source={source} />
 			) : (

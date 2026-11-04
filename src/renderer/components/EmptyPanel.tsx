@@ -1,11 +1,12 @@
 import type { SessionView } from "../../shared/protocol.ts";
 import { CloseIcon, FileIcon, PenIcon } from "../icons.tsx";
-import type { PanelKind } from "../panels.ts";
 import { setState } from "../store.ts";
 import { Resizer } from "./Resizer.tsx";
 import { t } from "../i18n.tsx";
 
-const COPY: Record<PanelKind, { title: string; heading: string; text: string }> = {
+type EmptyKind = "changes" | "note";
+
+const COPY: Record<EmptyKind, { title: string; heading: string; text: string }> = {
 	changes: {
 		title: "Changes",
 		heading: "No changes yet",
@@ -16,15 +17,10 @@ const COPY: Record<PanelKind, { title: string; heading: string; text: string }> 
 		heading: "No note yet",
 		text: "The Markdown note this session writes shows up here as it goes, with its sources.",
 	},
-	review: {
-		title: "Review",
-		heading: "Nothing to review yet",
-		text: "Documents this session edits show up here with each change marked, to accept or reject.",
-	},
 };
 
 /** The side panel before the session has anything for it. */
-export function EmptyPanel({ view, kind }: { view: SessionView; kind: PanelKind }) {
+export function EmptyPanel({ view, kind }: { view: SessionView; kind: EmptyKind }) {
 	const copy = COPY[kind];
 	return (
 		<aside className="side-panel" aria-label={t(copy.title)}>
@@ -47,7 +43,7 @@ export function EmptyPanel({ view, kind }: { view: SessionView; kind: PanelKind 
 }
 
 /** What the panel says while there is nothing in it, below its head. */
-export function EmptyBody({ kind }: { kind: PanelKind }) {
+export function EmptyBody({ kind }: { kind: EmptyKind }) {
 	const copy = COPY[kind];
 	return (
 		<div className="side-body panel-empty">

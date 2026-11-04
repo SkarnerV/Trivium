@@ -21,7 +21,7 @@ import type {
 } from "../shared/protocol.ts";
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import type { PermissionModeId } from "../shared/permissions.ts";
-import { type CodeView, codeTab, codeViews } from "./panels.ts";
+import { type PanelView, panelViews, shownView } from "./panels.ts";
 import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
 
@@ -59,14 +59,16 @@ export interface State {
 	splitWidth?: number;
 	/** Sessions whose side panel the user closed (true) or opened (false); unset follows whether it has content. */
 	changesHidden: Record<string, boolean>;
-	/** The views open as tabs in each session's Code panel, oldest first; unset opens the one it has most to show in. */
-	panelTabs: Record<string, CodeView[]>;
-	/** The Code panel tab the user picked for each session; unset shows the one opened last. */
-	panelTab: Record<string, CodeView>;
+	/** The views open as tabs in each session's panel, oldest first; unset opens the one it has most to show in. */
+	panelTabs: Record<string, PanelView[]>;
+	/** The panel tab the user picked for each session; unset shows the last one. */
+	panelTab: Record<string, PanelView>;
 	/** Sessions showing the summary cards beside the conversation. */
 	summaryShown: Record<string, boolean>;
 	/** The files open in each session's Preview panel, oldest first, and the one showing. */
 	previews: Record<string, { files: ReaderFile[]; active?: string }>;
+	/** The document each Write session's panel last went to on its own, so returning to the session leaves what the user chose. */
+	followed: Record<string, string>;
 	/** The repository each Code session works in, by session path; null when it is in none. */
 	git: Record<string, GitStatus | null>;
 	/** What each session's commands left running, by session path, whether or not the session is loaded. */
@@ -143,6 +145,7 @@ let state: State = {
 	panelTab: {},
 	summaryShown: {},
 	previews: {},
+	followed: {},
 	git: {},
 	services: {},
 	drafts: {},
@@ -370,7 +373,7 @@ export function openWebPreview(path: string, url: string): void {
 	showPreview(path, { id: `web:${url}`, path: url, rel: url, name: host, kind: "web", size: 0, mtime: Date.now(), url, scripts: true });
 }
 
-function showPreview(path: string, opened: ReaderFile): void {
+function showPreview(path: string, opened: ReaderFile, pick = true): void {
 	const files = getState().previews[path]?.files ?? [];
 	// The same file opened again takes the old one's place, so it is never open twice.
 	const same = files.find((file) => file.path === opened.path);
@@ -383,16 +386,39 @@ function showPreview(path: string, opened: ReaderFile): void {
 	for (const file of closing) if (file.kind !== "web") void trivium.closeReader(file.id).catch(() => {});
 	transition("tab", () => {
 		setState((s) => ({ previews: { ...s.previews, [path]: { files: next, active: opened.id } } }));
-		showPanelView(path, "preview");
+		if (pick) showPanelView(path, "preview");
+		else {
+			setState((s) => {
+				const { [path]: _, ...panelTab } = s.panelTab;
+				return { panelTab, changesHidden: { ...s.changesHidden, [path]: s.changesHidden[path] ?? false } };
+			});
+		}
 	});
 }
 
-function openViews(s: State, path: string): CodeView[] {
-	return s.views[path] ? codeViews(s.panelTabs[path]) : (s.panelTabs[path] ?? []);
+/**
+ * Shows a document in a session's panel, leaving the tab to the panel's default and a panel the user closed
+ * closed. A file that cannot be shown, such as one outside the project, is passed over.
+ */
+export async function showDocument(path: string, file: string): Promise<void> {
+	const opened = await trivium.openReader(path, file).catch(() => undefined);
+	if (opened) showPreview(path, opened, false);
 }
 
-/** Opens a view as a tab in a session's Code panel, or goes to its tab when it is open already, and shows the panel. */
-export function showPanelView(path: string, name: CodeView): void {
+/** Goes to the document a session is working on, once for each time it moves to another. */
+export function followDocument(path: string, file: string): void {
+	if (getState().followed[path] === file) return;
+	setState((s) => ({ followed: { ...s.followed, [path]: file } }));
+	void showDocument(path, file);
+}
+
+function openViews(s: State, path: string): PanelView[] {
+	const view = s.views[path];
+	return view ? panelViews(view, s.panelTabs[path]) : (s.panelTabs[path] ?? []);
+}
+
+/** Opens a view as a tab in a session's panel, or goes to its tab when it is open already, and shows the panel. */
+export function showPanelView(path: string, name: PanelView): void {
 	setState((s) => {
 		const open = openViews(s, path);
 		return {
@@ -404,7 +430,7 @@ export function showPanelView(path: string, name: CodeView): void {
 }
 
 /** Closes a view's tab; the one beside it shows next. Closing the last tab hides the panel. */
-export function closePanelView(path: string, name: CodeView): void {
+export function closePanelView(path: string, name: PanelView): void {
 	setState((s) => {
 		const open = openViews(s, path);
 		const index = open.indexOf(name);
@@ -413,7 +439,7 @@ export function closePanelView(path: string, name: CodeView): void {
 			const { [path]: _, ...rest } = s.panelTabs;
 			return { panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
 		}
-		const showing = codeTab(open, s.panelTab[path]);
+		const showing = shownView(open, s.panelTab[path]);
 		return {
 			panelTabs: { ...s.panelTabs, [path]: next },
 			panelTab: { ...s.panelTab, [path]: showing === name ? next[Math.min(index, next.length - 1)]! : showing },
@@ -776,6 +802,7 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		dialogs: s.dialogs.filter((dialog) => !gone.has(dialog.sessionPath)),
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
 		panelTabs: Object.fromEntries(Object.entries(s.panelTabs).filter(([path]) => !gone.has(path))),
+		followed: Object.fromEntries(Object.entries(s.followed).filter(([path]) => !gone.has(path))),
 		summaryShown: Object.fromEntries(Object.entries(s.summaryShown).filter(([path]) => !gone.has(path))),
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));

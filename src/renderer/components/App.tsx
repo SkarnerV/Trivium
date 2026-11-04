@@ -5,14 +5,13 @@ import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
 import { closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, toggleSplit, trivium, useStore } from "../store.ts";
 import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
-import { panelFor, panelKind, panelOpen } from "../panels.ts";
+import { panelFor, panelOpen } from "../panels.ts";
 import { commandKey, IS_WINDOWS } from "../platform.ts";
 import { t } from "../i18n.tsx";
 import { ChangesPanel } from "./ChangesPanel.tsx";
 import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
-import { ReviewPanel } from "./ReviewPanel.tsx";
 import { ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
 import { Panes } from "./Panes.tsx";
 import { EmptyPane } from "./SessionPane.tsx";
@@ -220,11 +219,10 @@ export function App() {
 				<div className="card">
 					{folded && peek && <PeekPanel />}
 					{view ? <Panes view={view} /> : <EmptyPane />}
-					{/* The Code panel has its own empty state, beside the repository's changes. */}
-					{view && open && app === "code" && <ChangesPanel view={view} />}
+					{/* The tabbed panel has its own empty states: the repository's changes in Code, a file to pick in Write. */}
+					{view && open && app !== "research" && <ChangesPanel view={view} />}
 					{view && panel === "note" && <NotePanel view={view} />}
-					{view && panel === "review" && <ReviewPanel view={view} />}
-					{view && open && !panel && app !== "code" && <EmptyPanel view={view} kind={panelKind(app)} />}
+					{view && open && !panel && app === "research" && <EmptyPanel view={view} kind="note" />}
 					<Toasts />
 				</div>
 			</div>

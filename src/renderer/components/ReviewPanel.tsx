@@ -2,11 +2,9 @@ import { diffWordsWithSpace } from "diff";
 import { useEffect, useState } from "react";
 import type { FileReview, ReviewSegment, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
-import { CloseIcon } from "../icons.tsx";
-import { askConfirm, attempt, setState, trivium } from "../store.ts";
+import { liveChanges } from "../panels.ts";
+import { askConfirm, attempt, setState, showDocument, trivium } from "../store.ts";
 import { Markdown } from "./Markdown.tsx";
-import { Resizer } from "./Resizer.tsx";
-import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
 
 type Change = Extract<ReviewSegment, { kind: "change" }>;
@@ -46,13 +44,12 @@ function InlineDiff({ change }: { change: Change }) {
 	);
 }
 
-/** The Write app's side panel: the document with each change shown in place, to accept or reject one by one. */
-export function ReviewPanel({ view }: { view: SessionView }) {
-	const files = view.changes.filter((change) => change.status !== "deleted");
-	const [selected, setSelected] = useState<string>();
+/** The Write panel's Review view: the document with each change shown in place, to accept or reject one by one. */
+export function ReviewBody({ view, current }: { view: SessionView; current: string | undefined }) {
+	const files = liveChanges(view);
 	const [review, setReview] = useState<FileReview>();
 	const [busy, setBusy] = useState(false);
-	const file = files.find((f) => f.path === selected) ?? files[0];
+	const file = files.find((f) => f.path === current) ?? files[0];
 	const version = file ? `${file.path}:${file.adds}:${file.dels}:${file.lines.length}` : "";
 
 	useEffect(() => {
@@ -95,10 +92,8 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 
 	const pending = shown?.pending ?? 0;
 	return (
-		<aside className="side-panel review-panel" aria-label={t("Document review")}>
-			<Resizer target="panel" />
-			<div className="side-head">
-				<h2 className="mono">{baseName(file.rel)}</h2>
+		<div className="review-body" role="tabpanel" aria-label={baseName(file.rel)}>
+			<div className="review-bar">
 				{pending > 0 && <span className="pending-pill">{t(pending === 1 ? "1 change to review" : "{n} changes to review", { n: pending })}</span>}
 				<div className="side-actions">
 					<button type="button" className="btn" disabled={busy || view.running} onClick={() => void resolveAll("reject")}>
@@ -108,26 +103,17 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 						{t("Accept all")}
 					</button>
 				</div>
-				<button
-					type="button"
-					className="icon-btn"
-					aria-label={t("Hide review")}
-					title={t("Hide review")}
-					onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: true } }))}
-				>
-					<CloseIcon size={13} />
-				</button>
 			</div>
 			{files.length > 1 && (
 				<div className="chips" role="tablist" aria-label={t("Changed documents")}>
 					{files.map((f) => (
-						<button key={f.path} type="button" role="tab" className="chip" aria-selected={f === file} title={f.rel} onClick={() => transition("tab", () => setSelected(f.path))}>
+						<button key={f.path} type="button" role="tab" className="chip" aria-selected={f === file} title={f.rel} onClick={() => void showDocument(view.path, f.path)}>
 							{baseName(f.rel)}
 						</button>
 					))}
 				</div>
 			)}
-			<div className="side-body">
+			<div className="review-scroll">
 				<article className="doc answer">
 					{shown?.segments.map((segment, index) =>
 						segment.kind === "same" ? (
@@ -162,6 +148,6 @@ export function ReviewPanel({ view }: { view: SessionView }) {
 					)}
 				</article>
 			</div>
-		</aside>
+		</div>
 	);
 }

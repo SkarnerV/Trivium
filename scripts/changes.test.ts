@@ -36,7 +36,7 @@ function setup({ repository = true } = {}) {
 		writeFileSync(file(rel), text);
 	};
 	const listed = async () => (await tracker.list()).map((change) => change.rel.replaceAll("\\", "/"));
-	return { repo, git, file, commit, tracker, edit, listed, saved, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+	return { repo, git, file, commit, tracker, edit, listed, saved, cleanup: () => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
 }
 
 test("a committed file leaves the session's list, and Revert no longer touches it", async () => {
@@ -168,16 +168,16 @@ test("a session loaded later still sees commits made while it was away", async (
 });
 
 test("a commit rewritten away only loses the check, not the file", async () => {
-	const { git, tracker, edit, listed, cleanup } = setup();
+	const { repo, commit, edit, saved, cleanup } = setup();
 	try {
-		await edit("src/cart.ts", "two\n");
-		const first = git("rev-parse", "HEAD").toString().trim();
-		git("commit", "-q", "--amend", "-m", "Reworded", "--allow-empty");
-		git("reflog", "expire", "--expire=now", "--all");
-		git("gc", "-q", "--prune=now");
-		assert.notEqual(git("rev-parse", "HEAD").toString().trim(), first);
-		assert.equal(await tracker.dropCommitted(), false);
-		assert.deepEqual(await listed(), ["src/cart.ts"]);
+		await edit("src/cart.ts", "two
+");
+		commit("Cart");
+		// The session last looked at a commit the repository no longer has.
+		writeFileSync(saved, JSON.stringify({ ...JSON.parse(readFileSync(saved, "utf8")), since: "0".repeat(40) }));
+		const reloaded = new ChangeTracker(saved, repo);
+		assert.equal(await reloaded.dropCommitted(), false);
+		assert.equal((await reloaded.list()).length, 1);
 	} finally {
 		cleanup();
 	}

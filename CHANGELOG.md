@@ -2,6 +2,17 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-11-04
+
+### Added
+
+- **History in Code's panel.** A new History tab draws every branch, remote branch and tag as a commit graph. Click a commit to see who wrote it, its message and the files it changed, and click a file to read its diff in that commit. A merge shows its changes against its first parent. Open it from the **History** button under Changes or from the summary cards; outside a git repository the tab says so.
+- **Revert one file.** Each file under **This session** has its own revert button, which says first when reverting will delete a file the session created. The button under the list is now **Revert all**.
+
+### Changed
+
+- **Keep changes** is gone from Code's panel. A file now leaves **This session** once it is committed, so reverting can't undo committed work. A file changed again after its commit stays until the next one, and staged or gitignored files stay too.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

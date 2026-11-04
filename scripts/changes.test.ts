@@ -170,8 +170,7 @@ test("a session loaded later still sees commits made while it was away", async (
 test("a commit rewritten away only loses the check, not the file", async () => {
 	const { repo, commit, edit, saved, cleanup } = setup();
 	try {
-		await edit("src/cart.ts", "two
-");
+		await edit("src/cart.ts", "two\n");
 		commit("Cart");
 		// The session last looked at a commit the repository no longer has.
 		writeFileSync(saved, JSON.stringify({ ...JSON.parse(readFileSync(saved, "utf8")), since: "0".repeat(40) }));

@@ -242,8 +242,9 @@ export async function readHead(cwd: string): Promise<string | null> {
 export async function committedSince(cwd: string, since: string | null, head: string): Promise<string[]> {
 	const names = async (...revisions: string[]) =>
 		(await git(cwd, ["diff", "--name-only", "-z", "--relative", "--no-renames", ...revisions, "--"], LARGE_OUTPUT)).split("\0").filter(Boolean);
-	const [changed, dirty] = await Promise.all([names(since ?? EMPTY_TREE, head), names("HEAD")]);
-	const different = new Set(dirty);
+	// One at a time: `since` may be gone, and a failure here must not leave the other git still running in the folder.
+	const changed = await names(since ?? EMPTY_TREE, head);
+	const different = new Set(await names("HEAD"));
 	return changed.filter((file) => !different.has(file));
 }
 

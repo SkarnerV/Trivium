@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { getShellConfig } from "@earendil-works/pi-coding-agent";
 import {
 	groupProcesses,
 	MARKER,
+	markerScript,
 	OutputTail,
 	parseLsof,
 	parseMarkerLines,
@@ -21,6 +23,7 @@ import {
 	ServiceTracker,
 	splitByRoot,
 	startsDetached,
+	systemProbe,
 } from "../src/main/services.ts";
 import type { ServiceInfo } from "../src/shared/protocol.ts";
 
@@ -120,6 +123,35 @@ test("Git Bash's marker lines map Windows process ids to command ids", () => {
 		[36592, "abc123"],
 		[20216, "def456"],
 	]);
+});
+
+test("a process whose environment crashes grep loses only itself", { skip: !hasShell() && "no bash" }, async () => {
+	const dir = mkdtempSync(join(tmpdir(), "trivium-markers-"));
+	try {
+		const shell = getShellConfig().shell;
+		const unix = (path: string) => (process.platform === "win32" ? execFileSync(shell, ["-c", `cygpath -u '${path}'`], { encoding: "utf8" }).trim() : path);
+		const proc = (pid: number, winpid: number, marker?: string) => {
+			mkdirSync(join(dir, "proc", String(pid)), { recursive: true });
+			writeFileSync(join(dir, "proc", String(pid), "environ"), `A=1\0${marker ? `${MARKER}=${marker}\0` : ""}B=2\0`);
+			writeFileSync(join(dir, "proc", String(pid), "winpid"), `${winpid}\n`);
+		};
+		proc(111, 5001, "first");
+		proc(222, 5002);
+		proc(333, 5003, "second");
+		proc(999, 5009, "poison");
+		// As Git Bash's grep does for some processes: dies by a signal, whatever else it was given.
+		const realGrep = execFileSync(shell, ["-c", "command -v grep"], { encoding: "utf8" }).trim();
+		mkdirSync(join(dir, "bin"));
+		writeFileSync(join(dir, "bin", "grep"), `#!/bin/sh\nfor arg; do case "$arg" in */999/environ) kill -HUP $$;; esac; done\nexec ${realGrep} "$@"\n`);
+		chmodSync(join(dir, "bin", "grep"), 0o755);
+		const output = execFileSync(shell, ["-c", `PATH="${unix(join(dir, "bin"))}:$PATH"; ${markerScript(unix(join(dir, "proc")))}`], { encoding: "utf8" });
+		assert.deepEqual([...parseMarkerLines(output)], [
+			[5001, "first"],
+			[5003, "second"],
+		]);
+	} finally {
+		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+	}
 });
 
 test("ps lines give the process group and the id from the environment after the command", () => {
@@ -410,6 +442,9 @@ test("a real server left running shows with its port, and Stop frees the port", 
 		}
 		assert.equal(free, true, "the port is free again");
 	} finally {
+		// A server the tracker never found is still running, holding the folder and keeping this process alive.
+		const listening = await systemProbe.listening().catch(() => new Map<number, number[]>());
+		await systemProbe.kill([...listening].filter(([, ports]) => ports.includes(port)).map(([pid]) => row(pid, 0)), true);
 		tracker.dispose();
 		// The tracker may still be saving services.json, so the folder can be briefly not empty.
 		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

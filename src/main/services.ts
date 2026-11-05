@@ -274,9 +274,13 @@ const WINDOWS_LIST =
 
 /**
  * Lists the Git Bash processes carrying a command id, by Windows process id. Git Bash keeps each process's
- * environment under /proc, including native programs it started; one grep reads them all.
+ * environment under /proc, including native programs it started; one grep reads them all. Reading some process's
+ * environment can crash the reader outright, and that process need not be ours, so if grep is killed each is read on
+ * its own, which is slower but loses only that one. grep's own exit codes stop at 2, which a process that just ended gives.
  */
-const MARKER_SCRIPT = `grep -a -o '${MARKER}=[A-Za-z0-9_-]*' /proc/[0-9]*/environ 2>/dev/null | while IFS= read -r line; do p=\${line#/proc/}; p=\${p%%/*}; read -r w < "/proc/$p/winpid" 2>/dev/null && printf '%s\\t%s\\n' "$w" "\${line##*=}"; done; true`;
+export function markerScript(root = "/proc"): string {
+	return `scan() { grep -a -H -o '${MARKER}=[A-Za-z0-9_-]*' "$@" 2>/dev/null; }; set -- ${root}/[0-9]*/environ; found=$(scan "$@"); if [ $? -gt 2 ]; then found=$(for file; do scan "$file"; done); fi; printf '%s\\n' "$found" | while IFS= read -r line; do p=\${line#${root}/}; p=\${p%%/*}; read -r w < "${root}/$p/winpid" 2>/dev/null && printf '%s\\t%s\\n' "$w" "\${line##*=}"; done; true`;
+}
 
 /** Reads processes with the system's own tools: PowerShell and Git Bash on Windows, ps and lsof elsewhere. */
 export const systemProbe: ProcessProbe = {
@@ -284,7 +288,7 @@ export const systemProbe: ProcessProbe = {
 		if (process.platform === "win32") {
 			const [json, markers] = await Promise.all([
 				run(join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_LIST]),
-				shell ? run(shell, ["-c", MARKER_SCRIPT]).catch(() => "") : Promise.resolve(""),
+				shell ? run(shell, ["-c", markerScript()]).catch(() => "") : Promise.resolve(""),
 			]);
 			const ids = parseMarkerLines(markers);
 			return parseWindowsProcesses(json).map((row) => ({ ...row, marker: ids.get(row.pid) }));
@@ -306,7 +310,7 @@ export const systemProbe: ProcessProbe = {
 	},
 	markers:
 		process.platform === "win32"
-			? async (shell) => new Set(shell ? parseMarkerLines(await run(shell, ["-c", MARKER_SCRIPT])).values() : [])
+			? async (shell) => new Set(shell ? parseMarkerLines(await run(shell, ["-c", markerScript()])).values() : [])
 			: undefined,
 	async listening() {
 		if (process.platform === "win32") return parseNetstat(await run(join(process.env.SystemRoot || "C:\\Windows", "System32", "netstat.exe"), ["-ano"]));

@@ -1085,7 +1085,7 @@ body.resizing * {
 		width: 100%;
 		max-width: var(--conversation-width, 720px);
 		margin: 0 auto;
-		padding: 2px 24px 6px;
+		padding: 2px var(--thread-gutter, 24px) 6px;
 	}
 
 	.scroll-row > .summary > .summary-card {
@@ -1184,7 +1184,7 @@ body.resizing * {
 	width: 100%;
 	max-width: var(--conversation-width, 720px);
 	margin: 0 auto;
-	padding: 8px 24px 24px;
+	padding: 8px var(--thread-gutter, 24px) 24px;
 }
 
 .run {
@@ -2534,20 +2534,6 @@ body.resizing * {
 	color: var(--ink-3);
 }
 
-.changes-foot {
-	display: flex;
-	gap: 6px;
-	padding: 12px;
-}
-
-.changes-foot .btn {
-	min-height: 36px;
-}
-
-.changes-foot .btn:only-child {
-	flex: 1;
-}
-
 .history-list {
 	flex: 1;
 	min-height: 0;
@@ -2739,17 +2725,6 @@ body.resizing * {
 .history-more:hover {
 	background: var(--tab);
 	color: var(--ink-2);
-}
-
-.btn.revert {
-	color: var(--del);
-	font-weight: 400;
-}
-
-.btn.revert.confirm {
-	border-color: var(--del);
-	background: #fdeeee;
-	font-weight: 500;
 }
 
 .btn.square {

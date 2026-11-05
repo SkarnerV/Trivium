@@ -179,6 +179,9 @@ export function App() {
 	const conversationWidth = useStore((s) => s.settings?.conversationWidth);
 	const widths: Record<string, string> = {};
 	if (conversationWidth !== undefined) widths["--conversation-width"] = conversationWidth ? `${conversationWidth}px` : "none";
+	// The thread's padding falls inside the width it shares with the message box, which insets its text from the box's
+	// edges. At full width the two are as wide as the pane allows, so the thread needs twice the padding for the same inset.
+	if (conversationWidth === 0) widths["--thread-gutter"] = "48px";
 	if (sidebarWidth) widths["--sidebar-width"] = `${sidebarWidth}px`;
 	if (panelWidth) widths["--panel-width"] = `${panelWidth}px`;
 	if (splitWidth) widths["--split-width"] = `${splitWidth}px`;

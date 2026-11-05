@@ -4,7 +4,7 @@ import { baseName } from "../format.ts";
 import { BranchIcon, Chevron, CloseIcon, CodeIcon, ExternalIcon, EyeIcon, FileIcon, HistoryIcon, MoreIcon, PenIcon, ServerIcon, UndoIcon } from "../icons.tsx";
 import { liveChanges, type PanelView, panelViews, shownView } from "../panels.ts";
 import { IS_WINDOWS } from "../platform.ts";
-import { askConfirm, attempt, closePanelView, closePreview, errorText, openPreview, selectPreview, showPanelView, trivium, setState, useStore } from "../store.ts";
+import { askConfirm, attempt, closePanelView, closePreview, errorText, openPreview, selectPreview, trivium, setState, useStore } from "../store.ts";
 import { ContextMenu } from "./ContextMenu.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { EmptyBody } from "./EmptyPanel.tsx";
@@ -98,16 +98,14 @@ type Picked = { kind: "session"; change: FileChange } | { kind: "git"; file: Git
 const pickedKey = (picked: Picked) => (picked.kind === "session" ? `session:${picked.change.path}` : `git:${picked.file.area}:${picked.file.rel}`);
 
 /**
- * The Code panel's Changes view: the branch, the files this session edited (to review or revert), any other
- * uncommitted changes git reports, and the selected file's diff, with the way to the repository's History below them.
- * Outside a repository it has no git information, and History says why.
+ * The Code panel's Changes view: the branch, the files this session edited (to review or revert one at a time), any
+ * other uncommitted changes git reports, and the selected file's diff. Outside a repository it has no git information.
  */
 function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null | undefined }) {
 	const { changes } = view;
 	const others = otherChanges(changes, git);
 	const [selected, setSelected] = useState<string | undefined>();
 	const [folded, setFolded] = useState<{ session?: boolean; other?: boolean }>({});
-	const [confirmRevert, setConfirmRevert] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [shown, setShown] = useState<{ key: string; diff?: GitDiff; error?: string }>();
 	const items: Picked[] = [
@@ -118,26 +116,6 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 	const key = current ? pickedKey(current) : "";
 	const gitFile = current?.kind === "git" ? current.file : undefined;
 
-	useEffect(() => {
-		if (!confirmRevert) return;
-		const timer = setTimeout(() => setConfirmRevert(false), 4000);
-		return () => clearTimeout(timer);
-	}, [confirmRevert]);
-
-	/** Reverts the given files, or every one this session changed. */
-	const revert = async (paths?: string[]) => {
-		setBusy(true);
-		const next = await attempt(() => trivium.revertChanges(view.path, paths));
-		setBusy(false);
-		setConfirmRevert(false);
-		if (next) {
-			setState((s) => {
-				const latest = s.views[view.path];
-				return latest ? { views: { ...s.views, [view.path]: { ...latest, changes: next } } } : {};
-			});
-		}
-	};
-
 	const revertFile = async (change: FileChange) => {
 		const file = baseName(change.rel);
 		const ok = await askConfirm({
@@ -145,7 +123,16 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 			message: t(change.status === "added" ? "This session created {file}, so reverting deletes it." : "{file} goes back to how it was before this session changed it.", { file }),
 			confirmLabel: t("Revert"),
 		});
-		if (ok) await revert([change.path]);
+		if (!ok) return;
+		setBusy(true);
+		const next = await attempt(() => trivium.revertChanges(view.path, [change.path]));
+		setBusy(false);
+		if (next) {
+			setState((s) => {
+				const latest = s.views[view.path];
+				return latest ? { views: { ...s.views, [view.path]: { ...latest, changes: next } } } : {};
+			});
+		}
 	};
 
 	useEffect(() => {
@@ -165,7 +152,6 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 	const areas = new Map<string, GitArea[]>();
 	for (const file of git?.files ?? []) areas.set(pathKey(file.path), [...(areas.get(pathKey(file.path)) ?? []), file.area]);
 
-	const files = t(changes.length === 1 ? "1 file" : "{n} files", { n: changes.length });
 	const gitDiff = shown?.key === key ? shown : undefined;
 	const path = current?.kind === "session" ? current.change.path : current?.file.path;
 	const rel = (current?.kind === "session" ? current.change.rel : current?.file.rel) ?? "";
@@ -234,7 +220,7 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 						)}
 						{git?.truncated && <p className="change-more">{t("Showing the first {n} changes.", { n: git.files.length })}</p>}
 					</div>
-					<div className={`diff${changes.length ? "" : " is-last"}`} role="region" aria-label={t("Diff of {file}", { file: rel })}>
+					<div className="diff is-last" role="region" aria-label={t("Diff of {file}", { file: rel })}>
 						<div className="diff-path change-diff-path" title={current.kind === "git" && current.file.from ? `${current.file.from} → ${current.file.rel}` : rel}>
 							<span className="change-name ellipsis">{baseName(rel)}</span>
 							<span className="change-dir ellipsis">{dirName(rel)}</span>
@@ -272,26 +258,6 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 						</div>
 					</div>
 				</>
-			)}
-			{(!view.chat || changes.length > 0) && (
-				<div className="changes-foot">
-					{!view.chat && (
-						<button type="button" className="btn" style={{ flex: 1 }} onClick={() => transition("tab", () => showPanelView(view.path, "history"))}>
-							<HistoryIcon size={14} /> {t("History")}
-						</button>
-					)}
-					{changes.length > 0 && (
-						<button
-							type="button"
-							className={`btn revert${confirmRevert ? " confirm" : ""}`}
-							disabled={busy || view.running}
-							title={view.running ? t("Stop the run before reverting") : t("Restore {files} to how they were before this session changed them", { files })}
-							onClick={() => (confirmRevert ? void revert() : setConfirmRevert(true))}
-						>
-							{confirmRevert ? t("Revert {files}?", { files }) : t("Revert all")}
-						</button>
-					)}
-				</div>
 			)}
 		</>
 	);

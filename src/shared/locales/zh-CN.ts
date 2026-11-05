@@ -371,6 +371,7 @@ export default {
 	"Export messages…": "导出消息…",
 	"Copy session ID": "复制会话 ID",
 	"Stop the session before archiving it": "请先停止会话再归档",
+	"Stop the session before deleting it": "请先停止会话再删除",
 	"Stop “{title}” before archiving it.": "请先停止“{title}”再归档。",
 	"“{title}”": "“{title}”",
 	"Pinned": "已置顶",

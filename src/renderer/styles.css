@@ -3636,10 +3636,42 @@ body.resizing * {
 	background: var(--soft);
 }
 
-.archived-list {
+.archived-list,
+.archived-group {
 	display: flex;
 	flex-direction: column;
+}
+
+.archived-list {
+	gap: 14px;
+}
+
+.archived-group {
 	gap: 2px;
+}
+
+.archived-group-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	margin: 0;
+	padding: 0 10px;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--ink-3);
+}
+
+.archived-group-head svg {
+	flex: none;
+}
+
+.archived-group-head .count {
+	margin-left: auto;
+	font-size: 11px;
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
 }
 
 .archived-row {

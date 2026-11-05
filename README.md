@@ -62,7 +62,7 @@ you which mode is still busy.
 
 - **Edit, fork or copy any message.** Edit opens a message in place and starts over from it when you send; pi keeps the old replies on their own branch. Fork copies the conversation up to a message into a new session. Copy takes a message or a reply's Markdown as written.
 - **Chats without a project.** Pick **No project** in New session for a conversation that needs no folder. Chats sit under "Chats" in the sidebar.
-- **Pin and organize.** Right-click a project or session to pin it to the top, start a new session, export the messages as Markdown, copy the session ID or archive it. Archived sessions leave the sidebar and search for **Archived**, the one place to restore or delete a session.
+- **Pin and organize.** Right-click a project or session to pin it to the top, start a new session, export the messages as Markdown, copy the session ID, archive it or delete it. Archived sessions leave the sidebar and search for **Archived**, where they are listed by workspace to restore or delete.
 - **One button for model and effort.** The composer's model button opens a menu with the thinking effort as a slider and a searchable model list.
 
 <p align="center">

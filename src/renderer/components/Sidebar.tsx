@@ -1,8 +1,9 @@
 import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary, UpdateStatus } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
-import { baseName, duration, relativeTime } from "../format.ts";
-import { AppIcon, ArchiveIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, SplitIcon } from "../icons.tsx";
+import { duration, relativeTime } from "../format.ts";
+import { byWorkspace, type WorkspaceGroup } from "../grouping.ts";
+import { AppIcon, ArchiveIcon, ChatIcon, CopyIcon, DownloadIcon, FolderIcon, FolderOpenIcon, GearIcon, MemoryIcon, PanelIcon, PinIcon, PinOffIcon, PlusIcon, SearchIcon, SplitIcon, TrashIcon } from "../icons.tsx";
 import { useNow } from "../hooks.ts";
 import { commandKey, IS_MAC, IS_WINDOWS, keyName } from "../platform.ts";
 import {
@@ -32,13 +33,8 @@ import { Resizer } from "./Resizer.tsx";
 import { serviceCount } from "./ServicesPanel.tsx";
 
 
-interface ProjectGroup {
-	cwd: string;
-	name: string;
-	/** Conversations started without a project. */
-	chat: boolean;
+interface ProjectGroup extends WorkspaceGroup {
 	pinned: boolean;
-	sessions: SessionSummary[];
 }
 
 const PER_PROJECT = 8;
@@ -52,23 +48,11 @@ function groupByProject(
 	pinnedProjects: Record<string, boolean>,
 	pinnedSessions: Record<string, boolean>,
 ): ProjectGroup[] {
-	const groups = new Map<string, ProjectGroup>();
-	for (const session of sessions) {
-		if (session.app !== app || session.archived) continue;
-		let group = groups.get(session.cwd);
-		if (!group) {
-			group = {
-				cwd: session.cwd,
-				name: session.chat ? t("Chats") : baseName(session.cwd) || t("No project"),
-				chat: session.chat,
-				pinned: !!pinnedProjects[`${app}:${session.cwd}`],
-				sessions: [],
-			};
-			groups.set(session.cwd, group);
-		}
-		group.sessions.push(session);
-	}
-	return pinnedFirst([...groups.values()], (group) => group.pinned).map((group) => ({
+	const groups = byWorkspace(sessions.filter((session) => session.app === app && !session.archived)).map((group) => ({
+		...group,
+		pinned: !!pinnedProjects[`${app}:${group.cwd}`],
+	}));
+	return pinnedFirst(groups, (group) => group.pinned).map((group) => ({
 		...group,
 		sessions: pinnedFirst(group.sessions, (session) => !!pinnedSessions[session.path]),
 	}));
@@ -151,6 +135,14 @@ function sessionMenu(session: SessionSummary, pinned: boolean, active: boolean):
 			disabled: session.running,
 			title: session.running ? t("Stop the session before archiving it") : undefined,
 			onSelect: () => void archiveSessions([session.path], true),
+		},
+		{
+			label: t("Delete session"),
+			icon: <TrashIcon size={14} />,
+			danger: true,
+			disabled: session.running,
+			title: session.running ? t("Stop the session before deleting it") : undefined,
+			onSelect: () => confirmDelete([session], t("“{title}”", { title: session.title })),
 		},
 	];
 }

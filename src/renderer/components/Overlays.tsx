@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionSummary, TrustChoice } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
-import { AppIcon, ArchiveIcon, CloseIcon, FolderIcon, TrashIcon, UndoIcon } from "../icons.tsx";
+import { byWorkspace } from "../grouping.ts";
+import { AppIcon, ArchiveIcon, ChatIcon, CloseIcon, FolderIcon, TrashIcon, UndoIcon } from "../icons.tsx";
 import { archiveSessions, attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
 import { commandKey } from "../platform.ts";
@@ -171,7 +172,7 @@ export function SearchOverlay() {
 	);
 }
 
-/** The current mode's archived sessions, and the one place to delete a session. */
+/** The current mode's archived sessions, by workspace, to restore or delete. */
 export function ArchivedPanel() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
@@ -200,38 +201,46 @@ export function ArchivedPanel() {
 				</div>
 				{archived.length ? (
 					<div className="archived-list">
-						{archived.map((session) => (
-							<div key={session.path} className="archived-row" title={session.title}>
-								<span className="title ellipsis">{session.title}</span>
-								{(services[session.path]?.length ?? 0) > 0 && (
-									<span
-										className="service-dot"
-										role="img"
-										aria-label={serviceCount(services[session.path]!.length)}
-										title={t("{services} running", { services: serviceCount(services[session.path]!.length) })}
-									/>
-								)}
-								<span className="session-meta">{session.chat ? t("Chats") : baseName(session.cwd)}</span>
-								<span className="session-meta">{relativeTime(session.modified)}</span>
-								<button
-									type="button"
-									className="icon-btn"
-									aria-label={t("Restore {title}", { title: session.title })}
-									title={t("Restore session")}
-									onClick={() => void archiveSessions([session.path], false)}
-								>
-									<UndoIcon size={14} />
-								</button>
-								<button
-									type="button"
-									className="icon-btn archived-delete"
-									aria-label={t("Delete {title}", { title: session.title })}
-									title={t("Delete session")}
-									onClick={() => confirmDelete([session], t("“{title}”", { title: session.title }))}
-								>
-									<TrashIcon size={14} />
-								</button>
-							</div>
+						{byWorkspace(archived).map((group) => (
+							<section key={group.cwd} className="archived-group" aria-label={group.name}>
+								<h3 className="archived-group-head" title={group.cwd}>
+									{group.chat ? <ChatIcon size={14} /> : <FolderIcon size={14} />}
+									<span className="ellipsis">{group.name}</span>
+									<span className="count">{group.sessions.length}</span>
+								</h3>
+								{group.sessions.map((session) => (
+									<div key={session.path} className="archived-row" title={session.title}>
+										<span className="title ellipsis">{session.title}</span>
+										{(services[session.path]?.length ?? 0) > 0 && (
+											<span
+												className="service-dot"
+												role="img"
+												aria-label={serviceCount(services[session.path]!.length)}
+												title={t("{services} running", { services: serviceCount(services[session.path]!.length) })}
+											/>
+										)}
+										<span className="session-meta">{relativeTime(session.modified)}</span>
+										<button
+											type="button"
+											className="icon-btn"
+											aria-label={t("Restore {title}", { title: session.title })}
+											title={t("Restore session")}
+											onClick={() => void archiveSessions([session.path], false)}
+										>
+											<UndoIcon size={14} />
+										</button>
+										<button
+											type="button"
+											className="icon-btn archived-delete"
+											aria-label={t("Delete {title}", { title: session.title })}
+											title={t("Delete session")}
+											onClick={() => confirmDelete([session], t("“{title}”", { title: session.title }))}
+										>
+											<TrashIcon size={14} />
+										</button>
+									</div>
+								))}
+							</section>
 						))}
 					</div>
 				) : (

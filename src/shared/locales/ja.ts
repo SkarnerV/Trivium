@@ -371,6 +371,7 @@ export default {
 	"Export messages…": "メッセージを書き出す…",
 	"Copy session ID": "セッション ID をコピー",
 	"Stop the session before archiving it": "アーカイブする前にセッションを停止してください",
+	"Stop the session before deleting it": "削除する前にセッションを停止してください",
 	"Stop “{title}” before archiving it.": "アーカイブする前に「{title}」を停止してください。",
 	"“{title}”": "「{title}」",
 	"Pinned": "固定済み",

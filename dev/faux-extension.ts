@@ -8,6 +8,7 @@
 // - A prompt that mentions "subagent", in any app, delegates: one child, three in parallel, then one in
 //   the background whose result arrives later as its own run.
 // - A prompt that mentions "server", in Code, starts a small web server in the background, for the Services view.
+// - A prompt that mentions "slow", in Code, runs a command that outlasts the bash limit; "hang" sets a short timeout, which only shortens the wait.
 // Every prompt replays the story from its first step.
 import {
 	createFauxCore,
@@ -312,6 +313,16 @@ const NOTICE_REPLY: Step = () =>
 		fauxText("The researcher is back: Electron starts about **2.1× slower** than Tauri here (420 ms vs 200 ms), but both stay under half a second, so it isn't a reason to switch."),
 	);
 
+const SLOW_STORY: Step[] = [
+	() => fauxAssistantMessage([fauxText("Running the test suite."), fauxToolCall("bash", { command: "echo starting; sleep 14; echo all 42 tests passed" })], { stopReason: "toolUse" }),
+	() => fauxAssistantMessage(fauxText("The tests are still running in the background. I'll report when they end.")),
+];
+
+const HANG_STORY: Step[] = [
+	() => fauxAssistantMessage([fauxText("Waiting a second for it."), fauxToolCall("bash", { command: "sleep 30", timeout: 1 })], { stopReason: "toolUse" }),
+	() => fauxAssistantMessage(fauxText("It's still going in the background.")),
+];
+
 function textOf(message: unknown): string {
 	return JSON.stringify(message);
 }
@@ -387,7 +398,10 @@ export default function (pi: ExtensionAPI) {
 		// pi hands a custom message to the model as a user message.
 		const prompt = textOf(context.messages[lastUser]?.content);
 		if (prompt.includes("Background task completed")) return NOTICE_REPLY();
-		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : app === "code" && /server/i.test(prompt) ? SERVER_STORY : scripts[app]!;
+		const ended = /Background command [^"\\]*/.exec(prompt)?.[0];
+		if (ended) return fauxAssistantMessage(fauxText(`Done. ${ended}`));
+		const coded = app === "code" && (/server/i.test(prompt) ? SERVER_STORY : /slow/i.test(prompt) ? SLOW_STORY : /hang/i.test(prompt) ? HANG_STORY : undefined);
+		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : coded || scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();
 	};
 	core.setResponses(Array.from({ length: 200 }, () => respond));

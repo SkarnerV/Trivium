@@ -1,12 +1,13 @@
 import { type ChildProcess, execFile, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
-import { access, readFile, rename, writeFile } from "node:fs/promises";
+import { createWriteStream, existsSync, mkdirSync, type WriteStream } from "node:fs";
+import { access, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type BashOperations, getShellConfig } from "@earendil-works/pi-coding-agent";
 import type { ServiceInfo } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
+import { BACKGROUND_AFTER_MS, BACKGROUND_LIMIT_MS, type BackgroundEnd, backgroundNote, LOG_KEEP_MS, LOG_LIMIT_BYTES } from "./long-commands.ts";
 
 /**
  * Every agent command runs with this variable set to an id of its own. Processes inherit it, so the ones a
@@ -415,6 +416,32 @@ function waitForShell(child: ChildProcess): Promise<number | null> {
 	});
 }
 
+/** A command's output on disk, from when it moved to the background, starting with what it had printed by then. */
+class CommandLog {
+	readonly path: string;
+	private readonly stream: WriteStream;
+	private bytes = 0;
+
+	constructor(path: string, printed: string) {
+		this.path = path;
+		mkdirSync(dirname(path), { recursive: true });
+		this.stream = createWriteStream(path, { mode: 0o600 });
+		this.stream.on("error", () => {});
+		this.write(printed);
+	}
+
+	write(chunk: Buffer | string): void {
+		if (this.bytes >= LOG_LIMIT_BYTES) return;
+		this.bytes += chunk.length;
+		this.stream.write(chunk);
+		if (this.bytes >= LOG_LIMIT_BYTES) this.stream.write("\n[Log limit reached; later output was dropped.]\n");
+	}
+
+	end(): void {
+		this.stream.end();
+	}
+}
+
 interface Tracked extends ServiceKey {
 	sessionPath: string;
 	command: string;
@@ -467,16 +494,50 @@ export class ServiceTracker {
 	/** Another read after one failed, for commands that just ended; services already listed have the poll. */
 	private retry: ReturnType<typeof setTimeout> | undefined;
 	private retries = 0;
+	private readonly backgroundAfterMs: number;
+	private readonly backgroundLimitMs: number;
+	/** Commands running in the background: their session paths, by command id. */
+	private background = new Map<string, () => string>();
+	private disposed = false;
 
-	constructor(options: { file: string; emit: (services: Record<string, ServiceInfo[]>) => void; probe?: ProcessProbe; pollMs?: number }) {
+	constructor(options: {
+		file: string;
+		emit: (services: Record<string, ServiceInfo[]>) => void;
+		probe?: ProcessProbe;
+		pollMs?: number;
+		backgroundAfterMs?: number;
+		backgroundLimitMs?: number;
+	}) {
 		this.file = options.file;
 		this.emit = options.emit;
 		this.probe = options.probe ?? systemProbe;
 		this.pollMs = options.pollMs ?? (process.platform === "win32" ? 5000 : 3000);
+		this.backgroundAfterMs = options.backgroundAfterMs ?? BACKGROUND_AFTER_MS;
+		this.backgroundLimitMs = options.backgroundLimitMs ?? BACKGROUND_LIMIT_MS;
+	}
+
+	private get logDir(): string {
+		return join(dirname(this.file), "command-logs");
+	}
+
+	/** Whether a session has a command in the background, which it needs to stay loaded to hear the end of. */
+	hasBackground(sessionPath: string): boolean {
+		return [...this.background.values()].some((path) => path() === sessionPath);
+	}
+
+	/** Deletes logs old enough that no session will want them. */
+	private async sweepLogs(): Promise<void> {
+		const names = await readdir(this.logDir).catch(() => [] as string[]);
+		for (const name of names) {
+			const file = join(this.logDir, name);
+			const { mtimeMs } = await stat(file).catch(() => ({ mtimeMs: Date.now() }));
+			if (Date.now() - mtimeMs > LOG_KEEP_MS) await rm(file, { force: true }).catch(() => {});
+		}
 	}
 
 	/** Finds services a crash left running, from the list saved before it. */
 	async init(): Promise<void> {
+		await this.sweepLogs();
 		if (!existsSync(this.file)) return;
 		let saved: Saved[] = [];
 		try {
@@ -496,11 +557,15 @@ export class ServiceTracker {
 	}
 
 	/** Bash operations that run each command with an id, and check for processes it left once it ends. */
-	bashOperations(sessionPath: () => string, options: { shellPath?: string; commandPrefix?: string } = {}): BashOperations {
+	bashOperations(
+		sessionPath: () => string,
+		options: { shellPath?: string; commandPrefix?: string; onBackgroundEnd?: (end: BackgroundEnd) => void } = {},
+	): BashOperations {
 		return {
 			exec: async (command, cwd, { onData, signal, timeout, env }) => {
 				if (signal?.aborted) throw new Error("aborted");
-				if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) throw new Error("Invalid timeout: must be a finite number of seconds");
+				// Models send 0 to mean no timeout.
+				if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 0)) throw new Error("Invalid timeout: must be a finite number of seconds");
 				try {
 					await access(cwd);
 				} catch {
@@ -524,8 +589,10 @@ export class ServiceTracker {
 				}
 				const output = new OutputTail();
 				let forward = true;
+				let log: CommandLog | undefined;
 				const onChunk = (data: Buffer) => {
 					output.append(data);
+					log?.write(data);
 					if (forward) onData(data);
 				};
 				child.stdout?.on("data", onChunk);
@@ -533,23 +600,61 @@ export class ServiceTracker {
 				// The pipes stay read after the command returns, so a service printing to them is not cut off.
 				child.stdout?.on("error", () => {});
 				child.stderr?.on("error", () => {});
-				let timedOut = false;
 				const stop = () => child.pid && killShell(child.pid);
-				const timer = timeout ? setTimeout(() => ((timedOut = true), stop()), timeout * 1000) : undefined;
 				signal?.addEventListener("abort", stop, { once: true });
+				const shown = options.commandPrefix && command.startsWith(`${options.commandPrefix}\n`) ? command.slice(options.commandPrefix.length + 1) : command;
+				const finished = waitForShell(child);
+				let tracked: Tracked | undefined;
+				// A timeout can shorten the wait, not lengthen it, and it ends nothing: killing a run loses its progress.
+				let backgroundTimer: ReturnType<typeof setTimeout> | undefined;
+				const toBackground = new Promise<"background">((resolve) => {
+					backgroundTimer = setTimeout(() => resolve("background"), Math.min(timeout ? timeout * 1000 : Infinity, this.backgroundAfterMs));
+				});
 				try {
-					const exitCode = await waitForShell(child);
+					const outcome = await Promise.race([finished, toBackground]);
+					if (outcome === "background" && !signal?.aborted) {
+						const commandLog = new CommandLog(join(this.logDir, `${id}.log`), output.read());
+						log = commandLog;
+						onData(Buffer.from(backgroundNote(Date.now() - startedAt, commandLog.path)));
+						this.background.set(id, sessionPath);
+						let hitLimit = false;
+						const limit = setTimeout(
+							() => {
+								hitLimit = true;
+								stop();
+							},
+							Math.max(0, this.backgroundLimitMs - (Date.now() - startedAt)),
+						);
+						limit.unref?.();
+						const settle = (exitCode: number | null) => {
+							clearTimeout(limit);
+							commandLog.end();
+							this.background.delete(id);
+							if (this.disposed) return;
+							options.onBackgroundEnd?.({
+								command: shown.trim(),
+								exitCode,
+								durationMs: Date.now() - startedAt,
+								logPath: commandLog.path,
+								output: output.read(),
+								stopped: !!tracked && (tracked.stopping || tracked.stoppingRoots.size > 0),
+								hitLimit,
+							});
+						};
+						void finished.then(settle, () => settle(null));
+						return { exitCode: 0 };
+					}
+					const exitCode = outcome === "background" ? await finished : outcome;
 					if (signal?.aborted) throw new Error("aborted");
-					if (timedOut) throw new Error(`timeout:${timeout}`);
 					const signalCode = child.signalCode;
 					return { exitCode: exitCode ?? (signalCode ? 128 + (osConstants.signals[signalCode] ?? 0) : 1) };
 				} finally {
 					forward = false;
-					clearTimeout(timer);
+					clearTimeout(backgroundTimer);
 					signal?.removeEventListener("abort", stop);
-					const shown = options.commandPrefix && command.startsWith(`${options.commandPrefix}\n`) ? command.slice(options.commandPrefix.length + 1) : command;
 					const detached = process.platform === "win32" && startsDetached(shown) ? { command: shown, endedAt: Date.now() } : undefined;
-					this.ended({ id, startedAt, shellPid: child.pid, detached, sessionPath: sessionPath(), command: shown.trim(), cwd, output, ...NOTHING_YET() });
+					tracked = { id, startedAt, shellPid: child.pid, detached, sessionPath: sessionPath(), command: shown.trim(), cwd, output, ...NOTHING_YET() };
+					this.ended(tracked);
 				}
 			},
 		};
@@ -565,7 +670,7 @@ export class ServiceTracker {
 
 	/** How many services are running, counting each program a command left. */
 	count(): number {
-		return [...this.services.values()].reduce((sum, service) => sum + Math.max(1, splitByRoot(service.processes).length), 0);
+		return [...this.services.values()].reduce((sum, service) => sum + (this.background.has(service.id) ? 1 : Math.max(1, splitByRoot(service.processes).length)), 0);
 	}
 
 	/**
@@ -643,6 +748,7 @@ export class ServiceTracker {
 
 	/** Ends every service at once, for when the app quits. */
 	dispose(): void {
+		this.disposed = true;
 		clearInterval(this.poll);
 		clearTimeout(this.outputTimer);
 		clearTimeout(this.retry);
@@ -774,7 +880,8 @@ export class ServiceTracker {
 			output,
 			stopping,
 		});
-		if (parts.length <= 1) return [info(service.id, service.processes, service.ports, serviceUrl(output, service.ports), service.stopping)];
+		// A command still running is one thing to the user, however its shell and programs are parented: Stop ends all of it.
+		if (parts.length <= 1 || this.background.has(service.id)) return [info(service.id, service.processes, service.ports, serviceUrl(output, service.ports), service.stopping)];
 		return parts.map((part) => {
 			const root = rootsOf(part)[0]!;
 			const ports = [...new Set(part.flatMap((row) => service.listening.get(row.pid) ?? []))].sort((a, b) => a - b);

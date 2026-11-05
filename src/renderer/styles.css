@@ -1792,6 +1792,11 @@ body.resizing * {
 	color: var(--del);
 }
 
+.subagent-notice-command {
+	min-width: 0;
+	color: var(--ink-2);
+}
+
 .subagent-notice-preview {
 	flex: 1;
 	color: var(--ink-4);

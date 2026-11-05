@@ -59,6 +59,7 @@ import { APP_IDS } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, skillDir, triviumDir } from "./apps.ts";
 import * as skillFiles from "./skills.ts";
+import { type BackgroundEnd, endedMessage, withLongCommands } from "./long-commands.ts";
 import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { permissionGate } from "./permission-gate.ts";
@@ -750,6 +751,7 @@ export class SessionHost {
 		const paths: string[] = [];
 		for (const live of this.live.values()) {
 			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
+			if (this.services.hasBackground(live.path)) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -1072,7 +1074,14 @@ export class SessionHost {
 		const shell = { shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() };
 		const customTools =
 			profileInfo(app).tools.includes("bash") && !ownBash
-				? [createBashToolDefinition(cwd, { ...shell, operations: this.services.bashOperations(() => sessionPath, shell) }) as ToolDefinition<any, any>]
+				? [
+						withLongCommands(
+							createBashToolDefinition(cwd, {
+								...shell,
+								operations: this.services.bashOperations(() => sessionPath, { ...shell, onBackgroundEnd: (end) => this.backgroundEnded(sessionPath, end) }),
+							}),
+						) as ToolDefinition<any, any>,
+					]
 				: undefined;
 		const model =
 			isNew && appSettings.model && slash > 0
@@ -1116,6 +1125,18 @@ export class SessionHost {
 		});
 		live.unsubscribe = session.subscribe((event) => this.onEvent(live, event));
 		return live;
+	}
+
+	/** Tells a session that a command it left in the background has ended. */
+	private backgroundEnded(path: string, end: BackgroundEnd): void {
+		const live = this.live.get(path);
+		if (!live) return;
+		// It may have changed files, committed or switched branches.
+		this.scheduleGit(live);
+		const { message, options } = endedMessage(end);
+		void live.session.sendCustomMessage(message, options).catch((error: unknown) => {
+			this.notice(error instanceof Error ? error.message : String(error), "error");
+		});
 	}
 
 	private onEvent(live: Live, event: AgentSessionEvent): void {

@@ -191,16 +191,19 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 	const [open, setOpen] = useState(false);
 	const took =
 		notice.durationMs !== undefined ? ` ${t(notice.status === "completed" ? "in {time}" : "after {time}", { time: duration(notice.durationMs) })}` : "";
-	const preview = firstLine(notice.text.replace(/^[#>*\-\s]+/gm, ""));
+	// A command's verdict is what it printed last.
+	const preview = notice.command !== undefined ? firstLine(notice.text.trim().split("\n").at(-1) ?? "") : firstLine(notice.text.replace(/^[#>*\-\s]+/gm, ""));
 	return (
 		<div className={`subagent-notice${notice.status === "completed" ? "" : " problem"}`}>
 			<div className="subagent-notice-head">
 				<span className="subagent-notice-icon">
 					<ReturnIcon />
 				</span>
-				{notice.agent.split(", ").map((agent) => (
-					<AgentTag key={agent} agent={agent} />
-				))}
+				{notice.command !== undefined ? (
+					<code className="subagent-notice-command ellipsis">{notice.command.split("\n")[0]}</code>
+				) : (
+					notice.agent.split(", ").map((agent) => <AgentTag key={agent} agent={agent} />)
+				)}
 				<span className="subagent-notice-status">
 					{t(NOTICE_VERBS[notice.status])}
 					{took}

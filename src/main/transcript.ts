@@ -3,6 +3,7 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 import { type AgentSessionEvent, type SessionEntry, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
 import type { ReplyTiming, Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
+import { movedToBackground } from "./long-commands.ts";
 import { describeSubagent, launchesSubagents, noticeOf, subagentOf } from "./subagents.ts";
 
 /**
@@ -180,14 +181,15 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 	if (tool.status === "error") {
 		const target = path || str(args.command) || str(args.pattern) || firstLine(JSON.stringify(args), 80);
 		const code = /exit(?:ed with)? code (\d+)/i.exec(result ?? "")?.[1];
-		return { target: firstLine(target, 120), meta: code ? `exit ${code}` : "error", tone: "error" };
+		const timedOut = tool.name === "bash" && /(?:^|\n)Command timed out after [\d.]+ seconds\s*$/.test(result ?? "");
+		return { target: firstLine(target, 120), meta: timedOut ? "timed out" : code ? `exit ${code}` : "error", tone: "error" };
 	}
 	switch (tool.name) {
 		case "read":
 			if (tool.images?.length) return { target: path, meta: tool.images.length === 1 ? "image" : `${tool.images.length} images`, tone: "plain" };
 			return { target: path, meta: running ? "" : `${result?.split("\n").length ?? 0} lines`, tone: "plain" };
 		case "bash":
-			return { target: commandLine(str(args.command)), meta: running ? "running" : "exit 0", tone: "add" };
+			return { target: commandLine(str(args.command)), meta: running ? "running" : movedToBackground(result) ? "in background" : "exit 0", tone: "add" };
 		case "edit": {
 			const diff = str((tool.details as { diff?: unknown } | undefined)?.diff);
 			const lines = diff.split("\n");

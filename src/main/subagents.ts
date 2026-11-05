@@ -1,4 +1,5 @@
 import type { Step, Subagent, SubagentChild, SubagentNotice } from "../shared/protocol.ts";
+import { commandNotice } from "./long-commands.ts";
 
 /**
  * Reads what pi-subagents reports about its children: the `subagent` tool's details while it runs and
@@ -170,7 +171,7 @@ const TRAILER = /^(Parent action|Session|Session file|Session share error|Retent
 
 /** A background child's result, or undefined for any other message. */
 export function noticeOf(message: { role?: unknown; customType?: unknown; content?: unknown; details?: unknown }): SubagentNotice | undefined {
-	if (message.role !== "custom" || message.customType !== "subagent-notify") return undefined;
+	if (message.role !== "custom" || message.customType !== "subagent-notify") return commandNotice(message);
 	const content = typeof message.content === "string"
 		? message.content
 		: list<{ type?: unknown; text?: unknown }>(message.content).map((part) => str(part.text)).join("\n");

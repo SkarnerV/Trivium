@@ -116,9 +116,11 @@ export interface Subagent {
 	background: boolean;
 }
 
-/** A background subagent's result, which starts a run of its own instead of a user message. */
+/** A background subagent's result or a background command's end, which starts a run of its own instead of a user message. */
 export interface SubagentNotice {
 	agent: string;
+	/** The command, when this is one rather than a subagent. */
+	command?: string;
 	status: "completed" | "failed" | "paused" | "stopped";
 	durationMs?: number;
 	/** The child's result, as pi-subagents previewed it. */

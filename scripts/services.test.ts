@@ -384,12 +384,11 @@ test("a command that leaves two programs running lists two services, each stoppe
 	}
 });
 
-test("a stopped or timed-out command ends with everything it started", { skip: !hasShell() && "no bash" }, async () => {
+test("a stopped command ends with everything it started", { skip: !hasShell() && "no bash" }, async () => {
 	const dir = mkdtempSync(join(tmpdir(), "trivium-services-"));
 	const tracker = new ServiceTracker({ file: join(dir, "services.json"), emit: () => {}, probe: fakeProbe(), pollMs: 60_000 });
 	try {
 		const ops = tracker.bashOperations(() => "s");
-		await assert.rejects(ops.exec("sleep 30", dir, { onData: () => {}, timeout: 0.5 }), /^Error: timeout:0.5$/);
 		const controller = new AbortController();
 		setTimeout(() => controller.abort(), 300);
 		await assert.rejects(ops.exec("sleep 30", dir, { onData: () => {}, signal: controller.signal }), /aborted/);

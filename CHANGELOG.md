@@ -2,6 +2,22 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-11-05
+
+### Added
+
+- **Delete from the session menu.** Right-click a session and **Delete session** sits under **Archive session**, so a session no longer has to be archived first. It asks before deleting, moves the session to the Trash, and is unavailable while the session runs.
+
+### Changed
+
+- **Archived is grouped by workspace.** The Archived panel lists sessions under a heading for each folder, with a count. Hover a heading for the full path.
+- **History** and **Revert all** are gone from under Changes. Open History from its summary card, and revert files one at a time with each file's own button.
+
+### Fixed
+
+- At **Full width**, the conversation text lined up with the message box's edges. It now keeps the same inset as the other widths.
+- Clearing committed files could leave a `git diff` running in the repository when the session's last known commit no longer existed.
+
 ## [0.7.0] - 2026-11-04
 
 ### Added

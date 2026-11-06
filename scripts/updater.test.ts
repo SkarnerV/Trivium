@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -199,7 +200,8 @@ test(
 			assert.match(text, /started/, "the script ran");
 			assert.match(text, /outlived Trivium/, "the script kept running after Trivium exited");
 		} finally {
-			rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+			// PowerShell can still be exiting. Each retry of `rm` tries again; `rmSync` gives up on the first EBUSY in Node 22.
+			await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 		}
 	},
 );

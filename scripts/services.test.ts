@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -445,7 +446,7 @@ test("a real server left running shows with its port, and Stop frees the port", 
 		const listening = await systemProbe.listening().catch(() => new Map<number, number[]>());
 		await systemProbe.kill([...listening].filter(([, ports]) => ports.includes(port)).map(([pid]) => row(pid, 0)), true);
 		tracker.dispose();
-		// The tracker may still be saving services.json, so the folder can be briefly not empty.
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		// The tracker may still be saving services.json, and each retry of `rm` clears the folder again, unlike those of `rmSync`.
+		await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 	}
 });

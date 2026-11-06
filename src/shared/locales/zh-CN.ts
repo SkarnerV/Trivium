@@ -1090,4 +1090,6 @@ export default {
 	"{name} diagram": "{name} 图表",
 	"Couldn't draw this {name} diagram: {error}": "无法绘制此 {name} 图表：{error}",
 	"Drawing diagram…": "正在绘制图表…",
+	"Moves a command still running after 10 minutes to the background, so the session carries on and the work isn't lost.": "将运行超过 10 分钟的命令移到后台，让会话继续进行，已完成的工作也不会丢失。",
+	"Comes with Trivium. Turn it off if this mode shouldn't have it.": "随 Trivium 提供。如果此模式不需要，可将其关闭。",
 } satisfies Record<string, string>;

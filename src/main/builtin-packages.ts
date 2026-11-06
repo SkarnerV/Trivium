@@ -38,10 +38,11 @@ export function activeBuiltIns(app: AppId, removed: string[], installed: Package
 /**
  * Drops a shipped package that registers a tool another extension also registers, with the conflicts pi reported
  * for it. The user's own copy wins, as in activeBuiltIns, and covers one whose package name differs: pi-memory,
- * which Trivium shipped before, and @pify/memory both register memory_write.
+ * which Trivium shipped before, and @pify/memory both register memory_write. `builtIns` are package folders, or the
+ * path of an extension Trivium ships in itself.
  */
-export function dropClashingBuiltIns(result: LoadExtensionsResult, builtInDirs: string[], off = new Set<string>()): LoadExtensionsResult {
-	const isBuiltIn = (path: string) => builtInDirs.some((dir) => path.startsWith(dir + sep));
+export function dropClashingBuiltIns(result: LoadExtensionsResult, builtIns: string[], off = new Set<string>()): LoadExtensionsResult {
+	const isBuiltIn = (path: string) => builtIns.some((entry) => path === entry || path.startsWith(entry + sep));
 	const theirs = new Set(
 		result.extensions
 			.filter((extension) => !isBuiltIn(extension.resolvedPath) && !off.has(extension.resolvedPath))

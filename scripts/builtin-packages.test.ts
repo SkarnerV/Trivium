@@ -60,6 +60,21 @@ test("a shipped package gives way to the user's own extension with the same tool
 	assert.deepEqual(dropClashingBuiltIns(loaded(), [shipped], new Set([theirs])).extensions.length, 3);
 });
 
+test("an extension Trivium ships in itself gives way by its path, unless the other one is off", () => {
+	const ours = "builtin:long-commands";
+	const theirs = join(tmpdir(), "user", "my-bash", "index.ts");
+	const extension = (path: string) => ({ path, resolvedPath: path, tools: new Map([["bash", {}]]), flags: new Map() }) as unknown as Extension;
+	const loaded = (): LoadExtensionsResult => ({
+		extensions: [extension(theirs), extension(ours)],
+		errors: [{ path: ours, error: `Tool "bash" conflicts with ${theirs}` }],
+		runtime: { pendingProviderRegistrations: [] } as unknown as LoadExtensionsResult["runtime"],
+	});
+	const result = dropClashingBuiltIns(loaded(), [ours]);
+	assert.deepEqual(result.extensions.map((entry) => entry.path), [theirs]);
+	assert.deepEqual(result.errors, []);
+	assert.deepEqual(dropClashingBuiltIns(loaded(), [ours], new Set([theirs])).extensions.map((entry) => entry.path), [theirs, ours]);
+});
+
 test("the old pi-permission-system policy carries over as the closest mode", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "trivium-perm-"));
 	try {

@@ -4,8 +4,18 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createBashToolDefinition, getShellConfig } from "@earendil-works/pi-coding-agent";
-import { type BackgroundEnd, COMMAND_ENDED, COMMAND_STOPPED, commandNotice, endedMessage, movedToBackground, withLongCommands } from "../src/main/long-commands.ts";
+import { createBashToolDefinition, DefaultResourceLoader, getShellConfig, SettingsManager } from "@earendil-works/pi-coding-agent";
+import {
+	type BackgroundEnd,
+	COMMAND_ENDED,
+	COMMAND_STOPPED,
+	commandNotice,
+	endedMessage,
+	LONG_COMMANDS_NAME,
+	LONG_COMMANDS_PATH,
+	movedToBackground,
+	withLongCommands,
+} from "../src/main/long-commands.ts";
 import { MARKER, type ProcessProbe, type ProcessRow, ServiceTracker, systemProbe } from "../src/main/services.ts";
 import { noticeOf } from "../src/main/subagents.ts";
 import { RunTracker } from "../src/main/transcript.ts";
@@ -70,6 +80,43 @@ test("a command that ends in time neither logs nor reports", shell, async () => 
 		assert.equal(reported, false);
 		assert.equal(tracker.hasBackground("s"), false);
 	});
+});
+
+test("with the extension off, a command holds its call however long it takes", shell, async () => {
+	await withTracker({ backgroundAfterMs: 100 }, async (tracker) => {
+		let printed = "";
+		const result = await tracker.bashOperations(() => "s").exec("sleep 1; echo done; exit 7", tmpdir(), { onData: (data) => (printed += data) });
+		assert.deepEqual(result, { exitCode: 7 });
+		assert.match(printed, /done/);
+		assert.equal(movedToBackground(printed), false);
+		assert.equal(tracker.hasBackground("s"), false);
+	});
+});
+
+test("with the extension off, a timeout kills the command", shell, async () => {
+	await withTracker({ backgroundAfterMs: 5000 }, async (tracker) => {
+		await assert.rejects(tracker.bashOperations(() => "s").exec("sleep 30", tmpdir(), { onData: () => {}, timeout: 0.5 }), /^Error: timeout:0.5$/);
+	});
+});
+
+test("pi loads the extension at the path Settings turns off, and hides it", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "trivium-long-"));
+	try {
+		const loader = new DefaultResourceLoader({
+			cwd: dir,
+			agentDir: dir,
+			settingsManager: SettingsManager.create(dir, dir, { projectTrusted: false }),
+			extensionFactories: [{ name: LONG_COMMANDS_NAME, builtin: true, factory: (pi) => pi.registerTool(createBashToolDefinition(dir)) }],
+		});
+		await loader.reload();
+		const [extension] = loader.getExtensions().extensions.filter((entry) => entry.tools.has("bash"));
+		assert.equal(extension?.path, LONG_COMMANDS_PATH);
+		assert.equal(extension?.resolvedPath, LONG_COMMANDS_PATH);
+		// Which is why Settings lists it by name.
+		assert.equal(extension?.hidden, true);
+	} finally {
+		await rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+	}
 });
 
 test("a short timeout shortens the wait and kills nothing", shell, async () => {

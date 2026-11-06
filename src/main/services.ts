@@ -556,7 +556,11 @@ export class ServiceTracker {
 		await this.save();
 	}
 
-	/** Bash operations that run each command with an id, and check for processes it left once it ends. */
+	/**
+	 * Bash operations that run each command with an id, and check for processes it left once it ends. With
+	 * `onBackgroundEnd`, long commands move to the background, which the long-commands extension turns on. Without it,
+	 * a command holds its call until it ends, or is killed at its timeout.
+	 */
 	bashOperations(
 		sessionPath: () => string,
 		options: { shellPath?: string; commandPrefix?: string; onBackgroundEnd?: (end: BackgroundEnd) => void } = {},
@@ -605,10 +609,12 @@ export class ServiceTracker {
 				const shown = options.commandPrefix && command.startsWith(`${options.commandPrefix}\n`) ? command.slice(options.commandPrefix.length + 1) : command;
 				const finished = waitForShell(child);
 				let tracked: Tracked | undefined;
-				// A timeout can shorten the wait, not lengthen it, and it ends nothing: killing a run loses its progress.
-				let backgroundTimer: ReturnType<typeof setTimeout> | undefined;
+				let timedOut = false;
+				let timer: ReturnType<typeof setTimeout> | undefined;
 				const toBackground = new Promise<"background">((resolve) => {
-					backgroundTimer = setTimeout(() => resolve("background"), Math.min(timeout ? timeout * 1000 : Infinity, this.backgroundAfterMs));
+					// A timeout can shorten the wait, not lengthen it, and it ends nothing: killing a run loses its progress.
+					if (options.onBackgroundEnd) timer = setTimeout(() => resolve("background"), Math.min(timeout ? timeout * 1000 : Infinity, this.backgroundAfterMs));
+					else if (timeout) timer = setTimeout(() => ((timedOut = true), stop()), timeout * 1000);
 				});
 				try {
 					const outcome = await Promise.race([finished, toBackground]);
@@ -646,11 +652,12 @@ export class ServiceTracker {
 					}
 					const exitCode = outcome === "background" ? await finished : outcome;
 					if (signal?.aborted) throw new Error("aborted");
+					if (timedOut) throw new Error(`timeout:${timeout}`);
 					const signalCode = child.signalCode;
 					return { exitCode: exitCode ?? (signalCode ? 128 + (osConstants.signals[signalCode] ?? 0) : 1) };
 				} finally {
 					forward = false;
-					clearTimeout(backgroundTimer);
+					clearTimeout(timer);
 					signal?.removeEventListener("abort", stop);
 					const detached = process.platform === "win32" && startsDetached(shown) ? { command: shown, endedAt: Date.now() } : undefined;
 					tracked = { id, startedAt, shellPid: child.pid, detached, sessionPath: sessionPath(), command: shown.trim(), cwd, output, ...NOTHING_YET() };

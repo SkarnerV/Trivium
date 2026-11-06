@@ -860,7 +860,10 @@ function ExtensionRow({
 			<div className="s-row-text">
 				<div className="s-ext-title">
 					<span className="s-label">{extension.name}</span>
-					<span className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`} title={t(SOURCE_HINT[extension.source])}>
+					<span
+						className={`s-tag src-${extension.source.toLowerCase().replace(/[^a-z]/g, "")}`}
+						title={t(extension.source === "Trivium" && !extension.builtIn ? "Comes with Trivium. Turn it off if this mode shouldn't have it." : SOURCE_HINT[extension.source])}
+					>
 						{t(extension.source === "App" ? "Mode" : extension.source)}
 					</span>
 					{failed && <span className="s-tag error">{t("Failed to load")}</span>}

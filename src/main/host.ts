@@ -59,7 +59,7 @@ import { APP_IDS } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, skillDir, triviumDir } from "./apps.ts";
 import * as skillFiles from "./skills.ts";
-import { type BackgroundEnd, endedMessage, withLongCommands } from "./long-commands.ts";
+import { type BackgroundEnd, endedMessage, LONG_COMMANDS_NAME, LONG_COMMANDS_PATH, withLongCommands } from "./long-commands.ts";
 import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { permissionGate } from "./permission-gate.ts";
@@ -850,7 +850,7 @@ export class SessionHost {
 		const sourceOf = (path: string, extension?: Extension): ExtensionSource => {
 			if (path === devFaux) return "Dev";
 			if (path.startsWith(profile.extensionDir + sep)) return "App";
-			if (builtInOf(path)) return "Trivium";
+			if (builtInOf(path) || path === LONG_COMMANDS_PATH) return "Trivium";
 			if ([...added].some((entry) => path === entry || path.startsWith(entry + sep))) return "Added";
 			if (path.startsWith("builtin:")) return "Built-in";
 			if (extension?.sourceInfo.origin === "package") return "Package";
@@ -860,7 +860,8 @@ export class SessionHost {
 		const result = loader.getExtensions();
 		const extensions: ExtensionInfo[] = await Promise.all(
 			result.extensions
-				.filter((extension) => !extension.hidden && !extension.path.startsWith("<"))
+				// pi hides its built-in extensions, but this one is here to be turned off.
+				.filter((extension) => (!extension.hidden || extension.path === LONG_COMMANDS_PATH) && !extension.path.startsWith("<"))
 				.map(async (extension) => {
 					const builtIn = builtIns.find((entry) => extension.resolvedPath.startsWith(entry.dir + sep));
 					const fromPackage = extension.sourceInfo.origin === "package";
@@ -869,7 +870,10 @@ export class SessionHost {
 						name: extensionName(extension.resolvedPath, builtIn?.name ?? (fromPackage ? extension.sourceInfo.source : undefined)),
 						display: builtIn?.name ?? (fromPackage ? extension.sourceInfo.source : shortPath(extension.resolvedPath)),
 						// pi sets baseDir to an installed package's root.
-						description: await packageDescription(builtIn?.dir ?? (fromPackage ? extension.sourceInfo.baseDir : undefined)),
+						description:
+							extension.path === LONG_COMMANDS_PATH
+								? t("Moves a command still running after 10 minutes to the background, so the session carries on and the work isn't lost.")
+								: await packageDescription(builtIn?.dir ?? (fromPackage ? extension.sourceInfo.baseDir : undefined)),
 						source: sourceOf(extension.resolvedPath, extension),
 						on: !disabled.has(extension.resolvedPath),
 						registers: registers(extension),
@@ -1001,8 +1005,18 @@ export class SessionHost {
 		app: AppId,
 		cwd: string,
 		settingsManager: SettingsManager,
-		options: { keepDisabled?: boolean; factories?: InlineExtension[] } = {},
+		options: { keepDisabled?: boolean; factories?: InlineExtension[]; sessionPath?: () => string } = {},
 	): DefaultResourceLoader {
+		const sessionPath = options.sessionPath ?? (() => "");
+		const longCommands: InlineExtension = {
+			name: LONG_COMMANDS_NAME,
+			// Not replaceable: pi would let a bash that is turned off here replace it. dropClashingBuiltIns decides instead.
+			builtin: true,
+			factory: (pi) => {
+				const bash = this.bashTool(cwd, settingsManager, sessionPath, (end) => this.backgroundEnded(sessionPath(), end));
+				pi.registerTool(withLongCommands(bash) as ToolDefinition<any, any>);
+			},
+		};
 		const profile = profileFor(app);
 		const appSettings = this.settings.app(app);
 		const builtIns = activeBuiltIns(app, appSettings.removed, settingsManager.getPackages());
@@ -1022,11 +1036,11 @@ export class SessionHost {
 			settingsManager,
 			additionalExtensionPaths: extensions,
 			appendSystemPromptOverride: appendPrompt ? (base) => [...base, appendPrompt] : undefined,
-			extensionFactories: [...builtinExtensions(), ...(options.factories ?? [])],
+			extensionFactories: [...builtinExtensions(), ...(profileInfo(app).tools.includes("bash") ? [longCommands] : []), ...(options.factories ?? [])],
 			skillsOverride: (loaded) => skillFiles.appSkills(loaded, profile.skillDir, disabledSkills, options.keepDisabled),
 			extensionsOverride: (loaded) => {
 				// A shipped package gives way to the user's own extension with the same tools, unless that one is off here.
-				const base = dropClashingBuiltIns(loaded, builtIns.map((entry) => entry.dir), disabled);
+				const base = dropClashingBuiltIns(loaded, [...builtIns.map((entry) => entry.dir), LONG_COMMANDS_PATH], disabled);
 				if (options.keepDisabled || disabled.size === 0) return base;
 				// Extensions turned off for this app still load from pi's discovery; drop them here.
 				const off = base.extensions.filter((extension) => disabled.has(extension.resolvedPath));
@@ -1044,12 +1058,20 @@ export class SessionHost {
 		});
 	}
 
+	/** pi's bash tool, running commands so the processes they leave show as services. */
+	private bashTool(cwd: string, settingsManager: SettingsManager, sessionPath: () => string, onBackgroundEnd?: (end: BackgroundEnd) => void) {
+		const shell = { shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() };
+		return createBashToolDefinition(cwd, { ...shell, operations: this.services.bashOperations(sessionPath, { ...shell, onBackgroundEnd }) });
+	}
+
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
+		let sessionPath = "";
 		// Untrusted until the reload hook below decides: project settings must not apply before that.
 		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
 		const changes = new ChangeTracker(join(triviumDir, "changes", `${sessionManager.getSessionId()}.json`), cwd);
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
+			sessionPath: () => sessionPath,
 			factories: [
 				(pi) => {
 					// Record each file before the agent first changes it, for the Changes panel.
@@ -1068,21 +1090,10 @@ export class SessionHost {
 		// A new session starts on the app's model when one is set; a reopened session keeps its own.
 		const appSettings = this.settings.app(app);
 		const slash = appSettings.model?.indexOf("/") ?? -1;
-		// pi's bash tool, running commands so the processes they leave show as services. An extension's own bash wins.
-		let sessionPath = "";
+		// An extension's bash wins, long-commands' included, so this one runs only with that extension off.
 		const ownBash = resourceLoader.getExtensions().extensions.some((extension) => extension.tools.has("bash"));
-		const shell = { shellPath: settingsManager.getShellPath(), commandPrefix: settingsManager.getShellCommandPrefix() };
 		const customTools =
-			profileInfo(app).tools.includes("bash") && !ownBash
-				? [
-						withLongCommands(
-							createBashToolDefinition(cwd, {
-								...shell,
-								operations: this.services.bashOperations(() => sessionPath, { ...shell, onBackgroundEnd: (end) => this.backgroundEnded(sessionPath, end) }),
-							}),
-						) as ToolDefinition<any, any>,
-					]
-				: undefined;
+			profileInfo(app).tools.includes("bash") && !ownBash ? [this.bashTool(cwd, settingsManager, () => sessionPath) as ToolDefinition<any, any>] : undefined;
 		const model =
 			isNew && appSettings.model && slash > 0
 				? this.modelRuntime.getModel(appSettings.model.slice(0, slash), appSettings.model.slice(slash + 1))

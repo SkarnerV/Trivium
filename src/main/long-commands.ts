@@ -5,7 +5,16 @@ import type { SubagentNotice } from "../shared/protocol.ts";
  * and the command carries on as a service, so the session isn't held up and the work isn't lost. When it ends, the
  * session gets a message saying how. Models pass a timeout out of habit, sometimes a huge one, so it only shortens the
  * wait: nothing ends a command early but Stop, or BACKGROUND_LIMIT_MS.
+ *
+ * It is an extension, so a mode can turn it off in Settings. That leaves Trivium's plain bash, as pi's own: no limit
+ * on a command but its timeout, which kills it. The extension provides a bash tool rather than wrapping one, so
+ * another extension's bash replaces it, the way one replaces a shipped package.
  */
+
+/** The extension's name. */
+export const LONG_COMMANDS_NAME = "long-commands";
+/** Its path, as pi names a built-in extension. Turning it off in Settings stores this. */
+export const LONG_COMMANDS_PATH = `builtin:${LONG_COMMANDS_NAME}`;
 
 /** How long a command holds up its tool call. */
 export const BACKGROUND_AFTER_MS = 10 * 60_000;

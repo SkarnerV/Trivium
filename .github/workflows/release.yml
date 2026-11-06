@@ -27,7 +27,7 @@ jobs:
             executable: release/win-unpacked/Trivium.exe
             asset: release/*.zip
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             args: --mac --arm64
             executable: release/mac-arm64/Trivium.app/Contents/MacOS/Trivium
             asset: release/*.dmg

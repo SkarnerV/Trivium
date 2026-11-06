@@ -2,6 +2,17 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-11-06
+
+### Added
+
+- **Long commands move to the background.** A command still running after 10 minutes stops holding up its session: the tool call returns and the command carries on as a service, with its output in a log. When it ends, the session gets a message with the exit code and last output, and the model carries on from there. A timeout the model sets can shorten the wait, but it never kills the command. **Stop** in Services ends it, and a command is ended after 4 hours so a hung one can't run forever.
+- **Turn it off per mode.** This comes as the `long-commands` extension under **Settings → Code → Extensions**. With it off, a command holds its call until it ends, and a timeout kills it, as before. The change applies when a session loads. Another extension's `bash` replaces it.
+
+### Fixed
+
+- On Windows, services could vanish from the list and couldn't be stopped there when one process's environment couldn't be read, even a process Trivium didn't start. Only that process is skipped now.
+
 ## [0.8.0] - 2026-11-05
 
 ### Added

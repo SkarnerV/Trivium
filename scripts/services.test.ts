@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -27,6 +27,12 @@ import {
 	systemProbe,
 } from "../src/main/services.ts";
 import type { ServiceInfo } from "../src/shared/protocol.ts";
+
+/**
+ * The tracker may still be saving services.json, so a file can appear in the folder while it goes. Each retry of `rm`
+ * clears the folder again; in Node 22 those of `rmSync` only try the empty folder again, and fail until they run out.
+ */
+const removeFolder = (dir: string) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 
 const row = (pid: number, ppid: number, extra: Partial<ProcessRow> = {}): ProcessRow => ({ pid, ppid, name: `p${pid}`, ...extra });
 
@@ -151,7 +157,7 @@ test("a process whose environment crashes grep loses only itself", { skip: !hasS
 			[5003, "second"],
 		]);
 	} finally {
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });
 
@@ -264,8 +270,7 @@ test("a failed read of the process list leaves what it was checking to be checke
 		assert.deepEqual(tracker.list().s?.map((service) => [service.id, service.processes.map((p) => p.pid)]), [["a", [500]]]);
 	} finally {
 		tracker.dispose();
-		// The tracker may still be saving services.json, so the folder can be briefly not empty.
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });
 
@@ -331,8 +336,7 @@ test("a command that leaves a process running becomes a service until it is stop
 		assert.deepEqual(emitted.at(-1), {});
 	} finally {
 		tracker.dispose();
-		// The tracker may still be saving services.json, so the folder can be briefly not empty.
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });
 
@@ -380,8 +384,7 @@ test("a command that leaves two programs running lists two services, each stoppe
 		assert.equal(tracker.count(), 1);
 	} finally {
 		tracker.dispose();
-		// The tracker may still be saving services.json, so the folder can be briefly not empty.
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });
 
@@ -397,8 +400,7 @@ test("a stopped command ends with everything it started", { skip: !hasShell() &&
 		assert.equal(failed.exitCode, 3);
 	} finally {
 		tracker.dispose();
-		// The tracker may still be saving services.json, so the folder can be briefly not empty.
-		rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });
 
@@ -446,7 +448,6 @@ test("a real server left running shows with its port, and Stop frees the port", 
 		const listening = await systemProbe.listening().catch(() => new Map<number, number[]>());
 		await systemProbe.kill([...listening].filter(([, ports]) => ports.includes(port)).map(([pid]) => row(pid, 0)), true);
 		tracker.dispose();
-		// The tracker may still be saving services.json, and each retry of `rm` clears the folder again, unlike those of `rmSync`.
-		await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+		await removeFolder(dir);
 	}
 });

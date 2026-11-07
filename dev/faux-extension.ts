@@ -9,6 +9,7 @@
 //   the background whose result arrives later as its own run.
 // - A prompt that mentions "server", in Code, starts a small web server in the background, for the Services view.
 // - A prompt that mentions "slow", in Code, runs a command that outlasts the bash limit; "hang" sets a short timeout, which only shortens the wait.
+// - A prompt that mentions "diagram", in any app, gets a reply with a Mermaid diagram.
 // Every prompt replays the story from its first step.
 import {
 	createFauxCore,
@@ -308,6 +309,26 @@ const SERVER_STORY: Step[] = [
 	() => fauxAssistantMessage(fauxText("The server is running on http://localhost:4173/. Stop it from the Services view when you're done.")),
 ];
 
+/** A reply with a Mermaid diagram between two paragraphs, for the drawn diagram in the thread. */
+const DIAGRAM_REPLY: Step = () =>
+	fauxAssistantMessage(
+		fauxText(
+			[
+				"The renderer never talks to pi directly. Everything goes through the preload bridge:",
+				"",
+				"```mermaid",
+				"flowchart LR",
+				'    UI["Renderer<br/>React thread"] -->|"window.trivium"| Bridge["Preload bridge"]',
+				'    Bridge -->|"IPC"| Host["Main process<br/>session host"]',
+				'    Host --> Pi["pi SDK<br/>agent loop"]',
+				'    Pi -->|"events"| Host',
+				"```",
+				"",
+				"So a new capability is a method on the bridge plus a handler in the host.",
+			].join("\n"),
+		),
+	);
+
 const NOTICE_REPLY: Step = () =>
 	fauxAssistantMessage(
 		fauxText("The researcher is back: Electron starts about **2.1× slower** than Tauri here (420 ms vs 200 ms), but both stay under half a second, so it isn't a reason to switch."),
@@ -400,6 +421,7 @@ export default function (pi: ExtensionAPI) {
 		if (prompt.includes("Background task completed")) return NOTICE_REPLY();
 		const ended = /Background command [^"\\]*/.exec(prompt)?.[0];
 		if (ended) return fauxAssistantMessage(fauxText(`Done. ${ended}`));
+		if (/diagram/i.test(prompt)) return DIAGRAM_REPLY();
 		const coded = app === "code" && (/server/i.test(prompt) ? SERVER_STORY : /slow/i.test(prompt) ? SLOW_STORY : /hang/i.test(prompt) ? HANG_STORY : undefined);
 		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : coded || scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();

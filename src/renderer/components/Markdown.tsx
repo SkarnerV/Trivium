@@ -67,8 +67,10 @@ export function Markdown({ text, diagrams = false }: { text: string; diagrams?: 
 			const body: string[] = [];
 			i++;
 			while (i < lines.length && !lines[i]!.trimStart().startsWith(fence[1]!)) body.push(lines[i++]!);
+			const closed = i < lines.length;
 			i++;
-			const language = diagrams ? diagramLanguage(fence[2]!) : undefined;
+			// A reply still being written has an open fence; its diagram draws once the fence closes.
+			const language = diagrams && closed ? diagramLanguage(fence[2]!) : undefined;
 			blocks.push(
 				language ? (
 					<Diagram key={key} language={language} code={body.join("\n")} />

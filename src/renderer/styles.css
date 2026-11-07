@@ -1076,16 +1076,28 @@ body.resizing * {
 		align-items: stretch;
 	}
 
+	/* On the thread's own white, with a fade under it so the thread scrolls out of sight below the cards. */
 	.scroll-row > .summary {
 		order: -1;
 		z-index: 4;
-		background: var(--chrome);
+		background: #fff;
 		flex-direction: row;
 		flex-wrap: wrap;
 		width: 100%;
 		max-width: var(--conversation-width, 720px);
 		margin: 0 auto;
 		padding: 2px var(--thread-gutter, 24px) 6px;
+	}
+
+	.scroll-row > .summary::after {
+		content: "";
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		height: 14px;
+		background: linear-gradient(#fff, rgba(255, 255, 255, 0));
+		pointer-events: none;
 	}
 
 	.scroll-row > .summary > .summary-card {
@@ -6033,6 +6045,39 @@ body.resizing * {
 	vertical-align: top;
 }
 
+/* The drawn diagram opens large in the lightbox; the corner icon says so on hover. */
+.md-diagram-open {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: zoom-in;
+}
+
+.md-diagram-expand {
+	position: absolute;
+	top: -6px;
+	right: -6px;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: #fff;
+	color: var(--ink-2);
+	box-shadow: 0 1px 3px rgba(19, 20, 43, 0.12);
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.md-diagram:hover .md-diagram-expand,
+.md-diagram-open:focus-visible .md-diagram-expand {
+	opacity: 1;
+}
+
 .md-diagram-source {
 	margin: 0 0 18px;
 }
@@ -6403,6 +6448,12 @@ body.resizing * {
 	max-height: none;
 	margin: 0 auto;
 	cursor: zoom-out;
+}
+
+/* A diagram is transparent, so it sits on white as it does in the thread. */
+.lightbox-stage img.diagram {
+	padding: 24px;
+	background: #fff;
 }
 
 .lightbox-stage img.loading {

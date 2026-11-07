@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { errorText, trivium } from "../store.ts";
+import { ExpandIcon } from "../icons.tsx";
+import { errorText, setState as setStore, trivium } from "../store.ts";
 import { t } from "../i18n.tsx";
 
 export type DiagramLanguage = "mermaid" | "plantuml";
@@ -87,7 +88,17 @@ export function Diagram({ language, code }: { language: DiagramLanguage; code: s
 	if (current?.image) {
 		return (
 			<figure className="md-diagram">
-				<img src={current.image} alt={t("{name} diagram", { name })} />
+				<button
+					type="button"
+					className="md-diagram-open"
+					title={t("Expand diagram")}
+					onClick={() => setStore({ diagram: { src: current.image!, name: t("{name} diagram", { name }) } })}
+				>
+					<img src={current.image} alt={t("{name} diagram", { name })} />
+					<span className="md-diagram-expand" aria-hidden="true">
+						<ExpandIcon size={13} />
+					</span>
+				</button>
 			</figure>
 		);
 	}

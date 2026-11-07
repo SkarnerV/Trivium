@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type { TranscriptImage } from "../../shared/protocol.ts";
 import { CloseIcon, DownloadIcon, ExpandIcon, ImageIcon } from "../icons.tsx";
 import { attempt, notify, setState, trivium, useStore } from "../store.ts";
@@ -40,59 +40,101 @@ export function ImageTile({ image, size = "small" }: { image: TranscriptImage; s
 const MAX_ZOOM = 2;
 
 /**
- * The image enlarged over the app: scaled to fit the screen, or at actual size after a click.
- * Esc or the backdrop closes it.
+ * An image enlarged over the app: scaled to fit the screen, or at actual size after a click.
+ * Esc or the backdrop closes it. Until `src` arrives, `placeholder` shows blurred.
  */
-export function ImageLightbox() {
-	const preview = useStore((s) => s.preview);
-	const [src, setSrc] = useState<string>();
+function Lightbox({
+	name,
+	src,
+	placeholder,
+	maxZoom = MAX_ZOOM,
+	className,
+	actions,
+	onClose,
+}: {
+	name: string;
+	src: string | undefined;
+	placeholder?: string;
+	maxZoom?: number;
+	className?: string;
+	actions?: ReactNode;
+	onClose: () => void;
+}) {
 	const [actual, setActual] = useState(false);
 	const [fitWidth, setFitWidth] = useState<number>();
 	useEffect(() => {
-		setSrc(undefined);
 		setActual(false);
 		setFitWidth(undefined);
-		if (!preview) return;
-		let current = true;
-		void attempt(() => trivium.imageData(preview.path, preview.image.id)).then((data) => current && data && setSrc(data));
-		const onKey = (event: KeyboardEvent) => event.key === "Escape" && setState({ preview: undefined });
+	}, [src]);
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
 		window.addEventListener("keydown", onKey);
-		return () => {
-			current = false;
-			window.removeEventListener("keydown", onKey);
-		};
-	}, [preview]);
-	if (!preview) return null;
-	const close = () => setState({ preview: undefined });
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
 	return (
-		<div className="lightbox" role="dialog" aria-modal="true" aria-label={preview.image.name} onMouseDown={(event) => event.target === event.currentTarget && close()}>
+		<div className="lightbox" role="dialog" aria-modal="true" aria-label={name} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
 			<div className="lightbox-bar">
-				<span className="ellipsis">{preview.image.name}</span>
-				<button type="button" className="lightbox-btn" onClick={() => void save(preview.path, preview.image)}>
-					<DownloadIcon size={14} /> {t("Download")}
-				</button>
-				<button type="button" className="lightbox-btn icon" aria-label={t("Close preview")} onClick={close}>
+				<span className="ellipsis">{name}</span>
+				{actions}
+				<button type="button" className="lightbox-btn icon" aria-label={t("Close preview")} onClick={onClose}>
 					<CloseIcon size={14} />
 				</button>
 			</div>
-			<div className={`lightbox-stage${actual ? " actual" : ""}`} onMouseDown={(event) => event.target === event.currentTarget && close()}>
+			<div className={`lightbox-stage${actual ? " actual" : ""}`} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
 				{src ? (
 					<img
 						src={src}
-						alt={preview.image.name}
+						alt={name}
+						className={className}
 						style={actual || !fitWidth ? undefined : { width: fitWidth }}
 						onLoad={(event) => {
 							const image = event.currentTarget;
 							const stage = image.parentElement!.getBoundingClientRect();
-							const scale = Math.min(MAX_ZOOM, (stage.width - 48) / image.naturalWidth, (stage.height - 28) / image.naturalHeight);
+							const scale = Math.min(maxZoom, (stage.width - 48) / image.naturalWidth, (stage.height - 28) / image.naturalHeight);
 							setFitWidth(Math.round(image.naturalWidth * scale));
 						}}
 						onClick={() => setActual(!actual)}
 					/>
 				) : (
-					preview.image.thumb && <img src={preview.image.thumb} alt="" className="loading" />
+					placeholder && <img src={placeholder} alt="" className="loading" />
 				)}
 			</div>
 		</div>
 	);
+}
+
+/** The transcript image or drawn diagram open in the lightbox, if any. */
+export function ImageLightbox() {
+	const preview = useStore((s) => s.preview);
+	const diagram = useStore((s) => s.diagram);
+	const [src, setSrc] = useState<string>();
+	useEffect(() => {
+		setSrc(undefined);
+		if (!preview) return;
+		let current = true;
+		void attempt(() => trivium.imageData(preview.path, preview.image.id)).then((data) => current && data && setSrc(data));
+		return () => {
+			current = false;
+		};
+	}, [preview]);
+	const closePreview = useCallback(() => setState({ preview: undefined }), []);
+	const closeDiagram = useCallback(() => setState({ diagram: undefined }), []);
+	if (preview) {
+		return (
+			<Lightbox
+				name={preview.image.name}
+				src={src}
+				placeholder={preview.image.thumb}
+				onClose={closePreview}
+				actions={
+					<button type="button" className="lightbox-btn" onClick={() => void save(preview.path, preview.image)}>
+						<DownloadIcon size={14} /> {t("Download")}
+					</button>
+				}
+			/>
+		);
+	}
+	// A diagram is drawn as vectors, so it can be scaled up further than a picture and stay sharp.
+	if (diagram) return <Lightbox name={diagram.name} src={diagram.src} maxZoom={3} className="diagram" onClose={closeDiagram} />;
+	return null;
 }

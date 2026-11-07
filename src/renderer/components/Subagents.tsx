@@ -82,7 +82,7 @@ function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolea
 					{child.error && <pre className="subagent-error">{child.error}</pre>}
 					{child.output && (
 						<div className="subagent-result">
-							<Markdown text={child.output} />
+							<Markdown text={child.output} diagrams />
 						</div>
 					)}
 				</>

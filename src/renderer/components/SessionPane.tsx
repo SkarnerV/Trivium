@@ -240,7 +240,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
 				{run.answer && (
 					<div className="reply">
 						<div className="answer">
-							<Markdown text={run.answer} />
+							<Markdown text={run.answer} diagrams />
 						</div>
 						{/* Copied as the markdown it was written in; offered once the reply is finished. */}
 						{!live && (

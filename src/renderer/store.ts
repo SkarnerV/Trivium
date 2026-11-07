@@ -87,6 +87,8 @@ export interface State {
 	trust: TrustRequest[];
 	/** The transcript image open in the lightbox, and the session it belongs to. */
 	preview?: { path: string; image: TranscriptImage };
+	/** The drawn diagram open in the lightbox, as an image URL. */
+	diagram?: { src: string; name: string };
 	/** A question waiting for Confirm or Cancel. */
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */

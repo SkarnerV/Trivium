@@ -1089,6 +1089,7 @@ export default {
 	"The diagram came back empty.": "図の描画結果が空でした。",
 	"{name} diagram": "{name} の図",
 	"Couldn't draw this {name} diagram: {error}": "この {name} の図を描けませんでした: {error}",
+	"Expand diagram": "図を拡大",
 	"Drawing diagram…": "図を描いています…",
 	"Moves a command still running after 10 minutes to the background, so the session carries on and the work isn't lost.": "10 分経っても実行中のコマンドをバックグラウンドに移します。セッションは続行でき、作業も失われません。",
 	"Comes with Trivium. Turn it off if this mode shouldn't have it.": "Trivium に付属しています。このモードで不要ならオフにできます。",

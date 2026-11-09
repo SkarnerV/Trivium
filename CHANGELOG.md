@@ -2,6 +2,18 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-11-09
+
+### Added
+
+- **Diagrams in replies.** Fenced Mermaid and PlantUML blocks in agent replies and subagent results are drawn as diagrams, as the Markdown preview already did. A block is drawn once its fence closes, so a reply still streaming shows the code instead of redrawing a half-written diagram.
+- **Open a diagram large.** Click a drawn diagram to open it in the image lightbox, shared with transcript images. A diagram scales up to 3x to fit the screen and sits on white, as it does in the thread.
+
+### Fixed
+
+- The update check no longer fails while GitHub's API is rate limited, which can happen to everyone behind the same proxy. It finds the latest release on GitHub's website instead and checks the download's size.
+- In a narrow pane, the summary cards above the thread sat on a lavender band that the user's message showed through. The band is now white, with a short fade at its foot.
+
 ## [0.9.0] - 2026-11-06
 
 ### Added

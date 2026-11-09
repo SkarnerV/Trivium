@@ -7,7 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import type { UpdateStatus } from "../src/shared/protocol.ts";
-import { assetName, installTarget, newerThan, readRelease, Updater, type UpdaterOptions, windowsScript } from "../src/main/updater.ts";
+import { assetName, installTarget, latestTag, newerThan, readRelease, Updater, type UpdaterOptions, windowsScript } from "../src/main/updater.ts";
 
 test("versions compare by number, and a release comes after its prereleases", () => {
 	assert.equal(newerThan("v0.3.0", "0.2.0"), true);
@@ -117,6 +117,64 @@ test("a check the user asked for reports a failure; a scheduled one keeps what i
 		events.map((event) => event.state),
 		["idle"],
 	);
+});
+
+test("the newest tag in the releases feed is the latest release, leaving out prereleases", () => {
+	const entry = (tag: string) => `<link rel="alternate" type="text/html" href="https://github.com/SkarnerV/Trivium/releases/tag/${tag}"/>`;
+	assert.equal(latestTag([entry("v1.0.0-beta.1"), entry("v0.10.0"), entry("v0.9.0")].join("\n")), "v0.10.0");
+	assert.equal(latestTag(entry("v0.3.0-windows-zip.1")), undefined);
+	assert.equal(latestTag("<feed></feed>"), undefined);
+});
+
+/** GitHub with the API out of requests: the website still has the feed and the download. */
+function rateLimited(tag: string, input: { status?: number; body?: Uint8Array; asset?: number } = {}): { fetch: UpdaterOptions["fetch"]; requests: string[] } {
+	const requests: string[] = [];
+	return {
+		requests,
+		fetch: async (url, init) => {
+			requests.push(`${init?.method ?? "GET"} ${url}`);
+			if (url.includes("api.github.com")) return new Response("", { status: input.status ?? 403 });
+			if (url.endsWith("releases.atom")) return new Response(`<link href="https://github.com/SkarnerV/Trivium/releases/tag/${tag}"/>`);
+			if (input.asset) return new Response(null, { status: input.asset });
+			if (init?.method === "HEAD") return new Response(null, { headers: { "content-length": "10" } });
+			return new Response(input.body ?? new Uint8Array(10));
+		},
+	};
+}
+
+test("when the API is rate limited, the check finds the release on the website", async () => {
+	const download = "GET https://github.com/SkarnerV/Trivium/releases/download/v0.3.0/Trivium-0.3.0-Windows-x64.zip";
+	for (const status of [403, 429]) {
+		const github = rateLimited("v0.3.0", { status });
+		const { updater: found } = updater(RELEASE, { fetch: github.fetch });
+		const result = await found.check();
+		assert.equal(result.state, "available");
+		assert.equal(result.state === "available" && result.release.installable, true);
+		assert.equal(result.state === "available" && result.release.url, "https://github.com/SkarnerV/Trivium/releases/tag/v0.3.0");
+		assert.equal(github.requests.at(-1), download.replace("GET", "HEAD"));
+	}
+
+	// The size from the website still catches a download cut short.
+	const short = rateLimited("v0.3.0", { body: new Uint8Array(4) });
+	const { updater: cut } = updater(RELEASE, { fetch: short.fetch });
+	await cut.check();
+	await assert.rejects(cut.install(), /incomplete \(4 of 10 bytes\)/);
+	assert.equal(short.requests.at(-1), download);
+
+	const missing = await updater(RELEASE, { fetch: rateLimited("v0.3.0", { asset: 404 }).fetch }).updater.check();
+	assert.equal(missing.state === "available" && missing.release.installable, false);
+	assert.match(missing.state === "available" ? missing.release.reason ?? "" : "", /no download/);
+
+	const same = rateLimited("v0.2.0");
+	assert.equal((await updater(RELEASE, { fetch: same.fetch }).updater.check()).state, "current");
+	assert.equal(same.requests.length, 2, "nothing to download, so nothing to measure");
+});
+
+test("a failure other than a rate limit doesn't fall back to the website", async () => {
+	const github = rateLimited("v0.3.0", { status: 500 });
+	const result = await updater(RELEASE, { fetch: github.fetch }).updater.check();
+	assert.match(result.state === "error" ? result.message : "", /500/);
+	assert.equal(github.requests.length, 1);
 });
 
 test("a download that doesn't match the release's checksum is not installed", async () => {

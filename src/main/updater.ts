@@ -66,6 +66,12 @@ export function installTarget(platform: NodeJS.Platform, execPath: string): stri
 	return undefined;
 }
 
+/** The newest release tag in GitHub's Atom feed of releases, which lists prereleases too. */
+export function latestTag(feed: string): string | undefined {
+	const tags = [...feed.matchAll(/\/releases\/tag\/(v[^"<]+)/g)].map((match) => match[1]!).filter((tag) => !tag.includes("-"));
+	return tags.reduce<string | undefined>((latest, tag) => (!latest || newerThan(tag, latest) ? tag : latest), undefined);
+}
+
 /** The release GitHub reports, when it is newer than `current`, with this platform's download. */
 export function readRelease(
 	json: GitHubRelease,
@@ -258,13 +264,7 @@ export class Updater {
 		const before = this.status;
 		if (manual) this.set({ state: "checking" });
 		try {
-			const response = await this.options.fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
-				headers: { Accept: "application/vnd.github+json", "User-Agent": `Trivium/${this.options.version}` },
-			});
-			if (!response.ok) {
-				throw new Error(response.status === 403 ? t("GitHub answered 403 (rate limited, try again later).") : t("GitHub answered {status}.", { status: response.status }));
-			}
-			const found = readRelease((await response.json()) as GitHubRelease, this.options.version, this.options.platform, this.options.arch);
+			const found = readRelease(await this.latest(), this.options.version, this.options.platform, this.options.arch);
 			if (!found) {
 				this.asset = undefined;
 				return this.set({ state: "current", checkedAt: Date.now() });
@@ -279,6 +279,37 @@ export class Updater {
 			}
 			return this.set({ state: "error", message: t("Could not check for updates: {error}", { error: messageOf(error) }) });
 		}
+	}
+
+	/**
+	 * The latest release from GitHub's API. The API allows 60 requests an hour for each address, which everyone
+	 * behind the same proxy shares, so when it refuses the answer comes from the website instead.
+	 */
+	private async latest(): Promise<GitHubRelease> {
+		const response = await this.options.fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
+			headers: { Accept: "application/vnd.github+json", "User-Agent": `Trivium/${this.options.version}` },
+		});
+		if (response.ok) return (await response.json()) as GitHubRelease;
+		const refused = () => new Error(response.status === 403 ? t("GitHub answered 403 (rate limited, try again later).") : t("GitHub answered {status}.", { status: response.status }));
+		if (response.status !== 403 && response.status !== 429) throw refused();
+		const release = await this.latestFromWebsite();
+		if (!release) throw refused();
+		return release;
+	}
+
+	/** The same release from GitHub's website, which has no checksums: the download is checked by its size alone. */
+	private async latestFromWebsite(): Promise<GitHubRelease | undefined> {
+		const { version, platform, arch } = this.options;
+		const headers = { "User-Agent": `Trivium/${version}` };
+		const feed = await this.options.fetch(`https://github.com/${REPOSITORY}/releases.atom`, { headers });
+		const tag = feed.ok ? latestTag(await feed.text()) : undefined;
+		if (!tag) return undefined;
+		const name = assetName(tag.replace(/^v/i, ""), platform, arch);
+		if (!name || !newerThan(tag, version)) return { tag_name: tag };
+		const url = `https://github.com/${REPOSITORY}/releases/download/${tag}/${name}`;
+		const asset = await this.options.fetch(url, { method: "HEAD", headers });
+		const size = Number(asset.headers.get("content-length"));
+		return { tag_name: tag, assets: asset.ok && size ? [{ name, browser_download_url: url, size }] : [] };
 	}
 
 	/** Downloads the release, puts it in place and restarts. Called again after the user put off a restart, it restarts. */

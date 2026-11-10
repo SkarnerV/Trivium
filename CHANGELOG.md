@@ -2,6 +2,21 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-11-10
+
+### Added
+
+- **API proxy.** Settings → API proxy runs a local server that answers OpenAI Chat Completions requests at `/v1/chat/completions` and Anthropic Messages requests at `/v1/messages`, streaming or not, with tool calls, images and thinking. Requests go through pi's model runtime, so every provider and login set up in Trivium is reachable and credentials stay with pi. Apps connect with named keys made on the page; only each key's SHA-256 digest is kept. It listens on this computer only, on port 8787, unless the network is allowed. `tool_choice` only honours `"none"`, images must be base64, `count_tokens` is an estimate, and proxy requests are not counted in Settings → Usage.
+- **Shell changes in the Changes view.** A file a bash or PowerShell command rewrote, created or deleted now shows under This session with its diff and a revert button, in a git repository or a plain folder. Checkout, pull, merge and commit record nothing; ignored files, files over 10 MB and nested repositories are left out. The project's own `.git` is never changed.
+- **Zoom and pan diagrams.** A drawn diagram fits its frame at first; the wheel or a pinch zooms at the pointer, dragging moves it, and a double-click zooms in or back to fit. A bar under it has zoom out, zoom level, zoom in and fit. The image lightbox uses the same view, so transcript images zoom and drag too.
+- **Diagram actions.** Hovering a diagram in a reply shows Download (SVG, or PNG at twice the size on white), Open in side panel (its own Preview tab, with the source under `</>`) and Expand.
+- The Preview panel's More menu gains Show in File Explorer (Finder on a Mac).
+
+### Fixed
+
+- Open in VS Code works again on Windows. Trivium now starts VS Code's own executable with `--goto file:line` instead of a `vscode://` link that VS Code couldn't read or that first asked for permission in a window left behind the others.
+- The Settings folder buttons say File Explorer on Windows instead of Finder.
+
 ## [0.10.0] - 2026-11-09
 
 ### Added

@@ -17,6 +17,7 @@ import type {
 	SessionSummary,
 	SessionView,
 	TranscriptImage,
+	ProxyStatus,
 	UpdateStatus,
 } from "../shared/protocol.ts";
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
@@ -96,6 +97,8 @@ export interface State {
 	login?: { providerId: string; name: string; events: LoginEvent[] };
 	/** Whether a newer Trivium is out, and how far installing it has got. */
 	update: UpdateStatus;
+	/** The API proxy, once Settings has asked about it. */
+	proxy?: ProxyStatus;
 }
 
 export interface QueuedMessage extends Draft {
@@ -111,7 +114,7 @@ export interface ConfirmRequest {
 	resolve: (ok: boolean) => void;
 }
 
-export type SettingsSection = "general" | "models" | "connectors" | "usage" | "shortcuts" | AppId | "about";
+export type SettingsSection = "general" | "models" | "connectors" | "proxy" | "usage" | "shortcuts" | AppId | "about";
 
 const PREFS_KEY = "trivium.prefs";
 
@@ -313,6 +316,9 @@ function handleEvent(event: HostEvent): void {
 			break;
 		case "services":
 			setState({ services: event.services });
+			break;
+		case "proxy":
+			setState({ proxy: event.status });
 			break;
 		case "update": {
 			const before = getState().update;

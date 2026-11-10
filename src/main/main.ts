@@ -21,6 +21,8 @@ import type {
 	McpExposure,
 	NewSessionInput,
 	PresetProviderChanges,
+	ProxyAlias,
+	ProxyOptions,
 	SkillDraft,
 	TriviumSettings,
 	TrustChoice,
@@ -53,6 +55,7 @@ import { DialogBroker } from "./dialogs.ts";
 import { type Rewound, SessionHost } from "./host.ts";
 import { packageSource } from "../shared/packages.ts";
 import { renderPlantUml } from "./plantuml.ts";
+import { ProxyService } from "./proxy.ts";
 import { READER_SCHEME, ReaderStore } from "./reader.ts";
 import { ServiceTracker } from "./services.ts";
 import { SettingsStore } from "./settings.ts";
@@ -138,6 +141,18 @@ const connectors = new ConnectorStore(getAgentDir(), (url) => void shell.openExt
 const memory = new MemoryStore(getAgentDir(), { secrets: (text) => scanForSecrets(text), recall: (lessons) => recallLessons(lessons) }, async () => [
 	...new Set((await host.listSessions()).flatMap((session) => (session.cwd ? [session.cwd] : []))),
 ]);
+// Other apps reach the models set up here through the API proxy, with the models the model picker offers.
+const proxy = new ProxyService({
+	file: join(triviumDir, "proxy.json"),
+	backend: {
+		models: async () => {
+			const hidden = new Set(settings.get().hiddenModels);
+			return (await host.runtime.getAvailable()).filter((model) => !hidden.has(`${model.provider}/${model.id}`));
+		},
+		stream: (model, context, options) => host.runtime.streamSimple(model, context, options),
+	},
+	emit: (status) => send({ type: "proxy", status }),
+});
 const updater = new Updater({
 	version: app.getVersion(),
 	platform: process.platform,
@@ -418,6 +433,13 @@ function registerIpc(): void {
 	handle("trivium:setMemoryConsent", (cwd: string, allowed: boolean) => memory.setConsent(cwd, allowed));
 	handle("trivium:keepMemoryLocal", (cwd: string) => memory.keepLocal(cwd));
 	handle("trivium:usage", async () => usage.report(await host.listSessions(), (provider) => host.runtime.isUsingOAuth(provider)));
+	handle("trivium:proxyStatus", () => proxy.status());
+	handle("trivium:setProxyEnabled", (on: boolean) => proxy.setEnabled(Boolean(on)));
+	handle("trivium:saveProxyOptions", (options: ProxyOptions) => proxy.saveOptions(options));
+	handle("trivium:saveProxyKey", (id: string | undefined, name: string, value: string) => proxy.saveKey(id || undefined, String(name), String(value ?? "")));
+	handle("trivium:setProxyKeyEnabled", (id: string, enabled: boolean) => proxy.setKeyEnabled(id, enabled));
+	handle("trivium:removeProxyKey", (id: string) => proxy.removeKey(id));
+	handle("trivium:saveProxyAliases", (aliases: ProxyAlias[]) => proxy.saveAliases(aliases));
 	handle("trivium:openFile", async (file: string) => {
 		const error = await shell.openPath(file);
 		if (error) throw new Error(error);
@@ -660,6 +682,8 @@ app.whenReady().then(async () => {
 	await host.init();
 	// Services a crash left running show again in their sessions.
 	void services.init().catch((error: unknown) => console.error("Could not check for services left running:", error));
+	// After the host: the proxy answers with the host's models.
+	void proxy.init().catch((error: unknown) => console.error("Could not start the API proxy:", error));
 	protocol.handle(READER_SCHEME, (request) => reader.respond(request));
 	registerIpc();
 	createWindow();
@@ -715,4 +739,5 @@ app.on("will-quit", () => {
 	// Whatever is left, such as a service that started while the question was open.
 	services.dispose();
 	reader.dispose();
+	proxy.dispose();
 });

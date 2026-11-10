@@ -388,7 +388,8 @@ export type HostEvent =
 	| { type: "trust_closed"; id: string }
 	| { type: "reader_changed"; id: string }
 	| { type: "services"; services: Record<string, ServiceInfo[]> }
-	| { type: "update"; update: UpdateStatus };
+	| { type: "update"; update: UpdateStatus }
+	| { type: "proxy"; status: ProxyStatus };
 
 /** A Trivium release on GitHub newer than the one running. */
 export interface ReleaseInfo {
@@ -614,6 +615,51 @@ export interface CustomProvider {
 	/** A key, $NAME for an environment variable or !command for a command's output. Empty when the endpoint needs none. */
 	apiKey: string;
 	models: CustomModel[];
+}
+
+/** A key a client presents to the API proxy. Only its last characters are kept to show. */
+export interface ProxyKeyInfo {
+	id: string;
+	name: string;
+	/** The end of the key, such as "…x4Fq". */
+	hint: string;
+	enabled: boolean;
+	createdAt: number;
+	/** When a request last came with it; unset until one does. */
+	lastUsedAt?: number;
+}
+
+/** Another name clients can ask for a model by, such as the one an app has built in. */
+export interface ProxyAlias {
+	alias: string;
+	/** The model it stands for, as provider/id. */
+	model: string;
+}
+
+/** How the API proxy listens. */
+export interface ProxyOptions {
+	port: number;
+	/** Answer OpenAI Chat Completions requests. */
+	openai: boolean;
+	/** Answer Anthropic Messages requests. */
+	anthropic: boolean;
+	/** Listen to other devices on the network too, rather than this computer only. */
+	lan: boolean;
+}
+
+/** The API proxy: a local server through which other apps use the models set up in Trivium. */
+export interface ProxyStatus extends ProxyOptions {
+	/** Turned on, which also starts it with Trivium. */
+	enabled: boolean;
+	/** Listening now. Off while `enabled` when it couldn't start, with `error` saying why. */
+	running: boolean;
+	error?: string;
+	keys: ProxyKeyInfo[];
+	aliases: ProxyAlias[];
+	/** This computer's addresses on the network, likeliest first. Empty when it has none. */
+	addresses: string[];
+	/** How many models it offers by provider/id. */
+	models: number;
 }
 
 /** How an MCP server's tools reach the agent, as pi names it in mcp.json. */
@@ -1027,5 +1073,18 @@ export interface TriviumApi {
 	keepMemoryLocal(cwd: string): Promise<void>;
 	/** Tokens and cost from every session on this computer. */
 	usage(): Promise<UsageReport>;
+	proxyStatus(): Promise<ProxyStatus>;
+	/** Turns the API proxy on or off. On stays on across restarts. */
+	setProxyEnabled(on: boolean): Promise<ProxyStatus>;
+	/** Changes how the proxy listens, restarting it when it runs. */
+	saveProxyOptions(options: ProxyOptions): Promise<ProxyStatus>;
+	/**
+	 * Adds a key, or renames `id`. A new key takes `value`, or a generated one when empty; an existing key keeps
+	 * its value unless `value` replaces it. `key` is the full key, which is shown this once.
+	 */
+	saveProxyKey(id: string | undefined, name: string, value: string): Promise<{ status: ProxyStatus; key?: string }>;
+	setProxyKeyEnabled(id: string, enabled: boolean): Promise<ProxyStatus>;
+	removeProxyKey(id: string): Promise<ProxyStatus>;
+	saveProxyAliases(aliases: ProxyAlias[]): Promise<ProxyStatus>;
 	onEvent(listener: (event: HostEvent) => void): () => void;
 }

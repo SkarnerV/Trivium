@@ -125,6 +125,13 @@ const api: TriviumApi = {
 	setMemoryConsent: call("setMemoryConsent") as TriviumApi["setMemoryConsent"],
 	keepMemoryLocal: call("keepMemoryLocal") as TriviumApi["keepMemoryLocal"],
 	usage: call("usage") as TriviumApi["usage"],
+	proxyStatus: call("proxyStatus") as TriviumApi["proxyStatus"],
+	setProxyEnabled: call("setProxyEnabled") as TriviumApi["setProxyEnabled"],
+	saveProxyOptions: call("saveProxyOptions") as TriviumApi["saveProxyOptions"],
+	saveProxyKey: call("saveProxyKey") as TriviumApi["saveProxyKey"],
+	setProxyKeyEnabled: call("setProxyKeyEnabled") as TriviumApi["setProxyKeyEnabled"],
+	removeProxyKey: call("removeProxyKey") as TriviumApi["removeProxyKey"],
+	saveProxyAliases: call("saveProxyAliases") as TriviumApi["saveProxyAliases"],
 	onEvent(listener) {
 		const wrapped = (_event: unknown, payload: HostEvent) => listener(payload);
 		ipcRenderer.on("trivium:event", wrapped);

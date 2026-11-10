@@ -98,6 +98,7 @@ export const SECTION_COLORS: Record<string, { accent: string; accentText: string
 	general: { accent: "#2563EB", accentText: "#1D4ED8" },
 	models: { accent: "#0891B2", accentText: "#0E7490" },
 	connectors: { accent: "#65A30D", accentText: "#4D7C0F" },
+	proxy: { accent: "#0D9488", accentText: "#0F766E" },
 	usage: { accent: "#7C3AED", accentText: "#6D28D9" },
 	shortcuts: { accent: "#EA580C", accentText: "#C2410C" },
 	about: { accent: "#475569", accentText: "#334155" },

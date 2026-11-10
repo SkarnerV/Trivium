@@ -5109,6 +5109,32 @@ body.resizing * {
 	color: #6e3c05;
 }
 
+/* API proxy */
+
+.px-url {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.s-row-control .px-url .cm-input {
+	width: 280px;
+}
+
+.px-port {
+	width: 96px;
+	text-align: right;
+}
+
+.px-alias {
+	gap: 8px;
+}
+
+.px-alias .cm-input {
+	flex: 1;
+	min-width: 0;
+}
+
 /* Connectors */
 
 .cn-details {

@@ -12,6 +12,9 @@ import type {
 	McpExposure,
 	PermissionSettings,
 	ProviderInfo,
+	ProxyKeyInfo,
+	ProxyOptions,
+	ProxyStatus,
 	SessionUsage,
 	SkillInfo,
 	SkillSource,
@@ -37,7 +40,7 @@ import { IS_WINDOWS, keyName } from "../platform.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
-import { AppIcon, BackIcon, ChartIcon, Chevron, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, SlidersIcon, TriviumIcon, UploadIcon } from "../icons.tsx";
+import { AppIcon, BackIcon, ChartIcon, Chevron, CopyIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, ServerIcon, SlidersIcon, TriviumIcon, UploadIcon } from "../icons.tsx";
 import {
 	askConfirm,
 	attempt,
@@ -65,6 +68,7 @@ import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 import { LoginDialog } from "./LoginDialog.tsx";
 import { ModelSelect } from "./ModelSelect.tsx";
 import { PresetModelsDialog } from "./PresetModelsDialog.tsx";
+import { ProxyKeyDialog } from "./ProxyKeyDialog.tsx";
 import { SkillDialog } from "./SkillDialog.tsx";
 
 /* Building blocks */
@@ -810,6 +814,243 @@ function Connectors({ onCount }: { onCount: (count: number) => void }) {
 						show(next);
 						setTouched(true);
 						if (names.length) void check();
+					}}
+				/>
+			)}
+		</>
+	);
+}
+
+/* API proxy */
+
+function ProxyUrl({ label, hint, url }: { label: string; hint: string; url: string }) {
+	const copy = async () => {
+		await attempt(() => trivium.copyText(url));
+		notify(t("Copied"), "info");
+	};
+	return (
+		<Item label={label} hint={hint}>
+			<div className="px-url">
+				<input className="cm-input mono" readOnly value={url} aria-label={label} onFocus={(event) => event.target.select()} />
+				<button type="button" className="s-icon-btn" aria-label={t("Copy {name}", { name: label })} title={t("Copy")} disabled={!url} onClick={() => void copy()}>
+					<CopyIcon size={15} />
+				</button>
+			</div>
+		</Item>
+	);
+}
+
+function ApiProxy() {
+	const status = useStore((s) => s.proxy);
+	const models = useStore((s) => s.models);
+	const now = useNow(30_000);
+	const [port, setPort] = useState("");
+	/** The key being edited: a key, or null for a new one. */
+	const [editing, setEditing] = useState<ProxyKeyInfo | null>();
+	/** The switch was turned on with no key to let anyone in; it turns on once there is one. */
+	const [startAfterKey, setStartAfterKey] = useState(false);
+	const [alias, setAlias] = useState("");
+	const [aliasModel, setAliasModel] = useState("");
+	const savedPort = status?.port;
+	useEffect(() => {
+		void attempt(() => trivium.proxyStatus()).then((next) => next && setState({ proxy: next }));
+	}, []);
+	useEffect(() => {
+		if (savedPort) setPort(String(savedPort));
+	}, [savedPort]);
+	if (!status) return null;
+
+	const apply = async (fn: () => Promise<ProxyStatus>) => {
+		const next = await attempt(fn);
+		if (next) setState({ proxy: next });
+		return next;
+	};
+	const saveOptions = async (patch: Partial<ProxyOptions>) => {
+		const { port: current, openai, anthropic, lan } = status;
+		const next = await apply(() => trivium.saveProxyOptions({ port: current, openai, anthropic, lan, ...patch }));
+		// A port that didn't take goes back to the one in use.
+		if (!next) setPort(String(status.port));
+	};
+	const toggle = (on: boolean) => {
+		if (on && !status.keys.some((key) => key.enabled)) {
+			setStartAfterKey(true);
+			setEditing(null);
+			return;
+		}
+		void apply(() => trivium.setProxyEnabled(on));
+	};
+	const commitPort = () => {
+		const value = Number(port);
+		if (value !== status.port) void saveOptions({ port: value });
+	};
+	const addAlias = async () => {
+		const next = await apply(() => trivium.saveProxyAliases([...status.aliases, { alias: alias.trim(), model: aliasModel }]));
+		if (!next) return;
+		setAlias("");
+		setAliasModel("");
+	};
+
+	const host = status.lan ? status.addresses[0] : "127.0.0.1";
+	const base = host ? `http://${host}:${status.port}` : "";
+	const modelOptions: DropdownOption[] = models.map((model) => ({ value: model.key, label: model.name, group: model.provider }));
+	const modelName = (key: string) => models.find((model) => model.key === key)?.name;
+	const state = status.running
+		? t(status.lan ? "Running on port {port}, open to your network" : "Running on port {port}, on this computer only", { port: status.port })
+		: status.enabled
+			? t("Couldn't start")
+			: t("Off");
+	return (
+		<>
+			<PageHeader
+				icon={<ServerIcon size={18} />}
+				tone="accent"
+				title={t("API proxy")}
+				subtitle={t("Lets other apps use the models you set up in Trivium, through an OpenAI- or Anthropic-style API on this computer.")}
+			/>
+
+			{status.error && <pre className="s-error mono">{status.error}</pre>}
+
+			<Group title={t("Server")} description={t("Each provider's login and key stay in Trivium. Apps connect with a key you create below.")}>
+				<Item label={t("Run the proxy")} hint={state}>
+					<Switch on={status.enabled} label={t("Run the proxy")} onChange={toggle} />
+				</Item>
+				<Item label={t("Port")} hint={t("From 1024 to 65535")}>
+					<input
+						className="cm-input mono px-port"
+						inputMode="numeric"
+						aria-label={t("Port")}
+						value={port}
+						onChange={(event) => setPort(event.target.value.replace(/\D/g, "").slice(0, 5))}
+						onBlur={commitPort}
+						onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+					/>
+				</Item>
+				<Item label={t("OpenAI format")} hint={<span className="mono">/v1/chat/completions</span>}>
+					<Switch on={status.openai} label={t("OpenAI format")} onChange={(on) => void saveOptions({ openai: on })} />
+				</Item>
+				<Item label={t("Anthropic format")} hint={<span className="mono">/v1/messages</span>}>
+					<Switch on={status.anthropic} label={t("Anthropic format")} onChange={(on) => void saveOptions({ anthropic: on })} />
+				</Item>
+				<Item
+					label={t("Allow other devices on your network")}
+					hint={t("Listens on every network this computer is on, over plain HTTP. Use it on networks you trust; your firewall may still block it.")}
+				>
+					<Switch on={status.lan} label={t("Allow other devices on your network")} onChange={(on) => void saveOptions({ lan: on })} />
+				</Item>
+			</Group>
+
+			<Group
+				title={t("Connect")}
+				description={t("Give an app the base URL for the format it speaks, one of the keys below, and a model name.")}
+				footer={
+					status.lan &&
+					(status.addresses.length
+						? status.addresses.length > 1 && t("This computer has other addresses too: {list}", { list: status.addresses.slice(1).join(", ") })
+						: t("This computer has no address on a network right now. Check its connection."))
+				}
+			>
+				{status.openai && <ProxyUrl label={t("OpenAI base URL")} hint={t("For apps that ask for an OpenAI-compatible endpoint")} url={base && `${base}/v1`} />}
+				{status.anthropic && <ProxyUrl label={t("Anthropic base URL")} hint={t("For apps that ask for an Anthropic endpoint, such as Claude Code")} url={base} />}
+			</Group>
+
+			<Group
+				title={`${t("API keys")}${status.keys.length ? ` · ${status.keys.length}` : ""}`}
+				description={t("A key is shown in full only when it is made. Turn one off or remove it, and its app can't connect.")}
+				aside={
+					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
+						<PlusIcon size={12} width={2.6} />
+						{t("Add")}
+					</button>
+				}
+			>
+				{!status.keys.length && <div className="s-empty">{t("No keys yet. Apps need one to connect.")}</div>}
+				{status.keys.map((key) => (
+					<div key={key.id} className={`s-row s-ext${key.enabled ? "" : " off"}`}>
+						<div className="s-row-text">
+							<div className="s-ext-title">
+								<span className="s-label">{key.name}</span>
+								<span className="s-tag mono">{key.hint}</span>
+							</div>
+							<span className="s-ext-desc">
+								{key.lastUsedAt ? t("Last used {when}", { when: relativeTime(key.lastUsedAt, now) }) : t("Not used yet")}
+								{" · "}
+								{t("Added {when}", { when: new Date(key.createdAt).toLocaleDateString(getLocale(), { year: "numeric", month: "short", day: "numeric" }) })}
+							</span>
+						</div>
+						<div className="s-row-control">
+							<button type="button" className="s-btn s-ext-remove" onClick={() => setEditing(key)}>
+								{t("Edit")}
+							</button>
+							<Switch
+								on={key.enabled}
+								label={t("Let {name} connect", { name: key.name })}
+								onChange={(on) => void apply(() => trivium.setProxyKeyEnabled(key.id, on))}
+							/>
+						</div>
+					</div>
+				))}
+			</Group>
+
+			<Group
+				title={t("Model names")}
+				description={tx("Apps ask for a model as {form}, the way {path} lists them. Give a model another name for an app that asks for one of its own.", {
+					form: <span className="mono">provider/id</span>,
+					path: <span className="mono">/v1/models</span>,
+				})}
+				footer={t(status.models === 1 ? "{n} model on offer: the one in Trivium's model picker." : "{n} models on offer: the ones in Trivium's model picker.", { n: status.models })}
+			>
+				{status.aliases.map((entry) => (
+					<div key={entry.alias} className="s-row">
+						<div className="s-row-text">
+							<span className="s-label mono">{entry.alias}</span>
+							<span className="s-hint">
+								{modelName(entry.model) ? (
+									<>
+										{modelName(entry.model)}
+										<span className="mono s-path">{entry.model}</span>
+									</>
+								) : (
+									t("{model} (unavailable)", { model: entry.model })
+								)}
+							</span>
+						</div>
+						<div className="s-row-control">
+							<button
+								type="button"
+								className="s-btn s-ext-remove"
+								onClick={() => void apply(() => trivium.saveProxyAliases(status.aliases.filter((other) => other.alias !== entry.alias)))}
+							>
+								{t("Remove")}
+							</button>
+						</div>
+					</div>
+				))}
+				<div className="s-row px-alias">
+					<input
+						className="cm-input mono"
+						value={alias}
+						spellCheck={false}
+						aria-label={t("Name an app asks for")}
+						placeholder={t("Name an app asks for, such as gpt-4o")}
+						onChange={(event) => setAlias(event.target.value)}
+					/>
+					<Dropdown label={t("The model it stands for")} value={aliasModel} options={modelOptions} placeholder={t("Choose a model")} onChange={setAliasModel} />
+					<button type="button" className="s-btn" disabled={!alias.trim() || !aliasModel} onClick={() => void addAlias()}>
+						{t("Add")}
+					</button>
+				</div>
+			</Group>
+
+			{editing !== undefined && (
+				<ProxyKeyDialog
+					item={editing ?? undefined}
+					onClose={() => {
+						setEditing(undefined);
+						setStartAfterKey(false);
+					}}
+					onChanged={(next, created) => {
+						setState({ proxy: next });
+						if (created && startAfterKey && !next.enabled) void apply(() => trivium.setProxyEnabled(true));
 					}}
 				/>
 			)}
@@ -1983,6 +2224,7 @@ function Usage() {
 export function SettingsPage() {
 	const section = useStore((s) => s.settingsSection);
 	const app = useStore((s) => s.app);
+	const proxyOn = useStore((s) => s.proxy?.running ?? false);
 	const [providers, setProviders] = useState<ProviderInfo[]>([]);
 	const [errors, setErrors] = useState<Partial<Record<AppId, number>>>({});
 	const [servers, setServers] = useState<number>();
@@ -1992,6 +2234,7 @@ export function SettingsPage() {
 	useEffect(() => {
 		loadProviders();
 		void attempt(() => trivium.connectors()).then((view) => view && setServers(view.servers.length));
+		void attempt(() => trivium.proxyStatus()).then((status) => status && setState({ proxy: status }));
 		for (const id of APP_IDS) {
 			void attempt(() => trivium.appDetails(id)).then(
 				(details) =>
@@ -2046,6 +2289,13 @@ export function SettingsPage() {
 					SECTION_COLORS.connectors.accent,
 					servers ? <span className="s-nav-meta">{servers}</span> : undefined,
 				)}
+				{item(
+					"proxy",
+					t("API proxy"),
+					<ServerIcon />,
+					SECTION_COLORS.proxy.accent,
+					proxyOn ? <span className="s-nav-meta">{t("On")}</span> : undefined,
+				)}
 				{item("usage", t("Usage"), <ChartIcon />, SECTION_COLORS.usage.accent)}
 				{item("shortcuts", t("Keyboard shortcuts"), <KeyboardIcon />, SECTION_COLORS.shortcuts.accent)}
 				<div className="set-nav-head">{t("Modes")}</div>
@@ -2074,6 +2324,7 @@ export function SettingsPage() {
 						{section === "general" && <General />}
 						{section === "models" && <Models providers={providers} reload={loadProviders} />}
 						{section === "connectors" && <Connectors onCount={setServers} />}
+						{section === "proxy" && <ApiProxy />}
 						{section === "usage" && <Usage />}
 						{section === "shortcuts" && <Shortcuts />}
 						{(section === "code" || section === "research" || section === "write") && <AppPage app={section} />}

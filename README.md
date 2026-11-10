@@ -126,6 +126,16 @@ calendar of the last 12 months shows your active days and streak. Point at a mod
 count for its average time to first token and output speed. Models used through a subscription
 login show "Plan" instead of a cost.
 
+### API proxy
+
+**Settings → API proxy** runs a local server that lets other apps use the models you set up in
+Trivium. It answers OpenAI Chat Completions requests at `http://127.0.0.1:8787/v1` and Anthropic
+Messages requests at `http://127.0.0.1:8787`, streaming or not, with tool calls, images and
+thinking. Apps connect with a key you create there, shown once; each provider's own login and key
+stay in Trivium. Ask for a model as `provider/id`, as `/v1/models` lists them, or give it another
+name for an app that asks for one of its own, such as `gpt-4o`. The proxy listens on this
+computer only unless you allow your network, which is plain HTTP and for networks you trust.
+
 ### Make each mode yours
 
 <p align="center">

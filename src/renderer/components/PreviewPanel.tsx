@@ -1,22 +1,33 @@
 import { useMemo, useState } from "react";
 import type { ReaderFile } from "../../shared/protocol.ts";
 import { fileSize, relativeTime } from "../format.ts";
-import { CodeIcon, CopyIcon, ExternalIcon, EyeIcon, FileIcon, ShieldIcon, UndoIcon } from "../icons.tsx";
-import { attempt, pickPreview, reloadPreview, setPreviewScripts, trivium } from "../store.ts";
+import { CodeIcon, CopyIcon, ExpandIcon, ExternalIcon, EyeIcon, FileIcon, FolderIcon, ShieldIcon, UndoIcon } from "../icons.tsx";
+import { IS_WINDOWS } from "../platform.ts";
+import { attempt, pickPreview, reloadPreview, setPreviewScripts, setState, trivium } from "../store.ts";
 import type { MenuEntry } from "./ContextMenu.tsx";
 import { parseTable } from "../preview.ts";
+import { downloadEntries } from "./Diagram.tsx";
 import { Markdown } from "./Markdown.tsx";
+import { ZoomView } from "./ZoomView.tsx";
 import { t } from "../i18n.tsx";
 
-/** Pages and Markdown have a rendered view and their source to switch between. */
+/** Pages, Markdown and drawn diagrams have a rendered view and their source to switch between. */
 export function hasSource(file: ReaderFile): boolean {
-	return (file.kind === "html" || file.kind === "markdown") && file.text !== undefined;
+	return (file.kind === "html" || file.kind === "markdown" || file.kind === "diagram") && file.text !== undefined;
 }
 
 /** What the "More" button offers for the file showing. */
 export function previewMenu(path: string, file: ReaderFile | undefined): MenuEntry[] {
 	const entries: MenuEntry[] = [];
-	if (file?.kind === "web") {
+	if (file?.kind === "diagram") {
+		const diagram = { src: file.url ?? "", name: file.name, code: file.text ?? "" };
+		entries.push(
+			...downloadEntries(diagram),
+			{ label: t("Open large"), icon: <ExpandIcon size={14} />, onSelect: () => setState({ diagram }) },
+			{ label: t("Copy source"), icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(diagram.code)) },
+			"separator",
+		);
+	} else if (file?.kind === "web") {
 		entries.push(
 			{ label: t("Open in browser"), icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openExternal(file.path)) },
 			{ label: t("Copy address"), icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
@@ -27,6 +38,11 @@ export function previewMenu(path: string, file: ReaderFile | undefined): MenuEnt
 		entries.push(
 			{ label: t("Open in VS Code"), icon: <CodeIcon size={14} />, onSelect: () => void attempt(() => trivium.openInEditor(file.path)) },
 			{ label: t("Open with default app"), icon: <ExternalIcon size={14} />, onSelect: () => void attempt(() => trivium.openFile(file.path)) },
+			{
+				label: t(IS_WINDOWS ? "Show in File Explorer" : "Show in Finder"),
+				icon: <FolderIcon size={14} />,
+				onSelect: () => void attempt(() => trivium.revealFile(file.path)),
+			},
 			{ label: t("Copy path"), icon: <CopyIcon size={14} />, onSelect: () => void attempt(() => trivium.copyText(file.path)) },
 			{ label: t("Reload"), icon: <UndoIcon size={14} />, onSelect: () => void reloadPreview(file.id) },
 		);
@@ -111,6 +127,8 @@ function FileView({ file, source }: { file: ReaderFile; source: boolean }) {
 			);
 		case "image":
 			return <ImageView file={file} />;
+		case "diagram":
+			return <ZoomView src={file.url ?? ""} alt={file.name} className="diagram is-panel" maxFit={1.5} pad={16} margin={20} />;
 		case "table":
 			return <TableView text={file.text ?? ""} tabs={/\.tsv$/i.test(file.name)} />;
 		case "text":

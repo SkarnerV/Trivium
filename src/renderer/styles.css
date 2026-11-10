@@ -6045,9 +6045,12 @@ body.resizing * {
 	vertical-align: top;
 }
 
-/* The drawn diagram opens large in the lightbox; the corner icon says so on hover. */
-.md-diagram-open {
+/* The drawn diagram opens large in the lightbox; on hover, the card's corner offers Download, the side panel and Expand. */
+.md-diagram.is-drawn {
 	position: relative;
+}
+
+.md-diagram-open {
 	display: inline-block;
 	max-width: 100%;
 	padding: 0;
@@ -6056,25 +6059,41 @@ body.resizing * {
 	cursor: zoom-in;
 }
 
-.md-diagram-expand {
+.md-diagram-actions {
 	position: absolute;
-	top: -6px;
-	right: -6px;
-	display: grid;
-	place-items: center;
-	width: 26px;
-	height: 26px;
+	top: 6px;
+	right: 6px;
+	display: flex;
+	gap: 1px;
+	padding: 2px;
 	border: 1px solid var(--line);
-	border-radius: 7px;
+	border-radius: 9px;
 	background: #fff;
-	color: var(--ink-2);
 	box-shadow: 0 1px 3px rgba(19, 20, 43, 0.12);
 	opacity: 0;
 	transition: opacity 120ms ease;
 }
 
-.md-diagram:hover .md-diagram-expand,
-.md-diagram-open:focus-visible .md-diagram-expand {
+.md-diagram-actions button {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-2);
+}
+
+.md-diagram-actions button:hover {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.md-diagram:hover .md-diagram-actions,
+.md-diagram:focus-within .md-diagram-actions,
+.md-diagram.is-active .md-diagram-actions {
 	opacity: 1;
 }
 
@@ -6434,26 +6453,111 @@ body.resizing * {
 	object-fit: contain;
 	border-radius: 6px;
 	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-	cursor: zoom-in;
 }
 
-/* Actual size scrolls instead of centring, so a large image can be scrolled to every edge. */
-.lightbox-stage.actual {
-	display: block;
+/* A picture to look around: the wheel zooms at the pointer and dragging moves it. */
+.zoom-frame {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+	outline: none;
 }
 
-.lightbox-stage.actual img {
+.zoom-frame.grabbing,
+.zoom-frame.grabbing * {
+	cursor: grabbing;
+}
+
+.zoom-sheet {
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+.zoom-sheet img {
 	display: block;
-	max-width: none;
-	max-height: none;
-	margin: 0 auto;
-	cursor: zoom-out;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
 }
 
 /* A diagram is transparent, so it sits on white as it does in the thread. */
-.lightbox-stage img.diagram {
-	padding: 24px;
+.zoom-frame.diagram .zoom-sheet {
 	background: #fff;
+}
+
+.lightbox .zoom-sheet {
+	border-radius: 6px;
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* In the side panel, the diagram is a white sheet on a dotted ground, so its edges show. */
+.zoom-frame.is-panel {
+	background-color: #f7f7fa;
+	background-image: radial-gradient(circle, rgba(19, 20, 43, 0.09) 1px, transparent 1.2px);
+	background-size: 16px 16px;
+}
+
+.zoom-frame.is-panel .zoom-sheet {
+	border-radius: 8px;
+	box-shadow:
+		0 0 0 1px var(--line),
+		0 4px 16px rgba(19, 20, 43, 0.06);
+}
+
+.zoom-controls {
+	position: absolute;
+	left: 50%;
+	bottom: 14px;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	padding: 3px;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.97);
+	box-shadow:
+		0 0 0 1px rgba(19, 20, 43, 0.08),
+		0 6px 20px rgba(19, 20, 43, 0.16);
+	cursor: default;
+}
+
+.zoom-controls button {
+	display: grid;
+	place-items: center;
+	min-width: 28px;
+	height: 28px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 7px;
+	background: none;
+	color: var(--ink-2);
+	font: 500 12px var(--sans);
+	font-variant-numeric: tabular-nums;
+}
+
+.zoom-controls button:hover:not(:disabled) {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.zoom-controls button:disabled {
+	opacity: 0.4;
+}
+
+.zoom-controls .zoom-level {
+	min-width: 52px;
+}
+
+.zoom-sep {
+	width: 1px;
+	height: 16px;
+	margin: 0 3px;
+	background: var(--line);
 }
 
 .lightbox-stage img.loading {

@@ -296,8 +296,8 @@ export interface GitDiff {
 	binary: boolean;
 }
 
-/** How the Preview panel shows a file. "web" is a local service's page, by its address. */
-export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary" | "web";
+/** How the Preview panel shows a file. "web" is a local service's page, by its address; "diagram" one drawn from the conversation. */
+export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary" | "web" | "diagram";
 
 /** A file open in the Preview panel. */
 export interface ReaderFile {
@@ -924,6 +924,11 @@ export interface TriviumApi {
 	imageData(path: string, id: string): Promise<string>;
 	/** Asks where to save a transcript image and writes it; false when cancelled. */
 	saveImage(path: string, id: string, name: string): Promise<boolean>;
+	/**
+	 * Asks where to save a drawn diagram and writes it: `data` is the SVG's text, or the PNG's bytes in base64.
+	 * The saved file's path, or undefined when cancelled.
+	 */
+	saveDiagram(name: string, format: "svg" | "png", data: string): Promise<string | undefined>;
 	reviewFile(path: string, file: string): Promise<FileReview>;
 	/** Accepts or rejects one change. `expect` is the change as shown, so a stale view is refused. */
 	resolveChange(
@@ -960,6 +965,8 @@ export interface TriviumApi {
 	customizeSkill(app: AppId, path: string): Promise<AppDetails>;
 	/** Shows one of this mode's skills in the system's file manager. */
 	revealSkill(app: AppId, path: string): Promise<void>;
+	/** Shows a file selected in its folder, in File Explorer or Finder. */
+	revealFile(file: string): Promise<void>;
 	/** Moves a skill in this mode's folder to the system Trash, then describes this app again. */
 	deleteSkill(app: AppId, path: string): Promise<AppDetails>;
 	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */

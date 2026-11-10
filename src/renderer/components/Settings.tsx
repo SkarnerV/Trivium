@@ -33,7 +33,7 @@ import {
 } from "../../shared/usage.ts";
 import { duration, relativeTime, shortPath, tokens } from "../format.ts";
 import { useNow } from "../hooks.ts";
-import { keyName } from "../platform.ts";
+import { IS_WINDOWS, keyName } from "../platform.ts";
 import { packageName } from "../../shared/packages.ts";
 import { RECOMMENDED } from "../../shared/recommended.ts";
 import { providerLogo } from "../provider-logos.ts";
@@ -165,7 +165,13 @@ function General() {
 					</span>
 				}
 			>
-				<button type="button" className="s-icon-btn" aria-label={t("Open {name} in Finder", { name: label })} title={t("Open in Finder")} onClick={() => openFolder(path)}>
+				<button
+					type="button"
+					className="s-icon-btn"
+					aria-label={t(IS_WINDOWS ? "Open {name} in File Explorer" : "Open {name} in Finder", { name: label })}
+					title={t(IS_WINDOWS ? "Open in File Explorer" : "Open in Finder")}
+					onClick={() => openFolder(path)}
+				>
 					<FolderIcon size={15} />
 				</button>
 			</Item>

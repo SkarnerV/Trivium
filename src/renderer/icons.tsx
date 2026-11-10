@@ -231,6 +231,15 @@ export const ExpandIcon = (p: IconProps) => (
 		<path d="M4 20l6-6" />
 	</Svg>
 );
+/** Four corners: fit the picture to its frame. */
+export const FitIcon = (p: IconProps) => (
+	<Svg size={14} {...p}>
+		<path d="M4 9V5a1 1 0 0 1 1-1h4" />
+		<path d="M15 4h4a1 1 0 0 1 1 1v4" />
+		<path d="M20 15v4a1 1 0 0 1-1 1h-4" />
+		<path d="M9 20H5a1 1 0 0 1-1-1v-4" />
+	</Svg>
+);
 export const PaperclipIcon = (p: IconProps) => (
 	<Svg size={16} {...p}>
 		<path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />

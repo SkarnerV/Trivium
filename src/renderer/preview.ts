@@ -10,6 +10,26 @@ export function usePreviewOpener(): ((file: string) => void) | undefined {
 	return useContext(PreviewOpener);
 }
 
+/** A Mermaid or PlantUML block, drawn. */
+export interface DrawnDiagram {
+	/** The diagram as a standalone SVG image URL. */
+	src: string;
+	/** What to call it, such as "Mermaid diagram". */
+	name: string;
+	/** Its source. */
+	code: string;
+}
+
+/**
+ * The session whose Preview panel a drawn diagram in the conversation can open in. Unset where there is no such
+ * panel, such as in Research or in the panel itself.
+ */
+export const PreviewSession = createContext<string | undefined>(undefined);
+
+export function usePreviewSession(): string | undefined {
+	return useContext(PreviewSession);
+}
+
 /**
  * Text that reads as a path to a file, such as `src/main.ts`, `./report/index.html` or `README.md:12`: no
  * spaces, and a name with an extension. A trailing line number is dropped.

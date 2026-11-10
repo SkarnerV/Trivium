@@ -22,6 +22,7 @@ import type {
 import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import type { PermissionModeId } from "../shared/permissions.ts";
 import { type PanelView, panelViews, shownView } from "./panels.ts";
+import type { DrawnDiagram } from "./preview.ts";
 import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
 
@@ -87,8 +88,8 @@ export interface State {
 	trust: TrustRequest[];
 	/** The transcript image open in the lightbox, and the session it belongs to. */
 	preview?: { path: string; image: TranscriptImage };
-	/** The drawn diagram open in the lightbox, as an image URL. */
-	diagram?: { src: string; name: string };
+	/** The drawn diagram open in the lightbox, and the session whose Preview panel it can move to, if any. */
+	diagram?: DrawnDiagram & { path?: string };
 	/** A question waiting for Confirm or Cancel. */
 	confirm?: ConfirmRequest;
 	/** The provider login in progress, and what it last reported. */
@@ -377,6 +378,38 @@ export function openWebPreview(path: string, url: string): void {
 	showPreview(path, { id: `web:${url}`, path: url, rel: url, name: host, kind: "web", size: 0, mtime: Date.now(), url, scripts: true });
 }
 
+let diagramTabs = 0;
+
+/** A short fingerprint of a diagram's source, so the same diagram opened again goes to its tab. */
+function fingerprint(text: string): string {
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+	return (hash >>> 0).toString(36);
+}
+
+/** Opens a drawn diagram in a tab of its own in a session's Preview panel, with its source as the source view. */
+export function openDiagramPreview(path: string, diagram: DrawnDiagram): void {
+	// Its first line, such as "sequenceDiagram", tells one diagram's tab from another's.
+	const first = diagram.code.split("\n").find((line) => line.trim() && !line.trim().startsWith("%%"));
+	showPreview(path, {
+		id: `diagram:${++diagramTabs}`,
+		path: `diagram:${fingerprint(diagram.code)}`,
+		rel: first ? `${diagram.name} · ${first.trim()}` : diagram.name,
+		name: diagram.name,
+		kind: "diagram",
+		size: diagram.src.length,
+		mtime: Date.now(),
+		url: diagram.src,
+		text: diagram.code,
+		scripts: false,
+	});
+}
+
+/** Whether main has the file open: local pages and drawn diagrams live only here. */
+function inMain(id: string): boolean {
+	return !id.startsWith("web:") && !id.startsWith("diagram:");
+}
+
 function showPreview(path: string, opened: ReaderFile, pick = true): void {
 	const files = getState().previews[path]?.files ?? [];
 	// The same file opened again takes the old one's place, so it is never open twice.
@@ -387,7 +420,7 @@ function showPreview(path: string, opened: ReaderFile, pick = true): void {
 		closing.push(next[0]!);
 		next = next.slice(1);
 	}
-	for (const file of closing) if (file.kind !== "web") void trivium.closeReader(file.id).catch(() => {});
+	for (const file of closing) if (inMain(file.id)) void trivium.closeReader(file.id).catch(() => {});
 	transition("tab", () => {
 		setState((s) => ({ previews: { ...s.previews, [path]: { files: next, active: opened.id } } }));
 		if (pick) showPanelView(path, "preview");
@@ -457,7 +490,7 @@ export function selectPreview(path: string, id: string): void {
 
 /** Closes a file; the one beside it shows next. Closing the last one closes the Preview tab. */
 export function closePreview(path: string, id: string): void {
-	if (!id.startsWith("web:")) void trivium.closeReader(id).catch(() => {});
+	if (inMain(id)) void trivium.closeReader(id).catch(() => {});
 	setState((s) => {
 		const files = s.previews[path]?.files ?? [];
 		const index = files.findIndex((file) => file.id === id);
@@ -491,6 +524,7 @@ export async function reloadPreview(id: string): Promise<void> {
 		if (page) replacePreview(id, { ...page, mtime: Date.now() });
 		return;
 	}
+	if (!inMain(id)) return;
 	const file = await trivium.reloadReader(id).catch(() => undefined);
 	if (file) replacePreview(id, file);
 }

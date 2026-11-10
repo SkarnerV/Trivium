@@ -1,8 +1,10 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type { TranscriptImage } from "../../shared/protocol.ts";
-import { CloseIcon, DownloadIcon, ExpandIcon, ImageIcon } from "../icons.tsx";
-import { attempt, notify, setState, trivium, useStore } from "../store.ts";
+import { CloseIcon, DownloadIcon, ExpandIcon, ImageIcon, PanelRightIcon } from "../icons.tsx";
+import { attempt, notify, openDiagramPreview, setState, trivium, useStore } from "../store.ts";
 import { t } from "../i18n.tsx";
+import { saveDiagram } from "./Diagram.tsx";
+import { ZoomView } from "./ZoomView.tsx";
 
 async function save(path: string, image: TranscriptImage): Promise<void> {
 	const saved = await attempt(() => trivium.saveImage(path, image.id, image.name));
@@ -40,8 +42,8 @@ export function ImageTile({ image, size = "small" }: { image: TranscriptImage; s
 const MAX_ZOOM = 2;
 
 /**
- * An image enlarged over the app: scaled to fit the screen, or at actual size after a click.
- * Esc or the backdrop closes it. Until `src` arrives, `placeholder` shows blurred.
+ * An image enlarged over the app, fitted to the screen at first; the wheel zooms and dragging moves it.
+ * Esc, the close button or a click around the image closes it. Until `src` arrives, `placeholder` shows blurred.
  */
 function Lightbox({
 	name,
@@ -49,6 +51,7 @@ function Lightbox({
 	placeholder,
 	maxZoom = MAX_ZOOM,
 	className,
+	pad,
 	actions,
 	onClose,
 }: {
@@ -57,15 +60,11 @@ function Lightbox({
 	placeholder?: string;
 	maxZoom?: number;
 	className?: string;
+	/** Room around the image on its sheet, in its own pixels. */
+	pad?: number;
 	actions?: ReactNode;
 	onClose: () => void;
 }) {
-	const [actual, setActual] = useState(false);
-	const [fitWidth, setFitWidth] = useState<number>();
-	useEffect(() => {
-		setActual(false);
-		setFitWidth(undefined);
-	}, [src]);
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
 		window.addEventListener("keydown", onKey);
@@ -80,25 +79,13 @@ function Lightbox({
 					<CloseIcon size={14} />
 				</button>
 			</div>
-			<div className={`lightbox-stage${actual ? " actual" : ""}`} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-				{src ? (
-					<img
-						src={src}
-						alt={name}
-						className={className}
-						style={actual || !fitWidth ? undefined : { width: fitWidth }}
-						onLoad={(event) => {
-							const image = event.currentTarget;
-							const stage = image.parentElement!.getBoundingClientRect();
-							const scale = Math.min(maxZoom, (stage.width - 48) / image.naturalWidth, (stage.height - 28) / image.naturalHeight);
-							setFitWidth(Math.round(image.naturalWidth * scale));
-						}}
-						onClick={() => setActual(!actual)}
-					/>
-				) : (
-					placeholder && <img src={placeholder} alt="" className="loading" />
-				)}
-			</div>
+			{src ? (
+				<ZoomView src={src} alt={name} className={className} maxFit={maxZoom} pad={pad} margin={28} autoFocus onBackdrop={onClose} />
+			) : (
+				<div className="lightbox-stage" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+					{placeholder && <img src={placeholder} alt="" className="loading" />}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -134,7 +121,41 @@ export function ImageLightbox() {
 			/>
 		);
 	}
-	// A diagram is drawn as vectors, so it can be scaled up further than a picture and stay sharp.
-	if (diagram) return <Lightbox name={diagram.name} src={diagram.src} maxZoom={3} className="diagram" onClose={closeDiagram} />;
+	if (diagram) {
+		const { path } = diagram;
+		return (
+			// A diagram is drawn as vectors, so it can be scaled up further than a picture and stay sharp.
+			<Lightbox
+				name={diagram.name}
+				src={diagram.src}
+				maxZoom={3}
+				className="diagram"
+				pad={16}
+				onClose={closeDiagram}
+				actions={
+					<>
+						<button type="button" className="lightbox-btn" onClick={() => void saveDiagram(diagram, "svg")}>
+							<DownloadIcon size={14} /> {t("Download SVG")}
+						</button>
+						<button type="button" className="lightbox-btn" onClick={() => void saveDiagram(diagram, "png")}>
+							<ImageIcon size={14} /> {t("Download PNG")}
+						</button>
+						{path && (
+							<button
+								type="button"
+								className="lightbox-btn"
+								onClick={() => {
+									closeDiagram();
+									openDiagramPreview(path, diagram);
+								}}
+							>
+								<PanelRightIcon size={14} /> {t("Open in side panel")}
+							</button>
+						)}
+					</>
+				}
+			/>
+		);
+	}
 	return null;
 }

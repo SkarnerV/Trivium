@@ -3,7 +3,7 @@ import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol
 import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
 import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
-import { PreviewOpener } from "../preview.ts";
+import { PreviewOpener, PreviewSession } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -423,9 +423,11 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 					<div className="scroll-row">
 						<div className="thread">
 							<PreviewOpener.Provider value={preview}>
-								{view.runs.map((run, index) => (
-									<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
-								))}
+								<PreviewSession.Provider value={preview && view.path}>
+									{view.runs.map((run, index) => (
+										<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+									))}
+								</PreviewSession.Provider>
 							</PreviewOpener.Provider>
 							{dialogs.map((request) => (
 								<AskCard key={request.id} request={request} />

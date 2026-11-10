@@ -1,4 +1,5 @@
-import { mkdirSync, watch, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { copyFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -42,6 +43,7 @@ import {
 	saveCustomProvider,
 	savePresetProvider,
 } from "./custom-models.ts";
+import { editorArgs, editorUrl } from "./editor.ts";
 import { exportFileName, sessionMarkdown } from "./export.ts";
 import { recallLessons } from "@pify/memory/src/lessons.ts";
 import { scanForSecrets } from "@pify/memory/src/secrets.ts";
@@ -300,6 +302,12 @@ function registerIpc(): void {
 	);
 	handle("trivium:customizeSkill", (id: AppId, path: string) => host.customizeSkill(id, path));
 	handle("trivium:revealSkill", async (id: AppId, path: string) => shell.showItemInFolder(await host.skillPath(id, path)));
+	handle("trivium:revealFile", (file: string) => {
+		const target = String(file);
+		// Explorer and Finder say nothing about a file that isn't there.
+		if (!existsSync(target)) throw new Error(t("{file} is gone.", { file: basename(target) }));
+		shell.showItemInFolder(target);
+	});
 	handle("trivium:deleteSkill", (id: AppId, path: string) => host.deleteSkill(id, path, (target) => shell.trashItem(target)));
 	handle("trivium:exportSession", async (path: string) => {
 		const info = host.exportInfo(path);
@@ -442,6 +450,17 @@ function registerIpc(): void {
 		await writeFile(result.filePath, Buffer.from(image.data, "base64"));
 		return true;
 	});
+	handle("trivium:saveDiagram", async (name: string, format: "svg" | "png", data: string) => {
+		const png = format === "png";
+		const result = await dialog.showSaveDialog(window!, {
+			title: t("Save diagram"),
+			defaultPath: join(app.getPath("downloads"), `${exportFileName(String(name))}.${png ? "png" : "svg"}`),
+			filters: [png ? { name: t("PNG image"), extensions: ["png"] } : { name: t("SVG image"), extensions: ["svg"] }],
+		});
+		if (result.canceled || !result.filePath) return undefined;
+		await writeFile(result.filePath, png ? Buffer.from(String(data), "base64") : String(data));
+		return result.filePath;
+	});
 	handle("trivium:reviewFile", (path: string, file: string) => host.reviewFile(path, file));
 	handle(
 		"trivium:resolveChange",
@@ -460,14 +479,52 @@ function registerIpc(): void {
 	handle("trivium:gitCommit", (path: string, id: string) => host.gitCommit(path, id));
 	handle("trivium:gitCommitDiff", (path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">) => host.gitCommitDiff(path, id, file));
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
-		// VS Code's URL handler opens the file at a line; fall back to the system default app.
-		const url = `vscode://file${encodeURI(file)}${line ? `:${line}` : ""}`;
-		try {
-			await shell.openExternal(url);
-		} catch {
-			const error = await shell.openPath(file);
-			if (error) throw new Error(error);
+		const target = String(file);
+		const command = await vsCodeCommand();
+		if (command) {
+			try {
+				await launch(command, editorArgs(target, Number(line)));
+				return;
+			} catch {
+				// Its link, below, still opens the file once the user allows it.
+			}
 		}
+		if (app.getApplicationNameForProtocol("vscode://")) {
+			await shell.openExternal(editorUrl(target, Number(line)));
+			return;
+		}
+		// Without VS Code, the file opens in its default app.
+		const error = await shell.openPath(target);
+		if (error) throw new Error(error);
+	});
+}
+
+/**
+ * VS Code's own executable, found from what handles its links: Code.exe on Windows, the `code` command inside the
+ * app on macOS. Started directly, it opens a file at once; its link first asks the user to allow it, in a window
+ * Windows may leave behind the others, so to the user nothing seems to happen.
+ */
+async function vsCodeCommand(): Promise<string | undefined> {
+	if (process.platform !== "win32" && process.platform !== "darwin") return undefined;
+	const info = await app.getApplicationInfoForProtocol("vscode://").catch(() => undefined);
+	if (!info?.path) return undefined;
+	const command = process.platform === "darwin" ? join(info.path, "Contents", "Resources", "app", "bin", "code") : info.path;
+	if (process.platform === "win32" && !/\.exe$/i.test(command)) return undefined;
+	return existsSync(command) ? command : undefined;
+}
+
+/** Starts another app on its own, so it keeps running whatever Trivium does. */
+function launch(command: string, args: string[]): Promise<void> {
+	const env = { ...process.env };
+	// Inherited, this would start VS Code, itself Electron, as plain Node.
+	delete env.ELECTRON_RUN_AS_NODE;
+	return new Promise((done, fail) => {
+		const child = spawn(command, args, { detached: true, stdio: "ignore", env });
+		child.once("error", fail);
+		child.once("spawn", () => {
+			child.unref();
+			done();
+		});
 	});
 }
 

@@ -73,8 +73,17 @@ function resolveTools(changes: string[] | undefined): string[] {
 	return [...tools];
 }
 
+/** Every app's replies draw Mermaid blocks as diagrams, so each one's model hears it can use them. */
+const DIAGRAMS = [
+	"Replies are shown in Trivium, which draws a fenced ```mermaid code block as a diagram the user can zoom, open beside the chat and download.",
+	"When a picture explains something better than prose, such as how parts connect, a flow or sequence of calls, a state machine, a timeline or a data model, include a Mermaid diagram with the explanation. Skip it for simple answers.",
+	"Keep a diagram small and focused, and label nodes in plain words. Put a label in double quotes when it has punctuation such as parentheses, colons or slashes, use <br/> for a line break, and don't name a node `end`.",
+].join("\n");
+
 export function profileFor(app: AppId): AppProfile & { extensions: string[]; skillDir: string } {
-	return { ...PROFILES[app], extensions: extensionFiles(app), skillDir: skillDir(app) };
+	const profile = PROFILES[app];
+	const appendSystemPrompt = [profile.appendSystemPrompt, DIAGRAMS].filter(Boolean).join("\n\n");
+	return { ...profile, appendSystemPrompt, extensions: extensionFiles(app), skillDir: skillDir(app) };
 }
 
 export function profileInfo(app: AppId): AppProfileInfo {

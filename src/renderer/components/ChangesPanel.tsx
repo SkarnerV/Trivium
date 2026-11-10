@@ -249,7 +249,7 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 						{/* Only the lines scroll, so the file's name and buttons stay in view as a long line is read. */}
 						<div className="diff-scroll">
 							{current.kind === "session" ? (
-								<DiffView lines={current.change.lines} tooLarge={current.change.tooLarge} empty={emptyNote(current.change.status)} />
+								<DiffView lines={current.change.lines} tooLarge={current.change.tooLarge} empty={emptyNote(current.change.status, current.change.binary)} />
 							) : gitDiff?.error ? (
 								<p className="diff-note">{gitDiff.error}</p>
 							) : gitDiff?.diff ? (

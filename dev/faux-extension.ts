@@ -8,6 +8,7 @@
 // - A prompt that mentions "subagent", in any app, delegates: one child, three in parallel, then one in
 //   the background whose result arrives later as its own run.
 // - A prompt that mentions "server", in Code, starts a small web server in the background, for the Services view.
+// - A prompt that mentions "format", in Code, runs a command that rewrites a file and creates another, for the Changes view.
 // - A prompt that mentions "slow", in Code, runs a command that outlasts the bash limit; "hang" sets a short timeout, which only shortens the wait.
 // - A prompt that mentions "diagram", in any app, gets a reply with a Mermaid diagram.
 // Every prompt replays the story from its first step.
@@ -339,6 +340,16 @@ const SLOW_STORY: Step[] = [
 	() => fauxAssistantMessage(fauxText("The tests are still running in the background. I'll report when they end.")),
 ];
 
+/** A command that rewrites one file and leaves another, as a formatter or a code generator would, for the Changes view. */
+const FORMAT_STORY: Step[] = [
+	() =>
+		fauxAssistantMessage(
+			[fauxText("Running the formatter."), fauxToolCall("bash", { command: "sed -i 's/const /let /' src/reader.ts && printf 'Formatted src/reader.ts\\n' > format.log" })],
+			{ stopReason: "toolUse" },
+		),
+	() => fauxAssistantMessage(fauxText("Formatted `src/reader.ts` and wrote `format.log`. Both are under This session in Changes, where you can revert either.")),
+];
+
 const HANG_STORY: Step[] = [
 	() => fauxAssistantMessage([fauxText("Waiting a second for it."), fauxToolCall("bash", { command: "sleep 30", timeout: 1 })], { stopReason: "toolUse" }),
 	() => fauxAssistantMessage(fauxText("It's still going in the background.")),
@@ -422,7 +433,7 @@ export default function (pi: ExtensionAPI) {
 		const ended = /Background command [^"\\]*/.exec(prompt)?.[0];
 		if (ended) return fauxAssistantMessage(fauxText(`Done. ${ended}`));
 		if (/diagram/i.test(prompt)) return DIAGRAM_REPLY();
-		const coded = app === "code" && (/server/i.test(prompt) ? SERVER_STORY : /slow/i.test(prompt) ? SLOW_STORY : /hang/i.test(prompt) ? HANG_STORY : undefined);
+		const coded = app === "code" && (/server/i.test(prompt) ? SERVER_STORY : /slow/i.test(prompt) ? SLOW_STORY : /hang/i.test(prompt) ? HANG_STORY : /format/i.test(prompt) ? FORMAT_STORY : undefined);
 		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : coded || scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();
 	};

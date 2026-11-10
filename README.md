@@ -93,7 +93,7 @@ needs you, you get a notification.
 
 Code mode's side panel shows one view at a time, picked from its **Show in panel** menu.
 
-- **Changes.** Code mode records each file before the agent first touches it, so this view lists the net diff of the whole session, per file, under **This session**. Each file has a revert button that puts that one back, or deletes it, along with any folders made for it, if the agent created it. A file leaves this list once it is committed, so reverting never undoes committed work. In a git repository the view also shows the branch, commits to push or pull, and under **Other uncommitted changes** whatever else git reports: your own edits and files changed before the session. Staged and conflicted files are tagged. Git's side refreshes after a run, after an edit or command, and when the window regains focus, without polling. Open any file in VS Code, at the first changed line for the session's files.
+- **Changes.** Code mode records each file before the agent first changes it, by an edit or by a command such as a formatter, `sed` or `rm`, so this view lists the net diff of the whole session, per file, under **This session**. For commands it snapshots the project before each one and compares after, in a git repository or not, without writing to your `.git`. That leaves out files git ignores, files over 10 MB, files outside the project, and what a command still running in the background writes later. Each file has a revert button that puts that one back, or deletes it, along with any folders made for it, if the agent created it. A file leaves this list once it is committed, so reverting never undoes committed work. In a git repository the view also shows the branch, commits to push or pull, and under **Other uncommitted changes** whatever else git reports: your own edits and files changed before the session. Staged and conflicted files are tagged. Git's side refreshes after a run, after an edit or command, and when the window regains focus, without polling. Open any file in VS Code, at the first changed line for the session's files.
 - **History.** The **History** card beside the conversation draws every branch, remote branch and tag as a commit graph. Click a commit to see who wrote it, its message and the files it changed, and click a file to read its diff in that commit. A merge shows its changes against its first parent. Outside a git repository the tab says so instead.
 - **Preview.** Open project files as tabs: HTML pages in a sandboxed frame with their own styles and images (scripts off until you ask, network blocked), Markdown with Mermaid and PlantUML diagrams (PlantUML needs a local install), CSV tables, text with line numbers, and images. Files reload when they change on disk. Open one from a step's eye icon, a file path in a reply, or the Changes view. A diagram in a reply opens here too, or large over the app: the wheel zooms, dragging moves it, and it downloads as SVG or PNG.
 - **Services.** Dev servers, watchers, databases and any other process a command leaves running, such as `npm run dev &`. Each shows its command, processes, the port it listens on and its latest output, with **Stop**, which ends it and everything it started. Open its address in Preview or the browser. A green dot in the header and the sidebar says a session has some running. Services keep running when a session is unloaded, and stop when the session is deleted or Trivium quits, which asks first. If Trivium crashes, they show again at the next start.
@@ -236,7 +236,7 @@ flowchart LR
 | `~/.trivium/apps/<app>/extensions/` | Extensions loaded only for that mode |
 | `~/.trivium/settings.json` | Language, text size, idle unloading, notifications, per-mode models and extension switches |
 | `~/.trivium/session-apps.json` | Which mode each session belongs to; sessions from elsewhere show under Code |
-| `~/.trivium/changes/` | File contents from before the agent's changes, until you accept, revert or commit them |
+| `~/.trivium/changes/` | File contents from before the agent's changes, until you accept, revert or commit them, and each session's snapshot of its project, kept until the session is deleted |
 | `~/.trivium/chats/` | The working folder for sessions started with No project |
 | `~/.trivium/usage-cache.json` | Each session's usage totals, counted again only when its file changes |
 | `~/.pi/agent/memory/`, `.pi/memory/MEMORY.md` | Global and per-project memory, kept by `@pify/memory` |
@@ -324,10 +324,10 @@ with `t("English text")`, and `npm test` checks that every text has a translatio
 - [x] Code: Git view, branch summary and file Preview
 - [x] Edit, fork and copy messages; chats without a project; pinned projects and sessions
 - [x] English, Simplified Chinese and Japanese interface
+- [x] Track changes made through `bash` with git snapshots
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`
 - [ ] Dark theme
 - [ ] Signed builds for macOS, Windows and Linux
-- [ ] Track changes made through `bash` with git snapshots
 
 ## Contributing
 

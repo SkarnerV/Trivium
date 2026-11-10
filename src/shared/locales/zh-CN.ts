@@ -554,6 +554,7 @@ export default {
 	"1 other uncommitted file": "另有 1 个未提交的文件",
 	"{n} other uncommitted files": "另有 {n} 个未提交的文件",
 	"Showing the first {n} changes.": "仅显示前 {n} 项更改。",
+	"This folder is too large to track what commands change. Edits are still tracked.": "此文件夹过大，无法跟踪命令所做的更改。编辑仍会被跟踪。",
 	"Diff of {file}": "{file} 的差异",
 	", ": "，",
 	"staged": "已暂存",

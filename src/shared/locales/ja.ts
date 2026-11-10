@@ -554,6 +554,7 @@ export default {
 	"1 other uncommitted file": "ほかに未コミットのファイル 1 個",
 	"{n} other uncommitted files": "ほかに未コミットのファイル {n} 個",
 	"Showing the first {n} changes.": "最初の {n} 件の変更を表示しています。",
+	"This folder is too large to track what commands change. Edits are still tracked.": "このフォルダーは大きすぎるため、コマンドによる変更を追跡できません。編集は引き続き追跡されます。",
 	"Diff of {file}": "{file} の差分",
 	", ": "、",
 	"staged": "ステージ済み",

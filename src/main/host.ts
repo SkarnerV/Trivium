@@ -62,7 +62,7 @@ import * as skillFiles from "./skills.ts";
 import { type BackgroundEnd, endedMessage, LONG_COMMANDS_NAME, LONG_COMMANDS_PATH, withLongCommands } from "./long-commands.ts";
 import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
-import { permissionGate } from "./permission-gate.ts";
+import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
@@ -725,6 +725,8 @@ export class SessionHost {
 				ids.add(id);
 				delete this.appIndex[id];
 				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
+				// And what it kept to tell what the session's commands changed.
+				for (const kept of ["git", "blobs"]) await rm(join(triviumDir, "changes", `${id}.${kept}`), { recursive: true, force: true, maxRetries: 3 });
 			}
 			deleted.push(path);
 		}
@@ -1069,7 +1071,14 @@ export class SessionHost {
 		let sessionPath = "";
 		// Untrusted until the reload hook below decides: project settings must not apply before that.
 		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
-		const changes = new ChangeTracker(join(triviumDir, "changes", `${sessionManager.getSessionId()}.json`), cwd);
+		const changes = new ChangeTracker(join(triviumDir, "changes", `${sessionManager.getSessionId()}.json`), cwd, () =>
+			this.notice(t("This folder is too large to track what commands change. Edits are still tracked."), "info"),
+		);
+		/** The command of a shell call that may change files, which is one that does more than read. */
+		const changing = (event: { toolName: string; input: unknown }) => {
+			const command = (event.input as { command?: unknown }).command;
+			return (event.toolName === "bash" || event.toolName === "powershell") && typeof command === "string" && !onlyReads(command);
+		};
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
 			sessionPath: () => sessionPath,
 			factories: [
@@ -1083,6 +1092,20 @@ export class SessionHost {
 					});
 				},
 				...(app === "code" ? [{ name: "permissions", factory: permissionGate(() => this.permissionMode()) }] : []),
+				// After the gate, so the project is snapshotted only for a command that was allowed to run.
+				(pi) => {
+					const snapshotted = new Set<string>();
+					pi.on("tool_call", async (event) => {
+						if (!changing(event)) return;
+						snapshotted.add(event.toolCallId);
+						await changes.beforeCommand();
+					});
+					pi.on("tool_result", async (event) => {
+						if (!snapshotted.delete(event.toolCallId)) return;
+						const live = this.live.get(sessionPath);
+						if ((await changes.afterCommand()) && live) await this.emitChanges(live).catch(() => {});
+					});
+				},
 			],
 		});
 		// Global extensions load first; project resources only once the project is trusted.

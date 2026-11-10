@@ -198,6 +198,8 @@ export interface FileChange {
 	dels: number;
 	lines: DiffLine[];
 	tooLarge: boolean;
+	/** Set for a file that is not text, which has no lines to show. */
+	binary?: boolean;
 }
 
 /** Where a changed file sits in git: in the index, the working tree only, not tracked, or mid-merge. */

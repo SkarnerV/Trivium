@@ -44,12 +44,17 @@ const BINARY_PROBE = 8000;
  * Runs git in `cwd`. GIT_OPTIONAL_LOCKS=0 keeps status from refreshing the index, so reading never
  * takes index.lock while the agent runs git commands of its own.
  */
-function git(cwd: string, args: string[], maxBuffer = 16 * 1024 * 1024): Promise<string> {
+export function git(
+	cwd: string,
+	args: string[],
+	maxBuffer = 16 * 1024 * 1024,
+	options: { env?: Record<string, string>; timeout?: number } = {},
+): Promise<string> {
 	return new Promise((resolve, reject) => {
 		execFile(
 			"git",
 			["-c", "core.quotepath=false", "--literal-pathspecs", ...args],
-			{ cwd, encoding: "utf8", maxBuffer, windowsHide: true, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } },
+			{ cwd, encoding: "utf8", maxBuffer, windowsHide: true, timeout: options.timeout, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env } },
 			(error, stdout) => (error ? reject(error) : resolve(stdout)),
 		);
 	});
@@ -68,11 +73,11 @@ const STATUS: Record<string, GitFile["status"]> = {
  * Reads `git status --porcelain=v2 --branch -z`. A file staged and then changed again is listed twice,
  * once per area. Paths stay relative to the repository root, as git prints them.
  */
-export function parseStatus(text: string, root: string): GitStatus {
+export function parseStatus(text: string, root: string, limit = MAX_FILES): GitStatus {
 	const status: GitStatus = { root, branch: null, head: null, ahead: 0, behind: 0, files: [], truncated: false };
 	const records = text.split("\0");
 	const add = (file: Omit<GitFile, "path">) => {
-		if (status.files.length >= MAX_FILES) status.truncated = true;
+		if (status.files.length >= limit) status.truncated = true;
 		else status.files.push({ ...file, path: join(root, file.rel) });
 	};
 	for (let index = 0; index < records.length; index++) {
@@ -130,21 +135,50 @@ async function commits(root: string, range: string): Promise<GitCommit[]> {
 	}
 }
 
+/** The top folder of the repository `cwd` is in and the git folder its worktrees share, or null when it is in none or git is missing. */
+export async function repoDirs(cwd: string): Promise<{ root: string; gitDir: string } | null> {
+	try {
+		// git prints forward slashes, even on Windows, and the common folder relative to `cwd`.
+		const [top = "", common = ".git"] = (await git(cwd, ["rev-parse", "--show-toplevel", "--git-common-dir"])).trim().split(/\r?\n/);
+		return { root: resolve(top), gitDir: resolve(cwd, common) };
+	} catch {
+		return null;
+	}
+}
+
+/** What git has uncommitted in the repository `cwd` is in, and the commit it is at. */
+export interface Dirty {
+	/** Every file changed, staged, untracked or in conflict, by its path from the repository's top folder as git prints it. */
+	files: Set<string>;
+	/** The commit HEAD is at, in full, or null before the first one. */
+	head: string | null;
+}
+
+/** Reads that in one git call, without the upstream's commits. Null when `cwd` is in no repository or git is missing. */
+export async function readDirty(cwd: string): Promise<Dirty | null> {
+	let text: string;
+	try {
+		// Paths come out relative to the top folder wherever in the repository this runs.
+		text = await git(cwd, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"], LARGE_OUTPUT);
+	} catch {
+		return null;
+	}
+	const files = new Set<string>();
+	for (const file of parseStatus(text, "", Infinity).files) {
+		files.add(file.rel);
+		if (file.from) files.add(file.from);
+	}
+	return { files, head: /(?:^|\0)# branch\.oid ([0-9a-f]{40,64})\0/.exec(text)?.[1] ?? null };
+}
+
 /**
  * The branch and changed files of the repository `cwd` is in, or null when it is in none or git is missing.
  * With an upstream, also the commits each way between them, and when the remote was last fetched.
  */
 export async function readGitStatus(cwd: string): Promise<GitStatus | null> {
-	let root: string;
-	let gitDir: string;
-	try {
-		// git prints forward slashes, even on Windows, and the common folder relative to `cwd`.
-		const [top = "", common = ".git"] = (await git(cwd, ["rev-parse", "--show-toplevel", "--git-common-dir"])).trim().split(/\r?\n/);
-		root = resolve(top);
-		gitDir = resolve(cwd, common);
-	} catch {
-		return null;
-	}
+	const dirs = await repoDirs(cwd);
+	if (!dirs) return null;
+	const { root, gitDir } = dirs;
 	const text = await git(root, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"]);
 	const status = parseStatus(text, root);
 	if (!status.upstream) return status;

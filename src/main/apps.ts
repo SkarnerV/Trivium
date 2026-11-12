@@ -80,9 +80,19 @@ const DIAGRAMS = [
 	"Keep a diagram small and focused, and label nodes in plain words. Put a label in double quotes when it has punctuation such as parentheses, colons or slashes, use <br/> for a line break, and don't name a node `end`.",
 ].join("\n");
 
+/**
+ * What a model writes before a tool call stays in the conversation, between the steps it took. Models differ in
+ * how much they say there, so each hears what the user sees: updates worth reading, and an answer that needs none of them.
+ */
+const PROGRESS = [
+	"Text you write before a tool call is shown to the user in the conversation as you work, in the order you wrote it, with your tool calls folded away between.",
+	"Use it for short progress updates: a sentence or two when you start a new part of the task, find something that matters, or change approach. Don't announce each tool call, and don't repeat what your last update said.",
+	"Put the full result in your final reply, after your last tool call. It should stand on its own for someone who skipped the updates.",
+].join("\n");
+
 export function profileFor(app: AppId): AppProfile & { extensions: string[]; skillDir: string } {
 	const profile = PROFILES[app];
-	const appendSystemPrompt = [profile.appendSystemPrompt, DIAGRAMS].filter(Boolean).join("\n\n");
+	const appendSystemPrompt = [profile.appendSystemPrompt, PROGRESS, DIAGRAMS].filter(Boolean).join("\n\n");
 	return { ...profile, appendSystemPrompt, extensions: extensionFiles(app), skillDir: skillDir(app) };
 }
 

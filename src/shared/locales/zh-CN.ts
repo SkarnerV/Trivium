@@ -387,6 +387,7 @@ export default {
 	"Unpin project": "取消置顶项目",
 	"Pin project": "置顶项目",
 	"Archive all sessions": "归档所有会话",
+	"Show {n} more": "再显示 {n} 个",
 	"Archive all {mode} sessions in {project}": "归档 {project} 中的所有{mode}会话",
 	"Archive session": "归档会话",
 	"Archive {n} sessions": "归档 {n} 个会话",

@@ -37,6 +37,7 @@ interface ProjectGroup extends WorkspaceGroup {
 	pinned: boolean;
 }
 
+/** Sessions a project shows before the rest fold behind a "Show more" row. */
 const PER_PROJECT = 8;
 
 const pinnedFirst = <T,>(items: T[], pinned: (item: T) => boolean): T[] => [...items.filter(pinned), ...items.filter((item) => !pinned(item))];
@@ -260,7 +261,10 @@ function ProjectSection({ app, group, selected, split }: { app: AppId; group: Pr
 	const pinnedSessions = useStore((s) => s.pinnedSessions);
 	const key = `${app}:${group.cwd}`;
 	const folded = useStore((s) => !!s.collapsed[key]);
+	const [showAll, setShowAll] = useState(false);
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
+	const hidden = group.sessions.length - PER_PROJECT;
+	const shown = showAll || hidden <= 0 ? group.sessions : group.sessions.slice(0, PER_PROJECT);
 	const closeMenu = useCallback(() => setMenu(undefined), []);
 	return (
 		<section className="project" aria-label={group.name}>
@@ -301,7 +305,7 @@ function ProjectSection({ app, group, selected, split }: { app: AppId; group: Pr
 				</button>
 			</div>
 			{!folded &&
-				group.sessions.slice(0, PER_PROJECT).map((session) => (
+				shown.map((session) => (
 					<SessionRow
 						key={session.path}
 						session={session}
@@ -311,6 +315,11 @@ function ProjectSection({ app, group, selected, split }: { app: AppId; group: Pr
 						startedAt={views[session.path]?.runs.at(-1)?.startedAt}
 					/>
 				))}
+			{!folded && hidden > 0 && (
+				<button type="button" className="show-more" aria-expanded={showAll} onClick={() => setShowAll((open) => !open)}>
+					{showAll ? t("Show less") : t("Show {n} more", { n: hidden })}
+				</button>
+			)}
 			{menu && <ContextMenu x={menu.x} y={menu.y} label={group.name} entries={projectMenu(app, group)} onClose={closeMenu} />}
 		</section>
 	);

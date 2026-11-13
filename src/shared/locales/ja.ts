@@ -387,6 +387,7 @@ export default {
 	"Unpin project": "プロジェクトの固定を解除",
 	"Pin project": "プロジェクトを固定",
 	"Archive all sessions": "すべてのセッションをアーカイブ",
+	"Show {n} more": "さらに {n} 件を表示",
 	"Archive all {mode} sessions in {project}": "{project} のすべての {mode} セッションをアーカイブ",
 	"Archive session": "セッションをアーカイブ",
 	"Archive {n} sessions": "{n} 件のセッションをアーカイブ",

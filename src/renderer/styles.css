@@ -781,6 +781,30 @@ body.resizing * {
 	background: var(--ink);
 }
 
+.show-more {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 28px;
+	/* Lines up with the session titles above it. */
+	padding: 0 10px 0 33px;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 12px;
+	text-align: left;
+}
+
+.show-more:hover {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.peek .show-more:hover {
+	background: var(--soft);
+}
+
 .sb-empty {
 	padding: 0 10px;
 	color: var(--muted);

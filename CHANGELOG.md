@@ -2,6 +2,17 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-11-13
+
+### Changed
+
+- **What the agent says along the way stays in the conversation.** Text a model writes before a tool call used to stream in like the answer and then fold away with its steps once the tool started. It now stays where it was written, shown like the answer, during the run and after it. The tool calls and thinking between two such notes fold into a group of their own, and the line that times the run opens or closes every group at once. A run with nothing said along the way looks as it did.
+- Each mode's system prompt tells the model this text is shown, so it keeps it to a sentence or two at turning points and puts the full result in the final reply.
+
+### Fixed
+
+- A project in the sidebar showed only its 8 most recent sessions, with no way to reach older ones. A **Show N more** row under them now lists the rest, and **Show less** folds them back.
+
 ## [0.11.0] - 2026-11-10
 
 ### Added

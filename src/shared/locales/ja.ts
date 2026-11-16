@@ -1,5 +1,6 @@
 /** Japanese, keyed by the English text the code passes to t(). */
 export default {
+	"The patch is not where subagents keep their files.": "パッチがサブエージェントのファイル保存場所にありません。",
 	"Handoff exceeds the display limit": "引き継ぎファイルが表示上限を超えています",
 	"Unknown child patch": "不明な子エージェントのパッチ",
 	"Implementing": "実装中",

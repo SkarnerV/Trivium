@@ -322,7 +322,8 @@ async function orchestratorFanout(id: string, scenario: string, signal: AbortSig
 	const eight = scenario.includes("eight");
 	const children = eight ? Array.from({ length: 8 }, (_, index) => ({ ...REVIEWERS[index % REVIEWERS.length]!, label: `review-${index + 1}`, pace: 900 + index * 150 })) : WRITERS;
 	const lanes = children.map((child, index) => ({ key: child.label!, mode: !eight && index < 2 ? "mutation" : "review", claims: !eight && index < 2 ? [index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx"] : [] }));
-	const dir = await mkdtemp(join(tmpdir(), "trivium-faux-handoff-"));
+	// Where pi-subagents keeps temporary runs, so the host accepts it as the extension's own (extension-paths.ts).
+	const dir = await mkdtemp(join(tmpdir(), "pi-subagents-trivium-faux-"));
 	const manifestPath = join(dir, "handoff.json");
 	const patches = [];
 	for (const [index, child] of children.entries()) {

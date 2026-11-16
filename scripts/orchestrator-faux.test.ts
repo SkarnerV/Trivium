@@ -5,6 +5,9 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import faux from "../dev/faux-extension.ts";
 import { HandoffCache, manifestOf } from "../src/main/handoffs.ts";
+import { handoffRoots } from "../src/main/extension-paths.ts";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { subagentOf } from "../src/main/subagents.ts";
 
 test("the faux workflow exercises plan, waiting, failure, eight children, timeout and real handoff patches", async () => {
@@ -39,7 +42,7 @@ test("the faux workflow exercises plan, waiting, failure, eight children, timeou
 				const manifest = manifestOf(JSON.parse(await readFile(path, "utf8")))!;
 				assert.equal(manifest.children.length, 2);
 				assert.equal(manifest.kept.length, 1);
-				const cache = new HandoffCache();
+				const cache = new HandoffCache(handoffRoots({ agentDir: join(tmpdir(), "no-agent"), cwd: join(tmpdir(), "no-project"), env: {} }));
 				await cache.capture(result.details);
 				const runs = [{ steps: [{ subagent: view }] }] as any;
 				cache.attach(runs);

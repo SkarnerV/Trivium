@@ -1,5 +1,6 @@
 /** Simplified Chinese, keyed by the English text the code passes to t(). */
 export default {
+	"The patch is not where subagents keep their files.": "补丁不在子代理存放文件的位置。",
 	"Handoff exceeds the display limit": "交接文件超出显示上限",
 	"Unknown child patch": "未知的子代理补丁",
 	"Implementing": "实现中",

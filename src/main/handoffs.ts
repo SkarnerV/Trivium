@@ -4,6 +4,7 @@ import { isAbsolute } from "node:path";
 import type { ChildHandoff, ChildPatchFile, Run, Subagent } from "../shared/protocol.ts";
 import { parseDiff } from "./git.ts";
 import { t } from "../shared/i18n.ts";
+import { type ExtensionRoots, trustedPath } from "./extension-paths.ts";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const objects = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item)) : [];
@@ -73,12 +74,29 @@ async function boundedRead(path: string, max: number): Promise<string> {
 	return bytes.toString("utf8");
 }
 
-/** Per-session authorization and immutable patch bytes, captured at completion, never on the 40ms render path. */
+/**
+ * Per-session authorization and immutable patch bytes, captured at completion, never on the 40ms render path.
+ * Only files under the extension's own roots are read (see extension-paths.ts): a manifest or patch path elsewhere,
+ * a link out of them, or a UNC or device path is ignored, and the step shows the ordinary subagent result.
+ */
 export class HandoffCache {
 	private manifests = new Map<string, { children: Map<string, ChildHandoff>; kept: NonNullable<Subagent["keptWorktrees"]>; worktrees: string[] }>();
 	private patches = new Map<string, ChildPatchFile[]>();
 	private completed = new Map<string, string>();
 	private reading = Promise.resolve();
+
+	private readonly roots: ExtensionRoots;
+
+	constructor(roots: ExtensionRoots) {
+		this.roots = roots;
+	}
+
+	/** Forgets every manifest and patch, for a session that is unloaded or deleted. */
+	clear(): void {
+		this.manifests.clear();
+		this.patches.clear();
+		this.completed.clear();
+	}
 
 	capture(details: unknown): Promise<void> {
 		this.reading = this.reading.catch(() => {}).then(() => this.read(details));
@@ -94,16 +112,22 @@ export class HandoffCache {
 		}
 		const path = string(object(object(details).parallelHandoff).path);
 		if (!isAbsolute(path)) return;
+		const file = await trustedPath(path, this.roots);
+		if (!file) return;
 		try {
-			const manifest = manifestOf(JSON.parse(await boundedRead(path, 4 * 1024 * 1024)));
+			const manifest = manifestOf(JSON.parse(await boundedRead(file, 4 * 1024 * 1024)));
 			if (!manifest) return;
 			const children = new Map<string, ChildHandoff>();
 			for (const { key, patch } of manifest.children) {
 				const id = randomUUID();
 				let files: ChildPatchFile[] = [];
 				let error = patch.error;
-				try { files = splitPatch(await boundedRead(patch.path, 8 * 1024 * 1024)); }
-				catch (cause) { error ||= String(cause); }
+				const source = await trustedPath(patch.path, this.roots);
+				if (!source) error ||= t("The patch is not where subagents keep their files.");
+				else {
+					try { files = splitPatch(await boundedRead(source, 8 * 1024 * 1024)); }
+					catch (cause) { error ||= String(cause); }
+				}
 				this.patches.set(id, files);
 				children.set(key, { ...patch, error, id, files: files.map((file) => file.file) });
 			}

@@ -67,6 +67,7 @@ import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { registerRequiredChildExtensions } from "pi-subagents/required-child-extensions";
 import { launchesSubagents } from "./subagents.ts";
 import { HandoffCache } from "./handoffs.ts";
+import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 import { packageName } from "../shared/packages.ts";
@@ -779,6 +780,8 @@ export class SessionHost {
 		clearTimeout(live.gitTimer);
 		live.unsubscribe();
 		live.session.dispose();
+		// Reopening reads the manifests again from the session's history; a deleted session's patches go with it.
+		live.handoffs.clear();
 		this.live.delete(live.path);
 		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: live.app === "code" ? this.workModes.get(live.session.sessionId) : undefined });
 	}
@@ -1106,7 +1109,8 @@ export class SessionHost {
 
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
-		const handoffs = new HandoffCache();
+		// What the extension may write for this session: its session folder, the temp root and the project's .pi folder.
+		const handoffs = new HandoffCache(handoffRoots({ agentDir: this.agentDir, cwd, sessionFile: sessionManager.getSessionFile() }));
 		const history = branchMessages(sessionManager.getBranch());
 		for (const message of history) {
 			if (message.role === "toolResult" || message.role === "custom") await handoffs.capture(message.details);

@@ -47,7 +47,7 @@ async function readOrNull(path: string): Promise<string | null> {
 }
 
 /** A path to compare by: git, the tools and Windows may write the same one with other slashes or case. */
-function pathKey(path: string): string {
+export function pathKey(path: string): string {
 	const slashed = path.replaceAll("\\", "/");
 	return process.platform === "win32" ? slashed.toLowerCase() : slashed;
 }

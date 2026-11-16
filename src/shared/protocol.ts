@@ -94,6 +94,12 @@ export interface Step {
 export interface SubagentChild {
 	/** A background child that stopped running without its result reaching this session. */
 	unreported?: boolean;
+	/** Not started because its run waits for a slot: pi-subagents reports the whole workflow as queued. */
+	queued?: boolean;
+	/** The tool it was using when it failed, as pi-subagents reports it. */
+	failedTool?: string;
+	/** It timed out or stopped with only part of its output written. */
+	outputPartial?: boolean;
 	childId?: string;
 	role?: "mutation" | "review" | "scout" | "gate";
 	worktree?: boolean;
@@ -110,8 +116,8 @@ export interface SubagentChild {
 	status: StepStatus | "pending" | "stopped";
 	/** The tool it is using now, such as { tool: "read", target: "src/auth.ts" }. */
 	current?: { tool: string; target: string };
-	/** Its latest tool calls, oldest first. */
-	steps: { tool: string; target: string }[];
+	/** Its latest tool calls, oldest first; `endMs` is when each one ended (epoch milliseconds), when reported. */
+	steps: { tool: string; target: string; endMs?: number }[];
 	tools: number;
 	tokens?: number;
 	durationMs?: number;

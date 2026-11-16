@@ -7980,3 +7980,63 @@ body.resizing * {
 	align-items: center;
 	gap: 3px;
 }
+
+/* A list item that takes no box, so its row keeps the fan-out's grid; it is there for the list semantics. */
+.fanout-item {
+	display: contents;
+}
+
+/* Text cut to a few lines until "Show all": the plan (3) and a child's task (6). */
+.clamp-body.clamped {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--clamp-lines, 3);
+	overflow: hidden;
+}
+
+.clamp-toggle {
+	border: 0;
+	padding: 2px 0;
+	background: transparent;
+	color: var(--accent-text);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.subagent-steps .subagent-step-time {
+	flex: none;
+	margin-left: auto;
+	color: var(--ink-4);
+}
+
+.agents-after {
+	border-radius: 10px;
+	padding: 10px;
+	background: var(--soft);
+	min-width: 0;
+}
+
+.agents-patches {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 12px;
+}
+
+.agents-patches li {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	min-width: 0;
+	padding: 2px 0;
+}
+
+.agents-patch-key {
+	flex: none;
+	max-width: 120px;
+	font-weight: 500;
+}
+
+.agents-patches .warn {
+	color: var(--warn);
+}

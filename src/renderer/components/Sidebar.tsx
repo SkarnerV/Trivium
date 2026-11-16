@@ -205,7 +205,7 @@ function SessionRow({
 				{needsYou ? <span className="running-meta attn"><span className="live-dot attn" />{t("Needs you")}</span> : session.running ? (
 					<span className="running-meta">
 						<span className="live-dot" />
-						{agents > 0 && <span className="agents-count" aria-label={t("{n} agents working", { n: agents })}><OrchestrateIcon size={11} />{agents} · </span>}
+						{agents > 0 && <span className="agents-count" aria-label={t(agents === 1 ? "1 agent working" : "{n} agents working", { n: agents })}><OrchestrateIcon size={11} />{agents} · </span>}
 						{startedAt ? duration(now - startedAt) : ""}
 					</span>
 				) : (

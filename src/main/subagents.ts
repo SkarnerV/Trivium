@@ -10,6 +10,7 @@ import { commandNotice } from "./long-commands.ts";
 interface ToolCallLike {
 	tool?: unknown;
 	args?: unknown;
+	endMs?: unknown;
 }
 
 interface ProgressLike {
@@ -25,10 +26,12 @@ interface ProgressLike {
 	durationMs?: unknown;
 	model?: unknown;
 	error?: unknown;
+	failedTool?: unknown;
 }
 
 interface ResultLike {
 	timedOut?: unknown;
+	outputPartial?: unknown;
 	index?: unknown;
 	agent?: unknown;
 	task?: unknown;
@@ -112,7 +115,7 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const status = childStatus(progress, result, toolStatus);
 	const recent = list<ToolCallLike>(progress?.recentTools ?? summary?.recentTools);
 	const steps = recent.length
-		? recent.map((call) => ({ tool: str(call.tool), target: str(call.args) }))
+		? recent.map((call) => ({ tool: str(call.tool), target: str(call.args), ...(num(call.endMs) !== undefined ? { endMs: num(call.endMs) } : {}) }))
 		: list<{ text?: unknown }>(result?.toolCalls).map((call) => splitCall(str(call.text)));
 	const currentTool = str(progress?.currentTool);
 	const usage = result?.usage;
@@ -120,6 +123,8 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const context = str(result?.context);
 	return {
 		timedOut: result?.timedOut === true || undefined,
+		outputPartial: result?.outputPartial === true || undefined,
+		failedTool: status === "error" ? str(progress?.failedTool) || str(summary?.failedTool) || undefined : undefined,
 		inputTokens: num(usage?.input), outputTokens: num(usage?.output),
 		agent: str(result?.agent) || str(progress?.agent) || "agent",
 		task: str(result?.task) || str(progress?.task),
@@ -196,7 +201,10 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		}
 		children.splice(0, children.length, ...merged);
 	}
+	// pi-subagents reports no per-child wait for a concurrency slot; it reports a whole workflow that waits as queued.
+	const queued = record(info.workflowChildren).workflowState === "queued";
 	for (const item of children) {
+		if (queued && item.status === "pending") item.queued = true;
 		if (args.worktree === true) item.worktree = true;
 		if (toolStatus === "error" && item.status === "running" && !background) item.status = "stopped";
 		if (item.current?.tool === "contact_supervisor") item.waitingOn = "main";

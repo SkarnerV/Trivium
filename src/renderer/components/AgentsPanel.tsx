@@ -3,10 +3,12 @@ import type { ChildPatchFile, Run, SessionView, Step, SubagentChild } from "../.
 import { duration, tokens } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { OrchestrateIcon } from "../icons.tsx";
-import { agentAttentionKey, agentCounts, agentSteps, currentStep, phaseOf } from "../agents.ts";
+import { agentAttentionKey, agentCounts, agentSteps, currentStep, middle, phaseOf } from "../agents.ts";
+import { nowLine } from "../verbs.ts";
 import { AgentSession } from "../agent-context.ts";
 import { attempt, setState, showAgentChild, showPanelView, trivium, useStore } from "../store.ts";
-import { activity, ChildDetail, childRole, Fanout } from "./Subagents.tsx";
+import { activity, ChildDetail, childRole, Fanout, FanoutLimit } from "./Subagents.tsx";
+import { Clamp } from "./Clamp.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { t } from "../i18n.tsx";
@@ -45,9 +47,9 @@ export function AgentsButton({ view, needsYou }: { view: SessionView; needsYou: 
 	const title = needsYou
 		? t("The main agent is asking you something.")
 		: counts.waiting
-			? t("{n} agents are waiting on the main agent.", { n: counts.waiting })
+			? t(counts.waiting === 1 ? "1 agent is waiting on the main agent." : "{n} agents are waiting on the main agent.", { n: counts.waiting })
 			: counts.running
-				? t("{n} agents working. Show them in the panel.", { n: counts.running })
+				? t(counts.running === 1 ? "1 agent working. Show it in the panel." : "{n} agents working. Show them in the panel.", { n: counts.running })
 				: label;
 	const attention = needsYou || counts.waiting || kept || failed;
 	return (
@@ -150,17 +152,10 @@ export function AgentsBody({ view }: { view: SessionView }) {
 				{taskRuns
 					.filter((run) => run.limit)
 					.map((run) => (
-						<div className="run-error limit" key={run.id}>
-							<p>{run.limit!.message}</p>
-							{run.limit!.link && (
-								<a href={run.limit!.link.url} target="_blank" rel="noreferrer">
-									{run.limit!.link.label}
-								</a>
-							)}
-						</div>
+						<FanoutLimit key={run.id} limit={run.limit!} agents={agentSteps([run]).flatMap((step) => step.subagent!.children)} />
 					))}
 				<footer className="agents-foot" title={t("Agents work at the same time, so their time adds up to more than the task took.")}>
-					{t("{n} agents · {tokens} tokens · {time} · agent time {agentTime}", {
+					{t(children.length === 1 ? "1 agent · {tokens} tokens · {time} · agent time {agentTime}" : "{n} agents · {tokens} tokens · {time} · agent time {agentTime}", {
 						n: children.length,
 						tokens: tokens(used),
 						time,
@@ -200,14 +195,10 @@ function Overview({
 	// The plan is what the main agent said just before its first fan-out; a task with none has no plan to show.
 	const firstFanout = steps.findIndex((step) => (step.subagent?.children.length ?? 0) > 1);
 	const plan = firstFanout < 0 ? undefined : steps.slice(0, firstFanout).findLast((step) => step.tool === "note");
-	const current = currentStep(taskRuns.at(-1));
-	const counts = agentCounts(taskRuns);
-	const doing =
-		current?.subagent && counts.running
-			? t("Waiting for {n} agents", { n: counts.running })
-			: current
-				? `${current.tool} ${current.target}`
-				: t(taskRuns.at(-1)?.answer ? "Writing the answer" : "Working");
+	const last = taskRuns.at(-1);
+	const current = currentStep(last);
+	// Every writer that finished, for the Patches list once the agents are done (§6.5). Applied state is v1.1.
+	const writers = phases.flatMap((step) => step.subagent!.children).filter((child) => child.role === "mutation" && child.handoff && child.status !== "running" && child.status !== "pending");
 	const state = t(
 		view.running ? "Working" : taskRuns.at(-1)?.status === "aborted" ? "Stopped" : taskRuns.at(-1)?.status === "error" ? "Failed" : "Done",
 	);
@@ -215,7 +206,14 @@ function Overview({
 		<>
 			<div className="agents-head" role="status">
 				<h3>{run?.prompt.split("\n")[0] || view.title}</h3>
-				<p>{t("{state} · {time} · {n} agents · {tokens} tokens", { state, time, n: children.length, tokens: tokens(used) })}</p>
+				<p>
+					{t(children.length === 1 ? "{state} · {time} · 1 agent · {tokens} tokens" : "{state} · {time} · {n} agents · {tokens} tokens", {
+						state,
+						time,
+						n: children.length,
+						tokens: tokens(used),
+					})}
+				</p>
 			</div>
 			{needsYou && (
 				<div className="agents-attn">
@@ -228,26 +226,19 @@ function Overview({
 			{plan && (
 				<section className="agents-plan">
 					<div className="step-detail-label">{t("Plan")}</div>
-					<Markdown text={plan.content ?? plan.target} />
+					<Clamp lines={3}>
+						<Markdown text={plan.content ?? plan.target} />
+					</Clamp>
 				</section>
 			)}
 			{phases.map((step, index) => (
-				<details className="agents-phase" key={step.id} open={step.status === "running" || undefined}>
-					<summary>
-						{t("{n}. {phase} · {agents} agents · {state}", {
-							n: index + 1,
-							phase: phaseOf(step.subagent!),
-							agents: step.subagent!.children.length,
-							state: t(step.status === "running" ? "Working" : step.status === "error" ? "Failed" : "Done"),
-						})}
-					</summary>
-					<Fanout step={step} now={now} onChild={(index) => onChild(step, index)} />
-				</details>
+				<PhaseCard key={step.id} step={step} number={index + 1} now={now} onChild={(child) => onChild(step, child)} />
 			))}
 			{!phases.length && <p>{t("Subagents appear here when the main agent delegates work.")}</p>}
+			{writers.length > 0 && !phases.some((step) => step.status === "running") && <Patches writers={writers} />}
 			{view.running && (
 				<div className="agents-now">
-					<p>{t("Now: {activity}", { activity: doing })}</p>
+					<p>{nowLine(last, current)}</p>
 					{note && (
 						<p className="ellipsis" title={note.content}>
 							{note.content ?? note.target}
@@ -256,6 +247,59 @@ function Overview({
 				</div>
 			)}
 		</>
+	);
+}
+
+/**
+ * One fan-out in the task. The current one is open; a finished one folds to its summary, which still says how many
+ * finished and how long it took. Background children are marked as such in their rows.
+ */
+function PhaseCard({ step, number, now, onChild }: { step: Step; number: number; now: number; onChild: (index: number) => void }) {
+	const children = step.subagent!.children;
+	const finished = children.filter((child) => child.status === "done" || child.status === "error" || child.status === "stopped").length;
+	const time = duration(step.durationMs ?? (step.startedAt ? now - step.startedAt : undefined));
+	return (
+		<details className={`agents-phase${step.status === "running" ? "" : " done"}`} open={step.status === "running" || undefined}>
+			<summary>
+				{t("{n}. {phase} · {finished} of {total} finished · {time}", {
+					n: number,
+					phase: phaseOf(step.subagent!),
+					finished,
+					total: children.length,
+					time,
+				})}
+			</summary>
+			<Fanout step={step} now={now} onChild={onChild} list />
+		</details>
+	);
+}
+
+/** One line per writer: what its patch holds, or why there is none to look at. Whether it was applied is v1.1. */
+function Patches({ writers }: { writers: SubagentChild[] }) {
+	return (
+		<section className="agents-after">
+			<div className="step-detail-label">{t("Patches")}</div>
+			<ul className="agents-patches">
+				{writers.map((child, index) => {
+					const patch = child.handoff!;
+					return (
+						<li key={child.childId ?? index}>
+							<span className="agents-patch-key ellipsis">{child.label || child.agent}</span>
+							{patch.error ? (
+								<span className="warn">{t("Patch couldn't be captured: {error}", { error: patch.error })}</span>
+							) : patch.changed ? (
+								<span className="mono">
+									<span className="plus">+{patch.insertions}</span> <span className="minus">−{patch.deletions}</span>{" "}
+									{t(patch.filesChanged === 1 ? "· 1 file" : "· {n} files", { n: patch.filesChanged })}
+								</span>
+							) : (
+								<span>{t("No changes")}</span>
+							)}
+						</li>
+					);
+				})}
+			</ul>
+		</section>
 	);
 }
 
@@ -283,7 +327,7 @@ function ChildView({
 				{childRole(child)}{" "}
 				{child.handoff?.branch && (
 					<>
-						<code>{child.handoff.branch}</code>{" "}
+						<code title={child.handoff.branch}>{middle(child.handoff.branch)}</code>{" "}
 						<button type="button" className="btn ghost" onClick={() => void attempt(() => trivium.copyText(child.handoff!.branch))}>
 							{t("Copy branch")}
 						</button>

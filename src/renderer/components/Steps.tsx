@@ -1,27 +1,18 @@
-import { Fragment, useEffect, useState } from "react";
-import type { Run, Step } from "../../shared/protocol.ts";
+import { Fragment, useContext, useEffect, useState } from "react";
+import { AgentSession } from "../agent-context.ts";
+import type { LimitNotice, Run, Step } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { Chevron, EyeIcon } from "../icons.tsx";
 import { usePreviewOpener } from "../preview.ts";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
-import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
+import { FanoutLimit, SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
 import { t } from "../i18n.tsx";
 import { blocksOf } from "../timeline.ts";
 import { currentStep } from "../agents.ts";
+import { liveVerb } from "../verbs.ts";
 
-/** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". */
-const VERBS: Record<string, string> = {
-	read: "Reading",
-	edit: "Editing",
-	write: "Writing",
-	bash: "Running",
-	grep: "Searching for",
-	find: "Finding",
-	ls: "Listing",
-	think: "Thinking",
-};
 
 /**
  * The step under way, or the last one while the agent decides what to do next. It stays until the next
@@ -36,7 +27,7 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 		<div className={`live-cmd${running ? "" : " idle"}`}>
 			<div className="live-cmd-head">
 				<span className="live-dot" />
-				<span className="live-cmd-label">{VERBS[step.tool] ? t(VERBS[step.tool]!) : t("Using {tool}", { tool: step.tool })}</span>
+				<span className="live-cmd-label">{liveVerb(step)}</span>
 				{prose ? (
 					<span className="live-cmd-prose ellipsis">{step.target}</span>
 				) : (
@@ -63,10 +54,12 @@ const FILE_TOOLS = new Set(["read", "edit", "write"]);
 
 const failedIn = (steps: Step[]) => steps.filter((step) => step.status === "error" || step.tone === "error").length;
 
-function StepRow({ step, now, preview }: { step: Step; now: number; preview: ReturnType<typeof usePreviewOpener> }) {
+function StepRow({ step, now, preview, limit }: { step: Step; now: number; preview: ReturnType<typeof usePreviewOpener>; limit?: LimitNotice }) {
 	const time =
 		step.durationMs !== undefined ? duration(step.durationMs) : step.status === "running" && step.startedAt ? duration(now - step.startedAt) : "";
 	const tone = step.status === "error" ? "error" : step.status === "running" ? "running" : step.tone;
+	// Worktrees, the Agents tab and the project folder are Code's; Research and Write show the steps alone.
+	const code = Boolean(useContext(AgentSession));
 	return (
 		<li className={`step ${tone}`}>
 			<details>
@@ -124,8 +117,26 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 					)}
 				</div>
 			</details>
-			{step.subagent && Boolean(step.subagent.keptWorktrees?.length) && <p className="fanout-note warn">{t("{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: step.subagent.keptWorktrees!.length })}</p>}
-			{step.subagent?.preflight && step.status === "error" && step.subagent.children.every((child) => child.status === "pending") && /uncommitted|clean git working tree/i.test(step.output ?? "") && <p className="fanout-note warn">{t("Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.")}</p>}
+			{code && step.subagent && Boolean(step.subagent.keptWorktrees?.length) && (
+				<p className="fanout-note warn">
+					{t(step.subagent.keptWorktrees!.length === 1 ? "1 worktree was kept. See the Agents tab for its path and reason." : "{n} worktrees were kept. See the Agents tab for their paths and reasons.", {
+						n: step.subagent.keptWorktrees!.length,
+					})}
+				</p>
+			)}
+			{/* The run hit a usage limit during this fan-out: what that meant for its agents (§8.8, run level). */}
+			{limit && step.subagent && <FanoutLimit limit={limit} agents={step.subagent.children} />}
+			{code &&
+				step.subagent?.preflight &&
+				step.status === "error" &&
+				step.subagent.children.every((child) => child.status === "pending") &&
+				/uncommitted|clean git working tree/i.test(step.output ?? "") && (
+					<p className="fanout-note warn">
+						{t(
+							"Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.",
+						)}
+					</p>
+				)}
 		</li>
 	);
 }
@@ -159,6 +170,8 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const foldable = groups.filter(folds);
 	const allOpen = foldable.length > 0 && foldable.every((group) => opened.has(group.id));
 	const finished = !live && Boolean(run.answer);
+	// A usage limit that ended the run is told against the fan-out it cut short, its last one.
+	const limitedFanout = run.limit ? steps.findLast((step) => (step.subagent?.children.length ?? 0) > 1)?.id : undefined;
 	const toggle = (id: string) =>
 		setOpened((before) => {
 			const next = new Set(before);
@@ -208,7 +221,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 						{open && (
 							<ol className="steps" style={{ ["--tool-w" as string]: `${toolWidth}px` }}>
 								{block.steps.map((step) => (
-									<StepRow key={step.id} step={step} now={now} preview={preview} />
+									<StepRow key={step.id} step={step} now={now} preview={preview} limit={step.id === limitedFanout ? run.limit : undefined} />
 								))}
 							</ol>
 						)}

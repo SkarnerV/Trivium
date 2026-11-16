@@ -54,7 +54,7 @@ test("live progress gives the child's current tool, steps and counts", () => {
 	};
 	const [child] = subagentOf(scoutArgs, details, "running").children;
 	assert.deepEqual(child!.current, { tool: "read", target: "src/auth.ts" });
-	assert.deepEqual(child!.steps, [{ tool: "grep", target: '"login" src' }]);
+	assert.deepEqual(child!.steps, [{ tool: "grep", target: '"login" src', endMs: 1 }], "each call keeps when it ended");
 	assert.equal(child!.tools, 1);
 	assert.equal(child!.tokens, 5200);
 	assert.equal(child!.output, undefined);
@@ -144,4 +144,15 @@ test("a running subagent step carries its children from live updates", () => {
 	assert.equal(step.subagent?.children[0]?.tools, 3);
 	assert.equal(step.meta, "3 tools");
 	assert.equal(step.target, "scout: Map the auth flow");
+});
+
+test("a queued workflow's children, a failed child's tool and step end times are read from the details", () => {
+	const queued = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "review" }] }, workflowChildren: { workflowState: "queued", children: [{ childId: "a", state: "pending" }] } }, "running");
+	assert.equal(queued.children[0]!.queued, true);
+	const running = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "review" }] }, workflowChildren: { workflowState: "running", children: [{ childId: "a", state: "pending" }] } }, "running");
+	assert.equal(running.children[0]!.queued, undefined, "a pending child of a running workflow is only starting");
+	const failed = subagentOf(scoutArgs, { results: [{ index: 0, agent: "scout", exitCode: 1, error: "boom", outputPartial: true, progressSummary: { failedTool: "bash", recentTools: [{ tool: "bash", args: "npm test", endMs: 1700000000000 }] } }] }, "error");
+	assert.equal(failed.children[0]!.failedTool, "bash");
+	assert.equal(failed.children[0]!.outputPartial, true);
+	assert.equal(failed.children[0]!.steps[0]!.endMs, 1700000000000);
 });

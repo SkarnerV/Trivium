@@ -22,6 +22,8 @@ function Svg({ size = 16, width = 2, children }: { size?: number; width?: number
 
 type IconProps = { size?: number; width?: number };
 
+export const OrchestrateIcon = (props: IconProps) => <Svg {...props}><circle cx="12" cy="4" r="2" /><path d="M12 6v5M4 16v-5h16v5M12 11v5" /><circle cx="4" cy="19" r="2" /><circle cx="12" cy="19" r="2" /><circle cx="20" cy="19" r="2" /></Svg>;
+
 export const TriviumIcon = ({ app = "code", size = 28 }: { app?: AppId; size?: number }) => (
 	<img src={appIconFilename(app)} width={size} height={size} alt="" draggable={false} />
 );

@@ -80,6 +80,7 @@ import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTrack
 
 interface Live {
 	handoffs: HandoffCache;
+	handoffSeen: Set<string>;
 	path: string;
 	app: AppId;
 	cwd: string;
@@ -283,6 +284,7 @@ export class SessionHost {
 		const summaries: SessionSummary[] = infos.map((info) => {
 			const live = this.live.get(info.path);
 			return {
+				...(live && live.app === "code" ? this.attentionOf(live) : {}),
 				path: info.path,
 				id: info.id,
 				cwd: info.cwd,
@@ -299,6 +301,7 @@ export class SessionHost {
 		for (const live of this.live.values()) {
 			if (onDisk.has(live.path)) continue;
 			summaries.push({
+				...(live.app === "code" ? this.attentionOf(live) : {}),
 				path: live.path,
 				id: live.session.sessionId,
 				cwd: live.cwd,
@@ -315,6 +318,15 @@ export class SessionHost {
 		summaries.sort((a, b) => b.modified - a.modified);
 		this.summaries = summaries;
 		return summaries;
+	}
+
+	refreshAttention(): void { this.scheduleList(); }
+
+	private attentionOf(live: Live) {
+		const runs = live.tracker.all();
+		const completed = new Set(runs.flatMap((run) => run.notice?.runIds ?? []));
+		const children = runs.flatMap((run) => run.steps).filter((step) => step.status === "running" || (step.subagent?.background && !completed.has(step.subagent.asyncId ?? ""))).flatMap((step) => step.subagent?.children ?? []);
+		return { needsYou: this.broker.hasPending(live.path), agents: { running: children.filter((child) => child.status === "running" || child.status === "pending").length, waiting: children.filter((child) => child.waitingOn === "main").length } };
 	}
 
 	recentProjects(): string[] {
@@ -1152,10 +1164,10 @@ export class SessionHost {
 					});
 					pi.on("message_end", async (event) => {
 						if (event.message.role !== "custom" || event.message.customType !== "subagent-notify") return;
-						const details = event.message.details as { id?: unknown; asyncId?: unknown; runId?: unknown } | undefined;
+						const details = event.message.details as { id?: unknown; asyncId?: unknown; runId?: unknown; runs?: { runId?: unknown }[] } | undefined;
 						await handoffs.capture(details);
-						const id = [details?.id, details?.asyncId, details?.runId].find((id): id is string => typeof id === "string" && background.has(id));
-						if (id) { background.delete(id); await changes.afterSubagents(); }
+						const ids = [details?.id, details?.asyncId, details?.runId, ...(Array.isArray(details?.runs) ? details.runs.map((run) => run?.runId) : [])];
+						for (const id of new Set(ids)) if (typeof id === "string" && background.delete(id)) await changes.afterSubagents();
 						const live = this.live.get(sessionPath);
 						if (live) {
 							await this.emitChanges(live);
@@ -1194,6 +1206,7 @@ export class SessionHost {
 		sessionPath = path;
 		const live: Live = {
 			handoffs,
+			handoffSeen: new Set(),
 			path,
 			app,
 			cwd,
@@ -1210,16 +1223,24 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
-		await session.bindExtensions({
-			uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
-			mode: "rpc",
-			onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
-		});
 		const required = app === "code" ? registerRequiredChildExtensions({
 			sessionId: session.sessionId,
 			extensions: [{ id: "trivium-permissions", path: fileURLToPath(new URL("./child-permissions.mjs", import.meta.url)) }],
 			requireForAllRunners: true,
 		}) : undefined;
+		try {
+			// session_start may revive detached work, so the mandatory snapshot must exist before binding extensions.
+			await session.bindExtensions({
+				uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
+				mode: "rpc",
+				onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
+			});
+		} catch (error) {
+			required?.dispose();
+			this.live.delete(path);
+			session.dispose();
+			throw error;
+		}
 		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
 		live.unsubscribe = () => { unsubscribe(); required?.dispose(); };
 		return live;
@@ -1242,6 +1263,15 @@ export class SessionHost {
 		// Before the tracker, so the finished reply it shows carries its first token's time.
 		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
+		if (event.type === "tool_execution_update" && event.toolName === "subagent") {
+			const details = (event.partialResult as { details?: { parallelHandoff?: { path?: unknown } } } | undefined)?.details;
+			const path = details?.parallelHandoff?.path;
+			if (typeof path === "string" && !live.handoffSeen.has(path)) {
+				live.handoffSeen.add(path);
+				// Pending manifests carry lane/worktree identities. Read once at launch, then again at completion.
+				void live.handoffs.capture(details).then(() => this.flush(live));
+			}
+		}
 		switch (event.type) {
 			case "agent_start":
 				live.running = true;

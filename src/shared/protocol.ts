@@ -8,6 +8,8 @@ export type AppId = "code" | "research" | "write";
 export const APP_IDS: readonly AppId[] = ["code", "research", "write"];
 
 export interface SessionSummary {
+	agents?: { running: number; waiting: number };
+	needsYou?: boolean;
 	path: string;
 	id: string;
 	cwd: string;
@@ -119,6 +121,7 @@ export interface SubagentChild {
 }
 
 export interface Subagent {
+	asyncId?: string;
 	preflight?: { lanes: SubagentLane[] };
 	phases?: string[];
 	handoffPath?: string;
@@ -156,6 +159,8 @@ export interface ChildPatchFile extends GitDiff {
 
 /** A background subagent's result or a background command's end, which starts a run of its own instead of a user message. */
 export interface SubagentNotice {
+	runId?: string;
+	runIds?: string[];
 	agent: string;
 	/** The command, when this is one rather than a subagent. */
 	command?: string;

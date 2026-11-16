@@ -15,6 +15,8 @@ import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
 import { SubagentNoticeLine } from "./Subagents.tsx";
 import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
+import { AgentsButton } from "./AgentsPanel.tsx";
+import { AgentSession } from "../agent-context.ts";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
 function fileKind(name: string, kind: "image" | "file"): string {
@@ -376,7 +378,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	const preview = useMemo(() => (app !== "research" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	return (
-		<main className={`pane${summary ? " has-summary" : ""}`} aria-label={split ? view.title : undefined}>
+		<main className={`pane${summary ? " has-summary" : ""}`} data-session-path={view.path} aria-label={split ? view.title : undefined}>
 			<header className="pane-head drag">
 				{split?.tabs ? (
 					<SplitTabs tabs={split.tabs} current={view.path} />
@@ -389,6 +391,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 						<h1 className="ellipsis">{view.title}</h1>
 					</div>
 				)}
+				{app === "code" && !view.chat && <AgentsButton view={view} needsYou={dialogs.length > 0} />}
 				<ServicesButton view={view} />
 				{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 				{app === "code" ? (
@@ -422,6 +425,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 				<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
 					<div className="scroll-row">
 						<div className="thread">
+							<AgentSession.Provider value={view.app === "code" && !view.chat ? view.path : undefined}>
 							<PreviewOpener.Provider value={preview}>
 								<PreviewSession.Provider value={preview && view.path}>
 									{view.runs.map((run, index) => (
@@ -429,6 +433,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 									))}
 								</PreviewSession.Provider>
 							</PreviewOpener.Provider>
+							</AgentSession.Provider>
 							{dialogs.map((request) => (
 								<AskCard key={request.id} request={request} />
 							))}

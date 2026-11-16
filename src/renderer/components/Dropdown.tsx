@@ -6,6 +6,7 @@ export interface DropdownOption {
 	label: string;
 	/** Short text on the right of the row, such as a provider. */
 	hint?: string;
+	description?: string;
 	/** Rows with the same group are listed under that heading. */
 	group?: string;
 }
@@ -131,7 +132,7 @@ export function OptionList({
 								onClick={() => onChoose(option)}
 							>
 								<span className="dd-check">{isSelected && <CheckIcon />}</span>
-								<span className="dd-label">{option.label}</span>
+								<span className="dd-label">{option.label}{option.description && <span className="dd-desc">{option.description}</span>}</span>
 								{option.hint && <span className="dd-hint">{option.hint}</span>}
 							</div>
 						</div>
@@ -158,6 +159,8 @@ export function Dropdown({
 	placeholder = t("Choose…"),
 	searchThreshold = 9,
 	icon,
+	footnote,
+	accent = false,
 }: {
 	value: string;
 	options: DropdownOption[];
@@ -171,6 +174,8 @@ export function Dropdown({
 	/** Show a search box when there are at least this many options. */
 	searchThreshold?: number;
 	icon?: ReactNode;
+	footnote?: string;
+	accent?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const [placement, setPlacement] = useState<"up" | "down">("down");
@@ -204,7 +209,7 @@ export function Dropdown({
 	}, [open]);
 
 	return (
-		<div ref={root} className={`dd dd-${variant}${open ? " open" : ""}`}>
+		<div ref={root} className={`dd dd-${variant}${open ? " open" : ""}${accent ? " is-accent" : ""}`}>
 			<button
 				ref={trigger}
 				type="button"
@@ -228,6 +233,7 @@ export function Dropdown({
 			{open && (
 				<div className={`dd-menu ${placement} ${align}`}>
 					<OptionList value={value} options={options} label={label} searchThreshold={searchThreshold} onChoose={choose} onClose={close} />
+					{footnote && <div className="dd-foot">{footnote}</div>}
 				</div>
 			)}
 		</div>

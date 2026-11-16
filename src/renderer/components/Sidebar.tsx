@@ -164,6 +164,9 @@ function SessionRow({
 }) {
 	const now = useNow(session.running ? 1000 : 60_000);
 	const services = useStore((s) => s.services[session.path]?.length ?? 0);
+	const view = useStore((s) => s.views[session.path]);
+	const needsYou = useStore((s) => session.app === "code" && s.dialogs.some((dialog) => dialog.sessionPath === session.path));
+	const agents = view ? agentCounts(view.runs).running : session.agents?.running ?? 0;
 	const [menu, setMenu] = useState<{ x: number; y: number }>();
 	const closeMenu = useCallback(() => setMenu(undefined), []);
 	return (
@@ -172,6 +175,7 @@ function SessionRow({
 				type="button"
 				className="session-row"
 				aria-current={active ? "page" : undefined}
+				aria-label={needsYou ? t("{title}, needs your answer", { title: session.title }) : undefined}
 				aria-haspopup="menu"
 				draggable
 				onDragStart={(event) => {
@@ -196,9 +200,10 @@ function SessionRow({
 				{services > 0 && (
 					<span className="service-dot" role="img" aria-label={serviceCount(services)} title={t("{services} running", { services: serviceCount(services) })} />
 				)}
-				{session.running ? (
+				{needsYou ? <span className="running-meta attn"><span className="live-dot attn" />{t("Needs you")}</span> : session.running ? (
 					<span className="running-meta">
 						<span className="live-dot" />
+						{agents > 0 && <span className="agents-count" aria-label={t("{n} agents working", { n: agents })}><OrchestrateIcon size={11} />{agents} · </span>}
 						{startedAt ? duration(now - startedAt) : ""}
 					</span>
 				) : (
@@ -348,21 +353,23 @@ export function SessionGroups() {
 export function AppSwitcher() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
+	const dialogs = useStore((s) => s.dialogs);
 	return (
 		<nav className="switcher" aria-label={t("Modes")}>
 			{APP_IDS.map((id) => {
 				const busy = id !== app && sessions.some((session) => session.app === id && session.running);
+				const needsYou = id === "code" && dialogs.some((dialog) => sessions.some((session) => session.path === dialog.sessionPath && session.app === id));
 				return (
 					<button
 						key={id}
 						type="button"
-						aria-label={t(THEMES[id].name)}
+						aria-label={needsYou ? t("{mode} · a session needs you", { mode: t(THEMES[id].name) }) : t(THEMES[id].name)}
 						aria-current={id === app ? "page" : undefined}
 						title={t(THEMES[id].name)}
 						onClick={() => switchApp(id)}
 					>
 						<AppIcon app={id} />
-						{busy && <span className="busy-dot" style={{ background: THEMES[id].accent }} />}
+						{(busy || needsYou) && <span className="busy-dot" style={{ background: needsYou ? "var(--warn)" : THEMES[id].accent }} />}
 					</button>
 				);
 			})}
@@ -529,6 +536,7 @@ export const schedulePeekClose = () => {
 export function Rail() {
 	const app = useStore((s) => s.app);
 	const sessions = useStore((s) => s.sessions);
+	const dialogs = useStore((s) => s.dialogs);
 	return (
 		<nav className="rail drag" aria-label={t(IS_WINDOWS ? "Tools" : "Apps and tools")} onMouseLeave={schedulePeekClose}>
 			<SidebarToggle rail />
@@ -537,18 +545,19 @@ export function Rail() {
 				<>
 					{APP_IDS.map((id) => {
 						const busy = id !== app && sessions.some((session) => session.app === id && session.running);
+						const needsYou = id === "code" && dialogs.some((dialog) => sessions.some((session) => session.path === dialog.sessionPath && session.app === id));
 						return (
 							<button
 								key={id}
 								type="button"
 								className="rail-btn app"
-								aria-label={t(THEMES[id].name)}
+								aria-label={needsYou ? t("{mode} · a session needs you", { mode: t(THEMES[id].name) }) : t(THEMES[id].name)}
 								aria-current={id === app ? "page" : undefined}
 								title={t(THEMES[id].name)}
 								onClick={() => switchApp(id)}
 							>
 								<AppIcon app={id} size={16} />
-								{busy && <span className="busy-dot" style={{ background: THEMES[id].accent, borderColor: "var(--chrome)" }} />}
+								{(busy || needsYou) && <span className="busy-dot" style={{ background: needsYou ? "var(--warn)" : THEMES[id].accent, borderColor: "var(--chrome)" }} />}
 							</button>
 						);
 					})}
@@ -588,3 +597,5 @@ export function PeekPanel() {
 		</div>
 	);
 }
+import { agentCounts } from "../agents.ts";
+import { OrchestrateIcon } from "../icons.tsx";

@@ -22,6 +22,9 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const fixedReader = [
 	'import { RpcClient } from "@earendil-works/pi-coding-agent";',
@@ -298,6 +301,59 @@ const SUBAGENT_STORY: Step[] = [
 		),
 ];
 
+const WRITERS: FauxChild[] = [
+	{ agent: "worker", label: "api", task: "Add the refresh endpoint and tests in src/api/refresh.ts.", calls: [["read", "src/api/refresh.ts"], ["edit", "src/api/refresh.ts"], ["write", "test/refresh.test.ts"]], output: "Refresh endpoint and tests added.", pace: 1100 },
+	{ agent: "worker", label: "web", task: "Add an expired-session banner in src/web/banner.tsx. Ask the main agent about sign-in behavior.", calls: [["read", "src/web/banner.tsx"], ["contact_supervisor", "Should the banner appear on the sign-in page?"], ["edit", "src/web/banner.tsx"], ["write", "test/banner.test.ts"]], output: "Banner added. The worktree was kept because its patch could not be captured.", pace: 2000 },
+	{ ...REVIEWERS[1]!, label: "tests", pace: 900 },
+];
+
+function orchestratorStory(scenario: string): Step[] {
+	return [SUBAGENT_STORY[0]!,
+		() => fauxAssistantMessage([
+			fauxText("The scout found separate API and web files. I'll give each writer its own worktree and have a reviewer check the tests."),
+			fauxToolCall("subagent", { workflow: true, async: false, options: { scenario, globalConcurrencyLimit: 4, preflight: { version: 1, coverage: "complete", lanes: (scenario.includes("eight") ? Array.from({ length: 8 }, (_, index) => ({ key: `review-${index + 1}`, mode: "review" })) : [{ key: "api", mode: "mutation", claims: ["src/api/refresh.ts", "test/refresh.test.ts"] }, { key: "web", mode: "mutation", claims: ["src/web/banner.tsx", "test/banner.test.ts"] }, { key: "tests", mode: "review" }]) } } }),
+		], { stopReason: "toolUse" }),
+		() => fauxAssistantMessage(fauxText("The fan-out finished. Open Agents to inspect each result, branch, file list and patch. One review failed, and the web worktree was kept for inspection. No patches were applied by this scripted demonstration.")),
+	];
+}
+
+/** Real artifact files exercise the same manifest validation and patch IPC as the package. No git writes. */
+async function orchestratorFanout(id: string, scenario: string, signal: AbortSignal | undefined, update: ((value: any) => void) | undefined) {
+	const eight = scenario.includes("eight");
+	const children = eight ? Array.from({ length: 8 }, (_, index) => ({ ...REVIEWERS[index % REVIEWERS.length]!, label: `review-${index + 1}`, pace: 900 + index * 150 })) : WRITERS;
+	const lanes = children.map((child, index) => ({ key: child.label!, mode: !eight && index < 2 ? "mutation" : "review", claims: !eight && index < 2 ? [index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx"] : [] }));
+	const dir = await mkdtemp(join(tmpdir(), "trivium-faux-handoff-"));
+	const manifestPath = join(dir, "handoff.json");
+	const patches = [];
+	for (const [index, child] of children.entries()) {
+		if (eight || index > 1) continue;
+		const file = index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx";
+		const path = join(dir, `${child.label}.patch`);
+		const text = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1,2 @@\n-export const ready = false;\n+export const ready = true;\n+// Added by the scripted writer.\ndiff --git a/test/${child.label}.test.ts b/test/${child.label}.test.ts\nnew file mode 100644\n--- /dev/null\n+++ b/test/${child.label}.test.ts\n@@ -0,0 +1 @@\n+// Regression coverage.\n`;
+		await writeFile(path, index === 1 ? "" : text);
+		patches.push({ index, taskIndex: index, agent: child.agent, workflowKey: child.label, status: "completed", summary: child.output, patch: { path, branch: `pi-sub/faux-${child.label}`, changed: true, diffStat: "", filesChanged: 2, insertions: 3, deletions: 1, ...(index === 1 ? { error: "Scripted patch capture failed; worktree preserved." } : {}) } });
+	}
+	const manifest = { version: 1, runId: id, mode: "parallel", source: "foreground", cwd: process.cwd(), createdAt: Date.now(), updatedAt: Date.now(), groups: [{ stepIndex: 0, baseCommit: "faux", repoRoot: process.cwd(), children: patches, cleanup: { state: "partial", pruned: false, tasks: eight ? [] : [{ index: 1, path: join(dir, "kept-web"), branch: "pi-sub/faux-web", worktreeRemoved: false, branchRemoved: false, preserved: true, reason: "changes were not captured" }] } }] };
+	await writeFile(manifestPath, JSON.stringify({ ...manifest, groups: manifest.groups.map((group) => ({ ...group, children: [], laneBindings: patches.map((child) => ({ index: child.index, taskIndex: child.taskIndex, workflowKey: child.workflowKey })), cleanup: { ...group.cleanup, tasks: patches.map((child) => ({ index: child.index, branch: child.patch.branch, path: join(dir, child.workflowKey!), worktreeRemoved: false })) } })) }));
+	const started = Date.now();
+	for (;;) {
+		if (signal?.aborted) throw new Error("Stopped");
+		const elapsed = Date.now() - started;
+		const { finished, details } = fauxDetails(children, Math.max(0, elapsed - 1800), "workflow");
+		const results = details.results.map((result, index) => ({ ...result, ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
+		const snapshot = { ...details, results, preflight: { version: 1, coverage: "complete", lanes }, workflowGraph: { phases: [{ title: eight ? "Reviewing" : "Implementing", nodeIds: [] }] },
+			workflowChildren: { version: 1, workflowRunId: id, parentToolCallId: id, inventoryComplete: true, workflowState: finished ? "completed" : "running", children: children.map((child, index) => {
+				const progress = details.progress[index]!;
+				return { childId: child.label, agent: child.agent, model: "scripted", state: elapsed < 1800 ? "pending" : finished ? (results[index]!.exitCode ? "failed" : "completed") : progress.status,
+					activity: { currentTool: progress.currentTool, toolCount: progress.toolCount, tokens: progress.tokens, durationMs: progress.durationMs } };
+			}) }, parallelHandoff: { version: 1, path: manifestPath } };
+		const content = [{ type: "text" as const, text: finished ? "Scripted fan-out finished." : "(running...)" }];
+		if (finished) { await writeFile(manifestPath, JSON.stringify(manifest)); return { content, details: snapshot }; }
+		update?.({ content, details: snapshot });
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+}
+
 /** A page server on port 4173 that the command leaves running, as `npm run dev &` would. */
 const SERVER = `node -e "require('http').createServer((q, s) => { s.setHeader('content-type', 'text/html'); s.end('<h1>Hello from a service</h1>'); }).listen(4173, () => console.log('Ready on http://localhost:4173/'))" &
 sleep 1`;
@@ -434,7 +490,7 @@ export default function (pi: ExtensionAPI) {
 		if (ended) return fauxAssistantMessage(fauxText(`Done. ${ended}`));
 		if (/diagram/i.test(prompt)) return DIAGRAM_REPLY();
 		const coded = app === "code" && (/server/i.test(prompt) ? SERVER_STORY : /slow/i.test(prompt) ? SLOW_STORY : /hang/i.test(prompt) ? HANG_STORY : /format/i.test(prompt) ? FORMAT_STORY : undefined);
-		const story = /subagent/i.test(prompt) ? SUBAGENT_STORY : coded || scripts[app]!;
+		const story = app === "code" && /orchestrat/i.test(prompt) ? orchestratorStory(prompt) : /subagent/i.test(prompt) ? SUBAGENT_STORY : coded || scripts[app]!;
 		return story[Math.min(step, story.length - 1)]!();
 	};
 	core.setResponses(Array.from({ length: 200 }, () => respond));
@@ -478,8 +534,10 @@ export default function (pi: ExtensionAPI) {
 			task: Type.Optional(Type.String()),
 			workflow: Type.Optional(Type.Boolean()),
 			async: Type.Optional(Type.Boolean()),
+			options: Type.Optional(Type.Object({ scenario: Type.Optional(Type.String()), globalConcurrencyLimit: Type.Optional(Type.Number()), preflight: Type.Optional(Type.Any()) })),
 		}),
 		execute: async (_id, params, signal, update) => {
+			if (params.workflow && params.options?.scenario) return orchestratorFanout(_id, params.options.scenario, signal, update);
 			if (params.agent === RESEARCHER.agent) {
 				setTimeout(() => {
 					pi.sendMessage(
@@ -487,7 +545,7 @@ export default function (pi: ExtensionAPI) {
 							customType: "subagent-notify",
 							content: `Background task completed: **${RESEARCHER.agent}**\n\n${RESEARCHER.output}\n\nSession file: /tmp/faux-researcher.jsonl\n\nParent action: Report the result.`,
 							display: false,
-							details: { runs: [{ agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
+							details: { runs: [{ runId: "faux-researcher", agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
 						},
 						{ triggerTurn: true },
 					);

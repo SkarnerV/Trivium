@@ -14,6 +14,9 @@ import { hasSource, PreviewBody, previewMenu } from "./PreviewPanel.tsx";
 import { Resizer } from "./Resizer.tsx";
 import { ReviewBody } from "./ReviewPanel.tsx";
 import { ServicesBody } from "./ServicesPanel.tsx";
+import { AgentsBody } from "./AgentsPanel.tsx";
+import { OrchestrateIcon } from "../icons.tsx";
+import { agentCounts } from "../agents.ts";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
 
@@ -264,6 +267,7 @@ function ChangesBody({ view, git }: { view: SessionView; git: GitStatus | null |
 }
 
 const VIEW_ICONS: Record<PanelView, (size: number) => ReactNode> = {
+	agents: (size) => <OrchestrateIcon size={size} />,
 	session: (size) => <FileIcon size={size} />,
 	history: (size) => <HistoryIcon size={size} />,
 	preview: (size) => <EyeIcon size={size} />,
@@ -271,7 +275,7 @@ const VIEW_ICONS: Record<PanelView, (size: number) => ReactNode> = {
 	review: (size) => <PenIcon size={size} />,
 };
 
-const VIEW_NAMES: Record<PanelView, string> = { session: "Changes", history: "History", preview: "Preview", services: "Services", review: "Review" };
+const VIEW_NAMES: Record<PanelView, string> = { session: "Changes", history: "History", preview: "Preview", services: "Services", review: "Review", agents: "Agents" };
 
 /** One tab in the panel's head, closed by its own button or a middle click, as a browser's are. One with no `onClose` stays. */
 function PanelTab({ name, icon, title, current, onSelect, onClose }: {
@@ -316,8 +320,9 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 	const git = useStore((s) => s.git[view.path]);
 	const picked = useStore((s) => s.panelTab[view.path]);
 	const tabs = useStore((s) => s.panelTabs[view.path]);
+	const dismissed = useStore((s) => s.agentsDismissed[view.path]);
 	const previews = useStore((s) => s.previews[view.path]);
-	const views = panelViews(view, tabs);
+	const views = panelViews(view, tabs, dismissed);
 	const tab = shownView(views, picked);
 	const files = previews?.files ?? [];
 	const file = files.find((f) => f.id === previews?.active) ?? files.at(-1);
@@ -354,7 +359,7 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 									<PanelTab
 										key={name}
 										name={t(VIEW_NAMES[name])}
-										icon={VIEW_ICONS[name](13)}
+										icon={<>{VIEW_ICONS[name](13)}{name === "agents" && agentCounts(view.runs).running > 0 && <span className="agents-tab-dot" />}</>}
 										current={tab === name}
 										onSelect={() => pick(name)}
 										onClose={name === "review" ? undefined : () => closePanelView(view.path, name)}
@@ -404,7 +409,9 @@ export function ChangesPanel({ view }: { view: SessionView }) {
 					</button>
 				</div>
 			</div>
-			{tab === "services" ? (
+			{tab === "agents" ? (
+				<AgentsBody view={view} />
+			) : tab === "services" ? (
 				<ServicesBody view={view} />
 			) : tab === "history" ? (
 				<HistoryBody key={view.path} view={view} git={git} />

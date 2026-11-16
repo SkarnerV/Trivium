@@ -9,6 +9,7 @@ import { Markdown } from "./Markdown.tsx";
 import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
 import { t } from "../i18n.tsx";
 import { blocksOf } from "../timeline.ts";
+import { currentStep } from "../agents.ts";
 
 /** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". */
 const VERBS: Record<string, string> = {
@@ -100,7 +101,7 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 				</summary>
 				<div className="step-detail">
 					{step.subagent ? (
-						<SubagentDetail subagent={step.subagent} />
+						<SubagentDetail subagent={step.subagent} stepId={step.id} />
 					) : step.tool === "think" ? (
 						<Markdown text={step.content ?? step.target} />
 					) : (
@@ -144,12 +145,13 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const end = live ? now : run.endedAt;
 	const total = run.startedAt && end ? duration(end - run.startedAt) : "";
 	const count = steps.length;
+	const agents = steps.reduce((sum, step) => sum + (step.subagent?.children.length ?? 0), 0);
 	// A failed command or tool would otherwise only show once the steps are open.
 	const failed = failedIn(steps);
 	// Size the tool column to the longest tool name so targets line up, in every group alike.
 	const toolWidth = Math.max(36, ...steps.map((step) => step.tool.length * 7.3 + 2));
 	// Once the answer is coming in, it shows what is happening on its own.
-	const current = live && !run.answer ? (steps.findLast((step) => step.status === "running") ?? steps.at(-1)) : undefined;
+	const current = live ? currentStep(run) : undefined;
 	// Among several groups, one step is shown as it is: "1 step" would hide it and take the same room.
 	const folds = (group: { steps: Step[] }) => groups.length === 1 || group.steps.length > 1;
 	const foldable = groups.filter(folds);
@@ -178,6 +180,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					{total && ` ${t("for {time}", { time: total })}`}
 				</span>
 				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
+				{agents > 0 && <span>· {t("{n} agents", { n: agents })}</span>}
 				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
 				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
 			</button>

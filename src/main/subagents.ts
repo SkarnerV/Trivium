@@ -119,6 +119,7 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const context = str(result?.context);
 	return {
 		timedOut: result?.timedOut === true || undefined,
+		inputTokens: num(usage?.input), outputTokens: num(usage?.output),
 		agent: str(result?.agent) || str(progress?.agent) || "agent",
 		task: str(result?.task) || str(progress?.task),
 		label: str(result?.workflowKey) || undefined,
@@ -157,7 +158,7 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		children.push({
 			agent: args.agent,
 			task: str(args.task),
-			status: background || toolStatus === "done" ? "done" : toolStatus === "error" ? "error" : "running",
+			status: background ? "running" : toolStatus === "done" ? "done" : toolStatus === "error" ? "error" : "running",
 			steps: [],
 			tools: 0,
 		});
@@ -190,12 +191,15 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		children.splice(0, children.length, ...merged);
 	}
 	for (const item of children) {
+		if (args.worktree === true) item.worktree = true;
+		if (toolStatus === "error" && item.status === "running" && !background) item.status = "stopped";
 		if (item.current?.tool === "contact_supervisor") item.waitingOn = "main";
 		item.role ??= /^(worker|delegate)$|writer$/.test(item.agent) ? "mutation" : item.agent === "reviewer" ? "review" : item.agent === "scout" ? "scout" : undefined;
 	}
 	const phases = list<Record<string, unknown>>(record(info.workflowGraph).phases).map((phase) => str(phase.title)).filter(Boolean);
 	return {
 		children, background,
+		...(typeof info.asyncId === "string" ? { asyncId: info.asyncId } : {}),
 		...(lanes.length ? { preflight: { lanes } } : {}),
 		...(phases.length ? { phases } : {}),
 		...(typeof record(info.parallelHandoff).path === "string" ? { handoffPath: str(record(info.parallelHandoff).path) } : {}),
@@ -237,7 +241,7 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 	const content = typeof message.content === "string"
 		? message.content
 		: list<{ type?: unknown; text?: unknown }>(message.content).map((part) => str(part.text)).join("\n");
-	const runs = list<{ agent?: unknown; status?: unknown; durationMs?: unknown }>((message.details as { runs?: unknown } | undefined)?.runs);
+	const runs = list<{ agent?: unknown; status?: unknown; durationMs?: unknown; runId?: unknown }>((message.details as { runs?: unknown } | undefined)?.runs);
 	// The first line reads "Background task completed: **scout**", which also covers notices without details.
 	const header = /^(?:Background task|Detached foreground task) (completed|failed|paused|stopped): \*\*(.+?)\*\*/.exec(content);
 	const agents = [...new Set(runs.map((run) => str(run.agent)).filter(Boolean))];
@@ -249,6 +253,7 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 	const end = lines.findIndex((line) => TRAILER.test(line));
 	const durations = runs.map((run) => num(run.durationMs)).filter((value) => value !== undefined);
 	return {
+		...(runs.some((run) => typeof run.runId === "string") ? { runId: str(runs[0]?.runId) || undefined, runIds: runs.map((run) => str(run.runId)).filter(Boolean) } : {}),
 		agent: agents.join(", ") || header?.[2] || "subagent",
 		status: ["completed", "failed", "paused", "stopped"].includes(status) ? status : "completed",
 		durationMs: durations.length ? Math.max(...durations) : undefined,

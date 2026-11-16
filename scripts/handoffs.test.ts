@@ -35,6 +35,11 @@ test("a session may read only cached manifest patches, never paths or another se
 		assert.equal(runs[0]!.steps[0]!.subagent!.keptWorktrees?.[0]?.reason, "capture failed");
 		writeFileSync(patchPath, "changed after capture");
 		assert.equal(cache.patch(handoff.id).length, 2);
+		const background = new HandoffCache();
+		await background.capture({ runs: [{ runId: "background-1", handoffPath: path }] });
+		const backgroundRuns = [{ steps: [{ subagent: { asyncId: "background-1", children: [{ label: "api" }] } }] }] as unknown as Run[];
+		background.attach(backgroundRuns);
+		assert.equal(backgroundRuns[0]!.steps[0]!.subagent!.children[0]!.handoff?.branch, "pi-sub/api");
 		assert.throws(() => cache.patch(patchPath), /Unknown/);
 		assert.throws(() => new HandoffCache().patch(handoff.id), /Unknown/);
 		await cache.capture({ parallelHandoff: { path: patchPath } });

@@ -1,0 +1,38 @@
+import type { Run, Subagent } from "../shared/protocol.ts";
+import { t } from "../shared/i18n.ts";
+
+export function agentCounts(runs: Run[] = []): { running: number; waiting: number } {
+	const children = agentSteps(runs).filter((step) => step.status !== "error").flatMap((step) => step.subagent?.children ?? []);
+	return {
+		running: children.filter((child) => child.status === "running" || child.status === "pending").length,
+		waiting: children.filter((child) => child.waitingOn === "main").length,
+	};
+}
+
+/** Pair detached launch receipts with grouped completion notices, without inventing live progress. */
+export function agentSteps(runs: Run[]) {
+	const notices = runs.flatMap((run) => run.notice?.runIds?.map((id) => ({ id, notice: run.notice! })) ?? []);
+	return runs.flatMap((run) => run.steps).filter((step) => step.subagent).map((step) => {
+		const notice = notices.find((item) => item.id === step.subagent?.asyncId)?.notice;
+		if (!notice) return step;
+		return { ...step, subagent: { ...step.subagent!, children: step.subagent!.children.map((child) => ({ ...child, status: notice.status === "completed" ? "done" as const : notice.status === "stopped" ? "stopped" as const : "error" as const, output: notice.text, durationMs: notice.durationMs })) } };
+	});
+}
+
+export function phaseOf(subagent: Subagent): string {
+	const roles = subagent.children.map((child) => child.role);
+	if (roles.includes("mutation")) return t("Implementing");
+	if (roles.length && roles.every((role) => role === "review")) return t("Reviewing");
+	if (roles.length && roles.every((role) => role === "scout")) return t("Scouting");
+	if (roles.includes("gate")) return t("Checking");
+	if (subagent.children.every((child) => child.agent === "researcher")) return t("Researching");
+	if (subagent.children.every((child) => child.agent === "oracle")) return t("Consulting");
+	return t("Delegating");
+}
+
+/** The same current step is used by the thread and the Agents tab's factual Now line. */
+export function currentStep(run: Run | undefined) {
+	if (!run || run.status !== "running" || run.answer) return undefined;
+	const steps = run.steps.filter((step) => step.tool !== "note");
+	return steps.findLast((step) => step.status === "running") ?? steps.at(-1);
+}

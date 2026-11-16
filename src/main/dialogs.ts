@@ -43,6 +43,10 @@ export class DialogBroker {
 		this.pending.get(id)?.resolve(answer);
 	}
 
+	hasPending(sessionPath: string): boolean {
+		return [...this.pending.values()].some((pending) => pending.sessionPath === sessionPath);
+	}
+
 	cancelAll(sessionPath?: string): void {
 		for (const [, pending] of this.pending) {
 			if (!sessionPath || pending.sessionPath === sessionPath) pending.resolve(undefined);

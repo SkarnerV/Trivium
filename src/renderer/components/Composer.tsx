@@ -1,5 +1,7 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
+import { isWorkMode, WORK_MODES } from "../../shared/work-modes.ts";
+import { OrchestrateIcon } from "../icons.tsx";
 import type { ContextInfo, PermissionSettings, SessionView } from "../../shared/protocol.ts";
 import { tokens } from "../format.ts";
 import { PaperclipIcon, PenIcon, QueueIcon, SendIcon, ShieldIcon, SteerIcon, StopIcon, TrashIcon } from "../icons.tsx";
@@ -122,6 +124,18 @@ function PermissionPicker({ permissions }: { permissions: PermissionSettings }) 
 			onChange={(value) => isPermissionMode(value) && void change(value)}
 		/>
 	);
+}
+
+function WorkModePicker({ view }: { view: SessionView }) {
+	const defaultMode = useStore((s) => s.settings?.apps.code.workMode ?? "default");
+	const mode = t(WORK_MODES.find((entry) => entry.id === defaultMode)?.label ?? "Default");
+	return <Dropdown label={t("Work mode")} value={view.workMode ?? "default"} variant="ghost"
+		icon={<OrchestrateIcon size={13} />} accent={view.workMode === "orchestrator"}
+		options={WORK_MODES.map((entry) => ({ value: entry.id, label: t(entry.label), description: t(entry.hint), group: t("Work mode") }))}
+		footnote={view.running
+			? t("Applies from your next message. For this session. New sessions start in {mode}. Change that in Settings → Code.", { mode })
+			: t("For this session. New sessions start in {mode}. Change that in Settings → Code.", { mode })}
+		onChange={(value) => isWorkMode(value) && void attempt(() => trivium.setWorkMode(view.path, value))} />;
 }
 
 function QueuedRow({ path, message, running, onEdit }: { path: string; message: QueuedMessage; running: boolean; onEdit: () => void }) {
@@ -322,7 +336,7 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 							placeholder={
 								running
 									? t("Queue a message for after this run, or {keys} to steer it", { keys: keyCombo(["⌥", "↵"]) })
-									: t("Ask for the next change, or type / for commands")
+									: view.workMode === "orchestrator" ? t("Describe the task. The agent splits it if it's large, or type / for commands") : t("Ask for the next change, or type / for commands")
 							}
 							onChange={(event) => setText(event.target.value)}
 							onPaste={(event) => {
@@ -338,6 +352,7 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 						<button type="button" className="icon-btn attach-btn" aria-label={t("Attach files")} title={t("Attach files or images")} onClick={files.pick}>
 							<PaperclipIcon />
 						</button>
+						{view.app === "code" && !view.chat && <WorkModePicker view={view} />}
 						{view.permissions && <PermissionPicker permissions={view.permissions} />}
 						<ContextRing context={view.context} />
 						<ModelPicker view={view} />

@@ -109,6 +109,7 @@ function alert(kind: "done" | "waiting", path: string, body: string): void {
 
 function emit(event: HostEvent): void {
 	if (event.type === "dialog") alert("waiting", event.request.sessionPath, event.request.title);
+	if (event.type === "dialog" || event.type === "dialog_closed") host.refreshAttention();
 	send(event);
 }
 

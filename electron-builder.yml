@@ -7,6 +7,8 @@ directories:
 asar: false
 files:
   - dist/main.mjs
+  # Loaded by path into subagent children, so it is a file of its own rather than part of main.mjs.
+  - dist/child-permissions.mjs
   - dist/preload.cjs
   - dist/renderer.js
   - dist/chunks/**

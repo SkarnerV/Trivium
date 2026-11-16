@@ -484,6 +484,8 @@ export interface ServiceInfo {
 export interface Draft {
 	text: string;
 	attachments: AttachmentInfo[];
+	/** Goes after what is already in the message box, which keeps its text and attachments, instead of replacing it. */
+	append?: boolean;
 }
 
 export interface NewSessionInput {

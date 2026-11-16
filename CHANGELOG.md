@@ -12,7 +12,7 @@ All notable changes to Trivium are listed here. Versions follow [Semantic Versio
 ### Fixed
 
 - Files changed by a subagent in the project now appear under This session in Changes and can be reverted. Detached children keep their snapshot until their completion notice arrives.
-- Code's permission gate is required in native foreground and background children too. They read the current mode from settings, block `.env` files and deny anything that needs approval because no one can answer there. Managed worktrees use their own folder as the project root. Runners that cannot load the gate are refused.
+- Code's permission gate is required in native foreground and background children too. They read the current mode from settings, block `.env` files and deny anything that needs approval because no one can answer there. Managed worktrees use their own folder as the project root. Agents that run through another tool's command line, such as Claude Code or Codex, cannot load the gate and launch as before, under that tool's own permissions.
 
 ## [0.12.0] - 2026-11-13
 

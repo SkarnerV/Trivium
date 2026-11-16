@@ -1225,12 +1225,17 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
-		const required = app === "code" ? registerRequiredChildExtensions({
-			sessionId: session.sessionId,
-			extensions: [{ id: "trivium-permissions", path: fileURLToPath(new URL("./child-permissions.mjs", import.meta.url)) }],
-			requireForAllRunners: true,
-		}) : undefined;
+		let required: ReturnType<typeof registerRequiredChildExtensions> | undefined;
 		try {
+			// Native pi children must load the gate. External CLI agents and remote machines cannot load an extension;
+			// they launch as they did before children were gated, under their own permission systems, instead of being
+			// refused. Inside the try: a missing file must not leave this half-built session in `live`.
+			if (app === "code") {
+				required = registerRequiredChildExtensions({
+					sessionId: session.sessionId,
+					extensions: [{ id: "trivium-permissions", path: fileURLToPath(new URL("./child-permissions.mjs", import.meta.url)) }],
+				});
+			}
 			// session_start may revive detached work, so the mandatory snapshot must exist before binding extensions.
 			await session.bindExtensions({
 				uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),

@@ -41,7 +41,7 @@ function firstLine(text: string): string {
 }
 
 function usage(child: SubagentChild): string {
-	return [child.model, child.context && t("{context} context", { context: child.context }), child.inputTokens !== undefined && t("{n} in", { n: tokens(child.inputTokens) }), child.outputTokens !== undefined && t("{n} out", { n: tokens(child.outputTokens) }), child.tokens && t("{n} tokens", { n: tokens(child.tokens) }), t("{n} tools", { n: child.tools }), duration(child.durationMs)]
+	return [child.model, child.context && t("{context} context", { context: child.context }), child.inputTokens !== undefined && t("{n} in", { n: tokens(child.inputTokens) }), child.outputTokens !== undefined && t("{n} out", { n: tokens(child.outputTokens) }), child.tokens && t("{n} tokens", { n: tokens(child.tokens) }), child.tools > 0 && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }), duration(child.durationMs)]
 		.filter(Boolean)
 		.join(" · ");
 }
@@ -192,9 +192,10 @@ export function Fanout({ step, now, onChild }: { step: Step; now: number; onChil
 	const phase = phaseOf(subagent);
 	const summary = plan ? t("{phase} · {writers} writers, {readers} readers", { phase, writers: writers.length, readers: children.length - writers.length }) : t("{phase} · {finished} of {total} finished", { phase, finished, total: children.length });
 	return <div className={`live-cmd subagent-live fanout${plan ? " is-plan" : ""}${rejected ? " not-started" : ""}`} role="group" aria-label={summary}>
-		<div className="live-cmd-head" role="status" aria-live="polite">
+		<div className="live-cmd-head">
 			<span className="live-dot" aria-hidden="true" />
-			<span className="live-cmd-prose">{summary}
+			{/* Announced when a count changes. The timer beside it stays out, or it would be read out every second. */}
+			<span className="live-cmd-prose" role="status" aria-live="polite">{summary}
 				{failed > 0 && <span className="steps-failed"> · {t("{n} failed", { n: failed })}</span>}
 				{waiting > 0 && <span className="warn"> · {t("{n} waiting on the main agent", { n: waiting })}</span>}
 				{stopped > 0 && <span className="warn"> · {t("{n} stopped", { n: stopped })}</span>}
@@ -215,7 +216,7 @@ export function Fanout({ step, now, onChild }: { step: Step; now: number; onChil
 				<span className="subagent-label ellipsis" title={child.label}>{child.label}</span>
 				<ChildRole child={child} />
 				<span className={`subagent-activity ellipsis ${tone}`} title={display}>{display}</span>
-				<span className="subagent-now-count">{child.handoff?.changed && done ? <><span className="plus">+{child.handoff.insertions}</span> <span className="minus">−{child.handoff.deletions}</span></> : <>{!done && child.tools > 0 && <span className="fanout-tools">{t("{n} tools", { n: child.tools })} · </span>}{duration(child.durationMs)}</>}</span>
+				<span className="subagent-now-count">{child.handoff?.changed && done ? <><span className="plus">+{child.handoff.insertions}</span> <span className="minus">−{child.handoff.deletions}</span></> : <>{!done && child.tools > 0 && <span className="fanout-tools">{t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools })} · </span>}{duration(child.durationMs)}</>}</span>
 			</button>;
 		})}</div>
 		{writers.length === 1 && !writers[0]!.worktree && dirty && !dirtyRejected && <p className="fanout-note">{t("One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.")}</p>}

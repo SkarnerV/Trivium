@@ -691,6 +691,7 @@ export default {
 	"{n} failed": "{n} 件失敗",
 	"Preview {file}": "{file} をプレビュー",
 	"No text output.": "テキスト出力はありません。",
+	"{n} agent": "{n} 個のエージェント",
 	"{n} agents": "{n} 個のエージェント",
 	"+{n} more": "ほか {n} 件",
 	"{context} context": "コンテキスト {context}",

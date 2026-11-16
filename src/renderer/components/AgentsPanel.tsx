@@ -26,7 +26,7 @@ export function AgentsButton({ view, needsYou }: { view: SessionView; needsYou: 
 	const kept = steps.some((step) => step.subagent?.keptWorktrees?.length);
 	const failed = steps.flatMap((step) => step.subagent!.children).filter((child) => child.status === "error").length;
 	if (!needsYou && !counts.running && (seen || (!kept && !failed))) return null;
-	const label = needsYou ? t("Needs you") : counts.waiting ? t("{n} waiting", { n: counts.waiting }) : counts.running ? t("{n} agents", { n: counts.running }) : kept ? t("Worktree kept") : t("{n} failed", { n: failed });
+	const label = needsYou ? t("Needs you") : counts.waiting ? t("{n} waiting", { n: counts.waiting }) : counts.running ? t(counts.running === 1 ? "{n} agent" : "{n} agents", { n: counts.running }) : kept ? t("Worktree kept") : t("{n} failed", { n: failed });
 	const title = needsYou ? t("The main agent is asking you something.") : counts.waiting ? t("{n} agents are waiting on the main agent.", { n: counts.waiting }) : counts.running ? t("{n} agents working. Show them in the panel.", { n: counts.running }) : label;
 	return <button type="button" className={`changes-toggle agents-toggle${needsYou || counts.waiting || kept || failed ? " attn" : ""}`} aria-pressed={pressed} title={title}
 		onClick={() => needsYou ? goToQuestion(view.path) : showPanelView(view.path, "agents")}>
@@ -77,8 +77,10 @@ export function AgentsBody({ view }: { view: SessionView }) {
 			if ((event.target as HTMLElement)?.closest("input, textarea, [contenteditable]")) return;
 			if (event.key === "Escape" || event.key === "Backspace" || (event.altKey && event.key === "ArrowLeft")) { event.preventDefault(); back(); }
 		};
-		document.addEventListener("keydown", key);
-		return () => document.removeEventListener("keydown", key);
+		// On the tab itself, not the document: these keys belong to whatever else has the focus, such as the thread.
+		const tab = body.current;
+		tab?.addEventListener("keydown", key);
+		return () => tab?.removeEventListener("keydown", key);
 	}, [Boolean(child), view.path]);
 	useEffect(() => {
 		let active = true;
@@ -89,11 +91,13 @@ export function AgentsBody({ view }: { view: SessionView }) {
 		);
 		return () => { active = false; };
 	}, [view.path, patchId]);
-	const draft = (text: string) => setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text, attachments: [] } } }));
+	const draft = (text: string) => setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text, attachments: [], append: true } } }));
 	const files = patch && patch.id === patchId ? patch.files : [];
 	const shown = files.find((item) => item.file === file) ?? files[0];
 	const note = steps.findLast((step) => step.tool === "note");
-	const plan = steps.slice(0, steps.findIndex((step) => (step.subagent?.children.length ?? 0) > 1)).findLast((step) => step.tool === "note");
+	// The plan is what the main agent said just before its first fan-out; a task with none has no plan to show.
+	const firstFanout = steps.findIndex((step) => (step.subagent?.children.length ?? 0) > 1);
+	const plan = firstFanout < 0 ? undefined : steps.slice(0, firstFanout).findLast((step) => step.tool === "note");
 	const current = currentStep(taskRuns.at(-1));
 	const counts = agentCounts(taskRuns);
 	const doing = current?.subagent && counts.running ? t("Waiting for {n} agents", { n: counts.running }) : current ? `${current.tool} ${current.target}` : t(taskRuns.at(-1)?.answer ? "Writing the answer" : "Working");

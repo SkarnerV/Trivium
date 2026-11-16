@@ -182,7 +182,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					{total && ` ${t("for {time}", { time: total })}`}
 				</span>
 				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
-				{agents > 0 && <span>· {t("{n} agents", { n: agents })}</span>}
+				{agents > 0 && <span>· {t(agents === 1 ? "{n} agent" : "{n} agents", { n: agents })}</span>}
 				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
 				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
 			</button>

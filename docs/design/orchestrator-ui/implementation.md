@@ -7,7 +7,10 @@ The implementation targets the locked pi-subagents 0.82.1 package. Paths below a
 
 - Public export `pi-subagents/required-child-extensions` exposes `registerRequiredChildExtensions`.
   `src/shared/required-child-extensions.js` registers an immutable snapshot by parent session id.
-  `requireForAllRunners` rejects external runners and remote placement, which cannot load the gate.
+  Trivium registers without `requireForAllRunners`. With it, the extension refuses every launch on an external
+  CLI runner or a remote machine, which cannot load an extension; that broke the six bundled external agents
+  (`claude-code`, `codex-exec`, `cursor-agent` and their writers) in Default mode, where they had launched
+  before. They now launch as before, ungated by Trivium, under their own tool's permissions.
 - `src/runs/foreground/execution.js`, `runSingleAttempt`, passes required extensions into the child launch.
   `src/runs/shared/child-tool-plan.js`, `resolvePiLaunchToolPlan`, unions mandatory paths into `extensionArgs` and
   refuses a capability ceiling that would deny extensions. `src/runs/shared/child-session.js`,

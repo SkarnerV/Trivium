@@ -221,8 +221,13 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 	});
 	useEffect(() => {
 		if (!draft) return;
-		setText(draft.text);
-		files.replace(draft.attachments);
+		if (draft.append) {
+			// A draft offered from elsewhere, such as the Agents tab, must not cost the user what they had typed.
+			setText((current) => (current.trim() ? `${current.trimEnd()}\n${draft.text}` : draft.text));
+		} else {
+			setText(draft.text);
+			files.replace(draft.attachments);
+		}
 		setState((s) => {
 			const { [view.path]: _, ...rest } = s.drafts;
 			return { drafts: rest };

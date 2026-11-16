@@ -691,6 +691,7 @@ export default {
 	"{n} failed": "{n} 个失败",
 	"Preview {file}": "预览 {file}",
 	"No text output.": "没有文本输出。",
+	"{n} agent": "{n} 个 Agent",
 	"{n} agents": "{n} 个 Agent",
 	"+{n} more": "另外 {n} 个",
 	"{context} context": "{context} 上下文",

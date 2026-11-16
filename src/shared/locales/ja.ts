@@ -1,5 +1,7 @@
 /** Japanese, keyed by the English text the code passes to t(). */
 export default {
+	"Handoff exceeds the display limit": "引き継ぎファイルが表示上限を超えています",
+	"Unknown child patch": "不明な子エージェントのパッチ",
 	"Implementing": "実装中",
 	"Reviewing": "レビュー中",
 	"Scouting": "調査中",
@@ -66,7 +68,7 @@ export default {
 	"{label}, {agent}, {role}, {activity}": "{label}、{agent}、{role}、{activity}",
 	"One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.": "プロジェクトフォルダーで1つのエージェントが編集します。未コミットの変更があり、独立したワークツリーにはクリーンなフォルダーが必要です。",
 	"Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.": "未開始：プロジェクトフォルダーに未コミットの変更があり、独立したワークツリーにはクリーンなフォルダーが必要です。メインエージェントが書き手を1つにするか、あなたに確認します。",
-	"The subagent budget ran out. Unfinished agents stopped; completed work is kept.": "サブエージェントの予算に達しました。未完了のエージェントは停止し、完了した作業は保持されます。",
+	"The subagent budget ran out. Completed work is kept.": "サブエージェントの予算に達しました。完了した作業は保持されます。",
 	"{n} worktrees were kept. See the Agents tab for their paths and reasons.": "{n} 個のワークツリーを保持しました。エージェントタブでパスと理由を確認できます。",
 	"Show changes in the panel": "変更をパネルに表示",
 	"+{adds} −{dels} · {n} files": "+{adds} −{dels} · {n} ファイル",

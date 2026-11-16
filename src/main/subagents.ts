@@ -171,22 +171,27 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		for (const key of new Set(ordered)) {
 			const live = workflow.find((item) => item.childId === key);
 			const lane = lanes.find((item) => item.key === key);
-			const existing = children.find((item) => item.label === key);
+			const position = lanes.length ? lanes.findIndex((lane) => lane.key === key) : workflow.findIndex((item) => item.childId === key);
+			const existing = children.find((item) => item.label === key) ?? (position >= 0 && !children[position]?.label ? children[position] : undefined);
 			const activity = record(live?.activity);
 			const state = str(live?.state);
-			const status = state === "completed" ? "done" : state === "failed" || state === "rejected" ? "error" : state === "stopped" ? "stopped" : state === "pending" ? "pending" : state ? "running" : undefined;
+			const status = state === "completed" ? "done" : state === "failed" || state === "rejected" ? "error" : state === "stopped" ? "stopped" : state === "pending" ? "pending" : ["running", "paused", "detached"].includes(state) ? "running" : undefined;
 			merged.push({
 				...(existing ?? { agent: str(live?.agent) || "agent", task: "", status: "pending", steps: [], tools: 0 }),
 				childId: key, label: key, role: lane?.mode,
+				agent: str(live?.agent) || existing?.agent || "agent",
 				status: status ?? existing?.status ?? "pending",
 				waitingOn: state === "paused" || activity.currentTool === "contact_supervisor" ? "main" : undefined,
 				current: typeof activity.currentTool === "string" ? { tool: activity.currentTool, target: "" } : existing?.current,
 				tools: num(activity.toolCount) ?? existing?.tools ?? 0,
 				tokens: num(activity.tokens) ?? existing?.tokens,
-				inputTokens: num(activity.inputTokens), outputTokens: num(activity.outputTokens),
+				inputTokens: num(activity.inputTokens) ?? existing?.inputTokens, outputTokens: num(activity.outputTokens) ?? existing?.outputTokens,
 				durationMs: num(activity.durationMs) ?? existing?.durationMs,
 				model: str(live?.model) || existing?.model,
 			});
+		}
+		for (const existing of children) {
+			if (!existing.label && !merged.some((item) => item.steps === existing.steps)) merged.push(existing);
 		}
 		children.splice(0, children.length, ...merged);
 	}

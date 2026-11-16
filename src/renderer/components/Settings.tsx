@@ -1,3 +1,4 @@
+import { isWorkMode, WORK_MODES } from "../../shared/work-modes.ts";
 import { type DragEvent, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type {
@@ -2343,4 +2344,3 @@ export function SettingsPage() {
 		</>
 	);
 }
-import { isWorkMode, WORK_MODES } from "../../shared/work-modes.ts";

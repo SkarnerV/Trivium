@@ -13,6 +13,24 @@ test("handoff diffs split per file, including deletes, binary files and spaces",
 	assert.equal(splitPatch('diff --git a/a b/a\n--- a/a\n+++ /dev/null\n@@ -1 +0,0 @@\n-a\n')[0]!.file, "a");
 	assert.equal(splitPatch('diff --git a/a.png b/a.png\nBinary files a/a.png and b/a.png differ\n')[0]!.binary, true);
 	assert.equal(splitPatch('diff --git a/a b.ts b/a b.ts\n--- a/a b.ts\n+++ b/a b.ts\n@@ -0,0 +1 @@\n+a\n')[0]!.file, "a b.ts");
+	assert.equal(splitPatch('diff --git "a/\\344\\270\\255.ts" "b/\\344\\270\\255.ts"\n--- "a/\\344\\270\\255.ts"\n+++ "b/\\344\\270\\255.ts"\n@@ -0,0 +1 @@\n+a\n')[0]!.file, "中.ts");
+	assert.equal(splitPatch('diff --git a/a.png b/a.png\nGIT binary patch\nliteral 0\n')[0]!.binary, true);
+});
+
+test("pending handoff lane bindings identify worktrees without reporting them as kept", async () => {
+	const root = mkdtempSync(join(tmpdir(), "trivium-pending-handoff-"));
+	try {
+		const path = join(root, "handoff.json");
+		const manifest = { version: 1, runId: "r", groups: [{ children: [], laneBindings: [{ workflowKey: "api", taskIndex: 0 }], cleanup: { state: "partial", tasks: [{ index: 0, branch: "pi-sub/api", path: root, worktreeRemoved: false, preserved: true, reason: "cleanup pending durable handoff capture" }] } }] };
+		assert.deepEqual(manifestOf(manifest)?.worktrees, ["api"]);
+		assert.deepEqual(manifestOf(manifest)?.kept, []);
+		writeFileSync(path, JSON.stringify(manifest));
+		const cache = new HandoffCache();
+		await cache.capture({ parallelHandoff: { path } });
+		const runs = [{ steps: [{ subagent: { handoffPath: path, children: [{ label: "api" }] } }] }] as unknown as Run[];
+		cache.attach(runs);
+		assert.equal(runs[0]!.steps[0]!.subagent!.children[0]!.worktree, true);
+	} finally { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 
 test("a session may read only cached manifest patches, never paths or another session's ids", async () => {

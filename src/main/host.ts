@@ -200,7 +200,7 @@ export class SessionHost {
 	private appIndex: Record<string, AppId> = {};
 	private workModes: WorkModeIndex;
 	/** Sessions unloaded before their first message was saved, so they can start again where they were. */
-	private unsaved = new Map<string, { app: AppId; cwd: string }>();
+	private unsaved = new Map<string, { app: AppId; cwd: string; workMode?: WorkModeId }>();
 	private summaries: SessionSummary[] = [];
 	private modelRuntime!: ModelRuntime;
 	private readonly agentDir = getAgentDir();
@@ -362,6 +362,7 @@ export class SessionHost {
 			if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
 			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
 			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
+			if (unsaved?.workMode) await this.workModes.set(manager.getSessionId(), unsaved.workMode);
 			live = await this.start(app, manager.getCwd(), manager);
 			if (unsaved) {
 				this.unsaved.delete(path);
@@ -779,7 +780,7 @@ export class SessionHost {
 		live.unsubscribe();
 		live.session.dispose();
 		this.live.delete(live.path);
-		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd });
+		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: live.app === "code" ? this.workModes.get(live.session.sessionId) : undefined });
 	}
 
 	private unloadIdle(): void {
@@ -790,6 +791,7 @@ export class SessionHost {
 		for (const live of this.live.values()) {
 			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
 			if (this.services.hasBackground(live.path)) continue;
+			if (this.attentionOf(live).agents.running) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -800,7 +802,7 @@ export class SessionHost {
 	reloadApp(app: AppId): string[] {
 		const paths: string[] = [];
 		for (const live of [...this.live.values()]) {
-			if (live.app !== app || live.running || live.path.startsWith("memory:")) continue;
+			if (live.app !== app || live.running || live.path.startsWith("memory:") || this.attentionOf(live).agents.running) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}

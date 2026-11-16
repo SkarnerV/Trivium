@@ -1,5 +1,7 @@
 /** Simplified Chinese, keyed by the English text the code passes to t(). */
 export default {
+	"Handoff exceeds the display limit": "交接文件超出显示上限",
+	"Unknown child patch": "未知的子代理补丁",
 	"Implementing": "实现中",
 	"Reviewing": "审查中",
 	"Scouting": "勘察中",
@@ -66,7 +68,7 @@ export default {
 	"{label}, {agent}, {role}, {activity}": "{label}，{agent}，{role}，{activity}",
 	"One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.": "一个代理在项目文件夹中编写：当前有未提交的更改，独立工作树需要干净的文件夹。",
 	"Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.": "未启动：项目文件夹有未提交的更改，独立工作树需要干净的文件夹。主代理将使用一个编写代理，或向你询问。",
-	"The subagent budget ran out. Unfinished agents stopped; completed work is kept.": "子代理预算已用尽。未完成的代理已停止，已完成的工作会保留。",
+	"The subagent budget ran out. Completed work is kept.": "子代理预算已用尽。已完成的工作会保留。",
 	"{n} worktrees were kept. See the Agents tab for their paths and reasons.": "保留了 {n} 个工作树。可在代理标签页查看路径和原因。",
 	"Show changes in the panel": "在面板中查看更改",
 	"+{adds} −{dels} · {n} files": "+{adds} −{dels} · {n} 个文件",

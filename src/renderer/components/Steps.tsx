@@ -124,6 +124,8 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 					)}
 				</div>
 			</details>
+			{step.subagent && Boolean(step.subagent.keptWorktrees?.length) && <p className="fanout-note warn">{t("{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: step.subagent.keptWorktrees!.length })}</p>}
+			{step.subagent?.preflight && step.status === "error" && step.subagent.children.every((child) => child.status === "pending") && /uncommitted|clean git working tree/i.test(step.output ?? "") && <p className="fanout-note warn">{t("Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.")}</p>}
 		</li>
 	);
 }

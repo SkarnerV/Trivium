@@ -45,7 +45,7 @@ export interface State {
 	views: Record<string, SessionView>;
 	dialogs: DialogRequest[];
 	agentDetail: Record<string, { step: string; child: number } | undefined>;
-	agentsSeen: Record<string, boolean>;
+	agentsSeen: Record<string, string>;
 	agentsDismissed: Record<string, string>;
 	notices: Notice[];
 	models: ModelOption[];

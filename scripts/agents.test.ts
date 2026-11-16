@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentCounts, agentSteps, currentStep, phaseOf } from "../src/renderer/agents.ts";
+import { agentAttentionKey, agentCounts, agentSteps, currentStep, phaseOf } from "../src/renderer/agents.ts";
 import type { Run, Subagent } from "../src/shared/protocol.ts";
 
 test("workflow counts include all eight children and waiting is distinct from user attention", () => {
@@ -29,4 +29,15 @@ test("the thread and Now line follow the current step and stop showing an old to
 	assert.equal(currentStep(run), undefined);
 	run.status = "done";
 	assert.equal(currentStep(run), undefined);
+});
+
+test("seeing live agents does not acknowledge a failure or kept worktree that arrives later", () => {
+	const runs = [{ steps: [{ id: "phase", status: "running", subagent: { children: [{ status: "running" }] } }] }] as unknown as Run[];
+	const before = agentAttentionKey(runs);
+	runs[0]!.steps[0]!.status = "done";
+	runs[0]!.steps[0]!.subagent!.children[0]!.status = "error";
+	assert.notEqual(agentAttentionKey(runs), before);
+	const failed = agentAttentionKey(runs);
+	runs[0]!.steps[0]!.subagent!.keptWorktrees = [{ path: "/kept", branch: "branch", reason: "capture failed" }];
+	assert.notEqual(agentAttentionKey(runs), failed);
 });

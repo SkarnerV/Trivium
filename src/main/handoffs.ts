@@ -10,17 +10,31 @@ const objects = (value: unknown): Record<string, unknown>[] => Array.isArray(val
 const string = (value: unknown): string => typeof value === "string" ? value : "";
 const count = (value: unknown): number | undefined => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 
+/** Git quotes UTF-8 bytes with octal escapes, which JSON.parse does not accept. */
+function patchName(raw: string): string {
+	if (!raw.startsWith('"') || !raw.endsWith('"')) return raw;
+	const text = raw.slice(1, -1);
+	const parts: Buffer[] = [];
+	let start = 0;
+	for (const match of text.matchAll(/\\([0-7]{3}|.)/g)) {
+		parts.push(Buffer.from(text.slice(start, match.index)));
+		const escape = match[1]!;
+		parts.push(/^[0-7]{3}$/.test(escape) ? Buffer.from([parseInt(escape, 8)]) : Buffer.from(({ n: "\n", r: "\r", t: "\t", b: "\b", f: "\f", v: "\v" } as Record<string, string>)[escape] ?? escape));
+		start = match.index + match[0].length;
+	}
+	parts.push(Buffer.from(text.slice(start)));
+	return Buffer.concat(parts).toString("utf8");
+}
+
 /** Split before parsing: parseDiff deliberately reads only the first file in its input. */
 export function splitPatch(text: string): ChildPatchFile[] {
 	return text.split(/(?=^diff --git )/m).filter((part) => part.startsWith("diff --git ")).map((part) => {
 		const header = /^\+\+\+ (.+)$/m.exec(part)?.[1]?.trim();
 		const old = /^--- (.+)$/m.exec(part)?.[1]?.trim();
 		const raw = header && header !== "/dev/null" ? header : old && old !== "/dev/null" ? old : /^diff --git (?:"a\/.*?"|a\/.*?) (.+)$/m.exec(part)?.[1] ?? "";
-		let file = raw;
-		if (raw.startsWith('"')) {
-			try { file = JSON.parse(raw); } catch { /* Keep an unfamiliar git-quoted name readable. */ }
-		}
-		return { file: file.replace(/^[ab]\//, ""), ...parseDiff(part) };
+		const file = patchName(raw);
+		const diff = parseDiff(part);
+		return { file: file.replace(/^[ab]\//, ""), ...diff, binary: diff.binary || /^GIT binary patch$/m.test(part) };
 	});
 }
 
@@ -53,9 +67,9 @@ export function manifestOf(value: unknown): { children: { key: string; patch: Om
 }
 
 async function boundedRead(path: string, max: number): Promise<string> {
-	if ((await stat(path)).size > max) throw new Error("Handoff exceeds the display limit");
+	if ((await stat(path)).size > max) throw new Error(t("Handoff exceeds the display limit"));
 	const bytes = await readFile(path);
-	if (bytes.length > max) throw new Error("Handoff exceeds the display limit");
+	if (bytes.length > max) throw new Error(t("Handoff exceeds the display limit"));
 	return bytes.toString("utf8");
 }
 
@@ -99,7 +113,7 @@ export class HandoffCache {
 
 	patch(id: string): ChildPatchFile[] {
 		const patch = this.patches.get(id);
-		if (!patch) throw new Error("Unknown child patch");
+		if (!patch) throw new Error(t("Unknown child patch"));
 		return structuredClone(patch);
 	}
 

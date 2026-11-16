@@ -3,7 +3,7 @@ import type { ChildPatchFile, SessionView } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { OrchestrateIcon } from "../icons.tsx";
-import { agentCounts, agentSteps, currentStep, phaseOf } from "../agents.ts";
+import { agentAttentionKey, agentCounts, agentSteps, currentStep, phaseOf } from "../agents.ts";
 import { AgentSession } from "../agent-context.ts";
 import { attempt, setState, showAgentChild, showPanelView, trivium, useStore } from "../store.ts";
 import { activity, ChildDetail, childRole, Fanout } from "./Subagents.tsx";
@@ -13,12 +13,13 @@ import { t } from "../i18n.tsx";
 
 /** A question is already in the thread; focus it instead of creating another answering surface. */
 export function goToQuestion(path: string): void {
-	document.querySelector<HTMLElement>(`[data-session-path="${CSS.escape(path)}"] .ask`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-	document.querySelector<HTMLElement>(`[data-session-path="${CSS.escape(path)}"] .ask`)?.focus();
+	const card = document.querySelector<HTMLElement>(`[data-session-path="${CSS.escape(path)}"] .ask`);
+	card?.scrollIntoView({ block: "center", behavior: "smooth" });
+	(card?.querySelector<HTMLElement>("input, textarea, button") ?? card)?.focus();
 }
 
 export function AgentsButton({ view, needsYou }: { view: SessionView; needsYou: boolean }) {
-	const seen = useStore((s) => s.agentsSeen[view.path]);
+	const seen = useStore((s) => s.agentsSeen[view.path]) === agentAttentionKey(view.runs);
 	const pressed = useStore((s) => s.panelTab[view.path] === "agents" && s.changesHidden[view.path] === false);
 	const counts = agentCounts(view.runs);
 	const steps = view.runs.slice(view.runs.findLastIndex((run) => !run.notice)).flatMap((run) => run.steps).filter((step) => step.subagent);
@@ -54,10 +55,11 @@ export function AgentsBody({ view }: { view: SessionView }) {
 	const [patch, setPatch] = useState<{ id: string; files: ChildPatchFile[]; error?: string }>();
 	const [file, setFile] = useState<string>();
 	const patchId = child?.handoff?.id;
+	const attention = agentAttentionKey(view.runs);
 	const back = () => setState((s) => ({ agentDetail: { ...s.agentDetail, [view.path]: undefined } }));
 	useEffect(() => {
-		setState((s) => ({ agentsSeen: { ...s.agentsSeen, [view.path]: true } }));
-	}, [view.path]);
+		setState((s) => ({ agentsSeen: { ...s.agentsSeen, [view.path]: attention } }));
+	}, [view.path, attention]);
 	useEffect(() => {
 		if (!child) {
 			if (body.current) body.current.scrollTop = scroll.current;
@@ -94,7 +96,8 @@ export function AgentsBody({ view }: { view: SessionView }) {
 	const plan = steps.slice(0, steps.findIndex((step) => (step.subagent?.children.length ?? 0) > 1)).findLast((step) => step.tool === "note");
 	const current = currentStep(taskRuns.at(-1));
 	const counts = agentCounts(taskRuns);
-	const doing = current?.subagent && counts.running ? t("Waiting for {n} agents", { n: counts.running }) : current ? `${current.tool} ${current.target}` : t(view.running ? "Writing the answer" : "Done");
+	const doing = current?.subagent && counts.running ? t("Waiting for {n} agents", { n: counts.running }) : current ? `${current.tool} ${current.target}` : t(taskRuns.at(-1)?.answer ? "Writing the answer" : "Working");
+	const state = t(view.running ? "Working" : taskRuns.at(-1)?.status === "aborted" ? "Stopped" : taskRuns.at(-1)?.status === "error" ? "Failed" : "Done");
 	return <AgentSession.Provider value={view.path}><div className="agents" ref={body}>
 		{child ? <>
 			<button type="button" className="btn ghost agents-back" onClick={back}>{t("‹ All agents")}</button>
@@ -115,7 +118,7 @@ export function AgentsBody({ view }: { view: SessionView }) {
 				{child.handoff && <button type="button" className="btn ghost" onClick={() => void attempt(() => trivium.copyText(child.handoff!.path))}>{t("Copy patch path")}</button>}
 			</div>
 		</> : <>
-			<div className="agents-head" role="status"><h3>{run?.prompt.split("\n")[0] || view.title}</h3><p>{t("{state} · {time} · {n} agents · {tokens} tokens", { state: t(view.running ? "Working" : "Done"), time, n: children.length, tokens: tokens(used) })}</p></div>
+			<div className="agents-head" role="status"><h3>{run?.prompt.split("\n")[0] || view.title}</h3><p>{t("{state} · {time} · {n} agents · {tokens} tokens", { state, time, n: children.length, tokens: tokens(used) })}</p></div>
 			{needsYou && <div className="agents-attn"><p>{t("The main agent is asking you something.")}</p><button type="button" className="btn ghost" onClick={() => goToQuestion(view.path)}>{t("Go to question")}</button></div>}
 			{plan && <section className="agents-plan"><div className="step-detail-label">{t("Plan")}</div><Markdown text={plan.content ?? plan.target} /></section>}
 			{phases.map((step, index) => <details className="agents-phase" key={step.id} open={step.status === "running" || undefined}>

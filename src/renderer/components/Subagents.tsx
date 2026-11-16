@@ -220,7 +220,7 @@ export function Fanout({ step, now, onChild }: { step: Step; now: number; onChil
 		})}</div>
 		{writers.length === 1 && !writers[0]!.worktree && dirty && !dirtyRejected && <p className="fanout-note">{t("One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.")}</p>}
 		{dirtyRejected && <p className="fanout-note warn">{t("Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.")}</p>}
-		{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Unfinished agents stopped; completed work is kept.")}</p>}
+		{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Completed work is kept.")}</p>}
 		{Boolean(subagent.keptWorktrees?.length) && <p className="fanout-note warn">{t("{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: subagent.keptWorktrees!.length })}</p>}
 	</div>;
 }

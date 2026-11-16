@@ -1,3 +1,5 @@
+import { agentCounts } from "../agents.ts";
+import { OrchestrateIcon } from "../icons.tsx";
 import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import type { AppId, SessionSummary, UpdateStatus } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
@@ -597,5 +599,3 @@ export function PeekPanel() {
 		</div>
 	);
 }
-import { agentCounts } from "../agents.ts";
-import { OrchestrateIcon } from "../icons.tsx";

@@ -2,6 +2,18 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Orchestrator work mode.** Each project Code session can ask the agent to scout large tasks, split independent work and use one writer by default, with parallel writers in managed worktrees. The main agent applies their patches one at a time and runs checks in the project. Pick the mode in the message box or set how new sessions start in Settings → Code; forks inherit it. Default leaves the system prompt unchanged.
+- **An Agents panel for delegated work.** Workflow plans and live children show in the thread, with all rows kept in order. Agents opens each child's task, activity, result and usage, and a writer's branch, files and patch. Waiting children, failures, timeouts and kept worktrees stay visible. Its action buttons put a draft in the message box. The panel never selects itself.
+
+### Fixed
+
+- Files changed by a subagent in the project now appear under This session in Changes and can be reverted. Detached children keep their snapshot until their completion notice arrives.
+- Code's permission gate is required in native foreground and background children too. They read the current mode from settings, block `.env` files and deny anything that needs approval because no one can answer there. Managed worktrees use their own folder as the project root. Runners that cannot load the gate are refused.
+
 ## [0.12.0] - 2026-11-13
 
 ### Changed

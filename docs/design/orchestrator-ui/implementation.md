@@ -9,7 +9,9 @@ The implementation targets the locked pi-subagents 0.82.1 package. Paths below a
   `src/shared/required-child-extensions.js` registers an immutable snapshot by parent session id.
   `requireForAllRunners` rejects external runners and remote placement, which cannot load the gate.
 - `src/runs/foreground/execution.js`, `runSingleAttempt`, passes required extensions into the child launch.
-  `src/runs/shared/child-session.js` creates a `DefaultResourceLoader` with `launch.cwd` and
+  `src/runs/shared/child-tool-plan.js`, `resolvePiLaunchToolPlan`, unions mandatory paths into `extensionArgs` and
+  refuses a capability ceiling that would deny extensions. `src/runs/shared/child-session.js`,
+  `createDefaultChildSessionFactory`, creates a `DefaultResourceLoader` with `launch.cwd` and
   `launch.extensionPaths`; its `open` verifies required extension identities and fails on missing or failed loads.
 - `src/runs/background/async-execution.js`, `buildSeqStep`, serializes `requiredExtensions` into runner
   steps. `src/runs/background/subagent-runner.js` carries these into child session creation. The snapshot is
@@ -31,3 +33,63 @@ The package's `docs/workflows.md` notes that awaited background children in an `
 receive supervisor decisions while the parent is blocked. Such a request returns a tool error and asks the child
 to report its blocker and stop. The UI displays paused children or an active `contact_supervisor`; it does not
 promise a question is answerable while a foreground workflow blocks the parent.
+
+## Notification and pending-manifest shapes
+
+`src/runs/background/notify.js`, `sendCompletion` / `notifyRunDetails`, sends grouped results as
+`details.runs[]`, each with `runId` and (when present) `handoffPath`. The host reads those as well as the tool's
+`details.parallelHandoff.path`, and pairs background receipts by run id. `parallel-handoff.js`'s pending groups
+have `laneBindings` and cleanup tasks before terminal `children` exist. These establish live worktree identity;
+pending cleanup is not shown as a kept-worktree warning. Files are read at launch once and on completion,
+including reopening recorded sessions; the 40ms projection only attaches cached data.
+
+The root `usageBudget` contract in `src/extension/schemas.js` blocks new launches but does not stop running
+children. The run-level notice therefore says the budget ran out and completed work is kept; it does not claim
+that every unfinished child was stopped.
+
+## Validation
+
+- TypeScript: `npm run check`.
+- Node suite: `npm test`, including workflow parsing, malformed details, pending and completed manifests,
+  grouped notifications, per-session patch authorization, multi-file and binary patches, UTF-8 git-quoted names,
+  child edit adoption/revert, permission mode from disk, worktree roots, mode persistence and prompt identity.
+- `scripts/orchestrator-faux.test.ts` executes both the three-child writer workflow and the eight-child variant,
+  observing their actual updates and reading their temporary handoff files. It removes its artifacts afterward.
+- `npm run build` emits the standalone mandatory child extension alongside the main bundle.
+- An isolated Electron renderer fixture at 360px was checked in English, Chinese and Japanese. It displayed all
+  eight rows without horizontal overflow, with labeled button rows, a branch and patch in the drill-in, and
+  keyboard Escape returning to the overview. Captures were visually inspected. This used rendered fixtures,
+  not a provider-backed agent session.
+
+## Try the faux extension
+
+From this checkout in PowerShell:
+
+```powershell
+$env:TRIVIUM_DEV_FAUX = '1'
+npm run dev
+```
+
+Create a Code session in a project folder, select **Trivium dev → Scripted** in the model picker, and type
+`orchestrator`. It scouts, then shows two worktree writers and a reviewer; the web writer waits on the main
+agent, a review fails, and a manifest contains one captured two-file patch and one capture error with a kept
+worktree. Open Agents and click `api` or `web`. Type `orchestrator eight` for eight rows including a failed child
+and a timeout. `subagent`, `format`, `server`, `slow`, `hang` and `diagram` keep their previous scripted stories.
+The composer mode picker can be changed independently; the faux model follows its script, not the guidance.
+Use a scratch project for the existing scenarios that edit files or launch a service.
+
+## Not verified on a real run
+
+- Provider-backed model compliance with the compact orchestration prompt, including scout-first splitting,
+  preflight coverage, disjoint writer claims, foreground phases, concurrency and serial application/checks.
+- Actual managed-worktree creation, cleanup and dirty-source refusal in an orchestrated task. These are owned
+  by pi-subagents; its code and manifest shapes were inspected, while the faux data simulates allocation.
+- End-to-end mandatory gate loading in real foreground, detached, revived and packaged children on Windows
+  and macOS. Inspect that `.env` reads are blocked, risky calls return the no-UI reason, ordinary worktree edits
+  succeed under Approve for me, and changing the permission mode reaches detached children on their next call.
+- Real provider limits and supervisor dialogue. Confirm whether the selected child execution path can pause
+  for a supervisor answer, or reports the documented foreground blocker instead.
+
+No new dependencies, version bump, push or pull request. Research and Write receive no work-mode extension.
+Applied-state tracking, overlap warnings, inferred post-application checks, dollars, predictive Next text and
+denied-action display are outside this first version. There is no host-side git mutation or apply control.

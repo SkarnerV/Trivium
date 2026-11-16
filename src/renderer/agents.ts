@@ -19,6 +19,12 @@ export function agentSteps(runs: Run[]) {
 	});
 }
 
+/** Opening the panel acknowledges the state seen, not failures that may arrive in a later phase. */
+export function agentAttentionKey(runs: Run[]): string {
+	const current = runs.slice(Math.max(0, runs.findLastIndex((run) => !run.notice)));
+	return agentSteps(current).map((step) => `${step.id}:${step.status}:${step.subagent!.children.map((child) => child.status).join(",")}:${step.subagent!.keptWorktrees?.length ?? 0}`).join("|");
+}
+
 export function phaseOf(subagent: Subagent): string {
 	const roles = subagent.children.map((child) => child.role);
 	if (roles.includes("mutation")) return t("Implementing");

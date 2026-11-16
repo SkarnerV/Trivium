@@ -11,6 +11,11 @@
 // - A prompt that mentions "format", in Code, runs a command that rewrites a file and creates another, for the Changes view.
 // - A prompt that mentions "slow", in Code, runs a command that outlasts the bash limit; "hang" sets a short timeout, which only shortens the wait.
 // - A prompt that mentions "diagram", in any app, gets a reply with a Mermaid diagram.
+// - "orchestrator", in Code, scouts, then fans out to two worktree writers and a reviewer (plan, waiting, failure,
+//   patches, a kept worktree). "orchestrator eight" fans out to eight reviewers with a failure and a timeout;
+//   "orchestrator queued" holds its children queued first; "orchestrator limit" cuts the fan-out short with a
+//   usage limit; "orchestrator background" starts two background children: one reports back, one never does
+//   and its status file goes away, so it stops counting as running.
 // Every prompt replays the story from its first step.
 import {
 	createFauxCore,
@@ -22,7 +27,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -220,6 +225,24 @@ const RESEARCHER: FauxChild = {
 };
 
 const BACKGROUND_MS = 6000;
+/** When the background child that never reports back loses its status file. */
+const LOST_MS = 9000;
+
+/**
+ * A background run's folder as pi-subagents keeps it (a pi-subagents-* folder in the temp directory, then
+ * async-subagent-runs/<id>/status.json), so the host reads the same evidence of life it reads for real runs.
+ */
+async function fauxRun(prefix: string) {
+	const id = `${prefix}-${Date.now().toString(36)}`;
+	const root = await mkdtemp(join(tmpdir(), "pi-subagents-trivium-faux-"));
+	const asyncDir = join(root, "async-subagent-runs", id);
+	await mkdir(asyncDir, { recursive: true });
+	const status = (state: string) => writeFile(join(asyncDir, "status.json"), JSON.stringify({ id, state, pid: process.pid, startedAt: Date.now(), lastUpdate: Date.now() }));
+	await status("running");
+	return { id, asyncDir, root, status, remove: () => rm(root, { recursive: true, force: true }) };
+}
+
+const LOST_WORKER: FauxChild = { agent: "worker", task: "Regenerate the API client in the background.", calls: [], output: "", pace: 0 };
 
 /** The details pi-subagents streams while its children work, shaped closely enough for Trivium to read. */
 function fauxDetails(children: FauxChild[], elapsed: number, mode: string) {
@@ -307,19 +330,40 @@ const WRITERS: FauxChild[] = [
 	{ ...REVIEWERS[1]!, label: "tests", pace: 900 },
 ];
 
+/** Two background children: the researcher reports back; the worker's run ends without a notice reaching here. */
+const BACKGROUND_STORY: Step[] = [
+	() =>
+		fauxAssistantMessage(
+			[
+				fauxText("Two things can run in the background while we talk: the startup comparison and the client regeneration."),
+				fauxToolCall("subagent", { agent: RESEARCHER.agent, task: RESEARCHER.task }),
+				fauxToolCall("subagent", { agent: LOST_WORKER.agent, task: LOST_WORKER.task, async: true }),
+			],
+			{ stopReason: "toolUse" },
+		),
+	() => fauxAssistantMessage(fauxText("Both are running in the background. The researcher will report back; watch the worker's row once its run goes away.")),
+];
+
+/** The fan-out is cut short by a usage limit: the run ends with the provider's error. */
+const LIMIT_REPLY: Step = () =>
+	fauxAssistantMessage([], { stopReason: "error", errorMessage: "usage_limit_reached: You've hit your ChatGPT usage limit. Try again later." });
+
 function orchestratorStory(scenario: string): Step[] {
+	if (/background/i.test(scenario)) return BACKGROUND_STORY;
 	return [SUBAGENT_STORY[0]!,
 		() => fauxAssistantMessage([
 			fauxText("The scout found separate API and web files. I'll give each writer its own worktree and have a reviewer check the tests."),
 			fauxToolCall("subagent", { workflow: true, async: false, options: { scenario, globalConcurrencyLimit: 4, preflight: { version: 1, coverage: "complete", lanes: (scenario.includes("eight") ? Array.from({ length: 8 }, (_, index) => ({ key: `review-${index + 1}`, mode: "review" })) : [{ key: "api", mode: "mutation", claims: ["src/api/refresh.ts", "test/refresh.test.ts"] }, { key: "web", mode: "mutation", claims: ["src/web/banner.tsx", "test/banner.test.ts"] }, { key: "tests", mode: "review" }]) } } }),
 		], { stopReason: "toolUse" }),
-		() => fauxAssistantMessage(fauxText("The fan-out finished. Open Agents to inspect each result, branch, file list and patch. One review failed, and the web worktree was kept for inspection. No patches were applied by this scripted demonstration.")),
+		/limit/i.test(scenario) ? LIMIT_REPLY : () => fauxAssistantMessage(fauxText("The fan-out finished. Open Agents to inspect each result, branch, file list and patch. One review failed, and the web worktree was kept for inspection. No patches were applied by this scripted demonstration.")),
 	];
 }
 
 /** Real artifact files exercise the same manifest validation and patch IPC as the package. No git writes. */
 async function orchestratorFanout(id: string, scenario: string, signal: AbortSignal | undefined, update: ((value: any) => void) | undefined) {
 	const eight = scenario.includes("eight");
+	const queued = scenario.includes("queued");
+	const limited = scenario.includes("limit");
 	const children = eight ? Array.from({ length: 8 }, (_, index) => ({ ...REVIEWERS[index % REVIEWERS.length]!, label: `review-${index + 1}`, pace: 900 + index * 150 })) : WRITERS;
 	const lanes = children.map((child, index) => ({ key: child.label!, mode: !eight && index < 2 ? "mutation" : "review", claims: !eight && index < 2 ? [index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx"] : [] }));
 	// Where pi-subagents keeps temporary runs, so the host accepts it as the extension's own (extension-paths.ts).
@@ -343,11 +387,15 @@ async function orchestratorFanout(id: string, scenario: string, signal: AbortSig
 		const { finished, details } = fauxDetails(children, Math.max(0, elapsed - 1800), "workflow");
 		const results = details.results.map((result, index) => ({ ...result, ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
 		const snapshot = { ...details, results, preflight: { version: 1, coverage: "complete", lanes }, workflowGraph: { phases: [{ title: eight ? "Reviewing" : "Implementing", nodeIds: [] }] },
-			workflowChildren: { version: 1, workflowRunId: id, parentToolCallId: id, inventoryComplete: true, workflowState: finished ? "completed" : "running", children: children.map((child, index) => {
+			workflowChildren: { version: 1, workflowRunId: id, parentToolCallId: id, inventoryComplete: true, workflowState: finished ? "completed" : queued && elapsed < 1800 ? "queued" : "running", children: children.map((child, index) => {
 				const progress = details.progress[index]!;
 				return { childId: child.label, agent: child.agent, model: "scripted", state: elapsed < 1800 ? "pending" : finished ? (results[index]!.exitCode ? "failed" : "completed") : progress.status,
 					activity: { currentTool: progress.currentTool, toolCount: progress.toolCount, tokens: progress.tokens, durationMs: progress.durationMs } };
 			}) }, parallelHandoff: { version: 1, path: manifestPath } };
+		// A usage limit cuts the fan-out short once one child has finished: the others stop where they are.
+		if (limited && !finished && details.progress.some((progress) => progress.status === "completed")) {
+			return { content: [{ type: "text" as const, text: "usage_limit_reached: You've hit your ChatGPT usage limit." }], details: snapshot, isError: true };
+		}
 		const content = [{ type: "text" as const, text: finished ? "Scripted fan-out finished." : "(running...)" }];
 		if (finished) { await writeFile(manifestPath, JSON.stringify(manifest)); return { content, details: snapshot }; }
 		update?.({ content, details: snapshot });
@@ -540,20 +588,31 @@ export default function (pi: ExtensionAPI) {
 		execute: async (_id, params, signal, update) => {
 			if (params.workflow && params.options?.scenario) return orchestratorFanout(_id, params.options.scenario, signal, update);
 			if (params.agent === RESEARCHER.agent) {
-				setTimeout(() => {
+				const run = await fauxRun("faux-researcher");
+				setTimeout(async () => {
+					await run.status("complete");
 					pi.sendMessage(
 						{
 							customType: "subagent-notify",
 							content: `Background task completed: **${RESEARCHER.agent}**\n\n${RESEARCHER.output}\n\nSession file: /tmp/faux-researcher.jsonl\n\nParent action: Report the result.`,
 							display: false,
-							details: { runs: [{ runId: "faux-researcher", agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
+							details: { runs: [{ runId: run.id, asyncDir: run.asyncDir, agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
 						},
 						{ triggerTurn: true },
 					);
-				}, BACKGROUND_MS);
+				}, BACKGROUND_MS).unref?.();
 				return {
 					content: [{ type: "text", text: `Started ${RESEARCHER.agent} in the background.` }],
-					details: { mode: "single", asyncId: "faux-researcher", background: true, results: [] },
+					details: { mode: "single", runId: run.id, asyncId: run.id, asyncDir: run.asyncDir, background: true, results: [] },
+				};
+			}
+			if (params.agent === LOST_WORKER.agent && params.async) {
+				// No notice ever comes; the run's folder goes away as a killed or cleaned-up run's would.
+				const run = await fauxRun("faux-lost-worker");
+				setTimeout(() => void run.remove(), LOST_MS).unref?.();
+				return {
+					content: [{ type: "text", text: "Started worker in the background." }],
+					details: { mode: "single", runId: run.id, asyncId: run.id, asyncDir: run.asyncDir, background: true, results: [] },
 				};
 			}
 			const children = params.workflow ? REVIEWERS : [SCOUT];

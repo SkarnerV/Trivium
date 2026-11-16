@@ -53,3 +53,37 @@ test("the faux workflow exercises plan, waiting, failure, eight children, timeou
 		for (const root of roots) await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 	}
 });
+
+test("the faux workflow also queues, stops at a usage limit, and runs background children with real status files", async () => {
+	let execute: Function = () => {};
+	faux({
+		registerProvider: () => {},
+		sendMessage: () => {},
+		registerTool: (tool: { name: string; execute: Function }) => { if (tool.name === "subagent") execute = tool.execute; },
+	} as unknown as ExtensionAPI);
+	const roots = new Set<string>();
+	const { readRunStatus, stateFromStatus } = await import("../src/main/background-runs.ts");
+	try {
+		let queued = false;
+		await execute("faux-queued", { workflow: true, options: { scenario: "orchestrator queued" } }, undefined, (update: { details: any }) => {
+			if (update.details.parallelHandoff?.path) roots.add(dirname(update.details.parallelHandoff.path));
+			queued ||= subagentOf({ workflow: true }, update.details, "running").children.every((child) => child.queued);
+		});
+		assert.equal(queued, true, "children show queued while the workflow waits for a slot");
+		const limited = await execute("faux-limit", { workflow: true, options: { scenario: "orchestrator limit" } }, undefined, (update: { details: any }) => {
+			if (update.details.parallelHandoff?.path) roots.add(dirname(update.details.parallelHandoff.path));
+		});
+		assert.equal(limited.isError, true);
+		const view = subagentOf({ workflow: true }, limited.details, "error");
+		assert.ok(view.children.some((child) => child.status === "done"));
+		assert.ok(view.children.some((child) => child.status === "stopped"));
+		for (const agent of ["researcher", "worker"]) {
+			const launch = await execute(`faux-${agent}`, { agent, task: "x", async: true });
+			roots.add(dirname(dirname(launch.details.asyncDir)));
+			const status = await readRunStatus(launch.details.asyncDir, launch.details.asyncId);
+			assert.equal(stateFromStatus(status, { now: Date.now(), bootedAt: 0, alive: (pid) => pid === process.pid }), "running", agent);
+		}
+	} finally {
+		for (const root of roots) await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});

@@ -74,6 +74,15 @@ that every unfinished child was stopped.
   out, and a runner that dies without writing leaves a dead pid. The cases it cannot settle (a pid reused by
   another process during the same boot) are bounded by the staleness rule.
 
+## Queued children
+
+`workflowChildren.children[].state` is `pending | running | completed | failed | paused | stopped | rejected | detached`
+(`src/shared/types.d.ts`, `WorkflowChildSummary`; built in `src/workflows/workflow-child-summary.js`). There is no
+per-child "waiting for a concurrency slot" state: a child not yet launched is `pending`, whether it waits for a slot or
+has simply not started. The only queued signal is the whole workflow's `workflowState: "queued"`. The host marks a
+workflow's pending children `queued` only then, and the row reads "Queued · starts when a slot frees"; otherwise a
+pending child reads "Starting". The foreground `progress[].status` (`AgentProgress`) has no queued value either.
+
 ## Where handoff files may be
 
 `src/main/extension-paths.ts` lists the roots with the functions that define them: `TEMP_ROOT_DIR`, `ASYNC_DIR` and
@@ -112,9 +121,27 @@ agent, a review fails, and a manifest contains one captured two-file patch and o
 worktree. Open Agents and click `api` or `web`. Type `orchestrator eight` for eight rows including a failed child
 and a timeout. `subagent`, `format`, `server`, `slow`, `hang` and `diagram` keep their previous scripted stories.
 The composer mode picker can be changed independently; the faux model follows its script, not the guidance.
+`orchestrator queued` holds the children queued for the first two seconds, then runs them. `orchestrator limit`
+stops the fan-out once one child finishes and ends the run with a ChatGPT usage-limit error, for the run-level note.
+`orchestrator background` starts a researcher and a worker in the background, each with a real status file in a
+`pi-subagents-trivium-faux-*` temp folder: the researcher marks its run complete and reports back after 6 seconds;
+the worker never reports, and its folder is removed after 9 seconds, so about 15 seconds after launch (the launch
+grace) its row reads "Not running · its result didn't arrive here" and the session can be unloaded again.
 Use a scratch project for the existing scenarios that edit files or launch a service.
 
 ## Not verified on a real run
+
+- That a real background run's `status.json` is written where its launch's `asyncDir` says, and that the host's
+  read of it (state, pid, `lastUpdate`) tracks a real runner across its life, an app restart and a killed runner.
+  The code paths were read in the package and exercised with faux status files; no real detached runner ran.
+- That real handoff manifests and patches fall under the accepted roots on Windows and macOS, including the temp
+  directory's short-name form on Windows (`C:UsersABCDEF~1…`), which the check resolves with `realpath`, and
+  a session folder outside the agent directory.
+- Whether a real workflow ever reports `workflowState: "queued"` for a foreground fan-out, so whether "Queued" shows
+  in practice. Only the faux run showed it.
+- That `failedTool`, `outputPartial` and `recentTools[].endMs` arrive in real details for the children that have them.
+- A real usage limit during a fan-out: whether the children of a foreground workflow end as stopped, as the run-level
+  note assumes, or as failed.
 
 - Provider-backed model compliance with the compact orchestration prompt, including scout-first splitting,
   preflight coverage, disjoint writer claims, foreground phases, concurrency and serial application/checks.

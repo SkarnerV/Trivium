@@ -375,6 +375,7 @@ export interface FileReview {
 }
 
 export interface SessionView {
+	workMode?: import("./work-modes.ts").WorkModeId;
 	path: string;
 	id: string;
 	cwd: string;
@@ -496,6 +497,7 @@ export interface AppProfileInfo {
 }
 
 export interface AppSettings {
+	workMode?: import("./work-modes.ts").WorkModeId;
 	/** Model for new sessions in this app, as provider/id. Unset uses pi's default. */
 	model?: string;
 	thinkingLevel?: string;
@@ -931,6 +933,7 @@ export interface UsageReport {
 }
 
 export interface TriviumApi {
+	setWorkMode(path: string, mode: import("./work-modes.ts").WorkModeId): Promise<void>;
 	subagentPatch(path: string, id: string): Promise<ChildPatchFile[]>;
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;

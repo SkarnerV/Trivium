@@ -67,6 +67,8 @@ import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { registerRequiredChildExtensions } from "pi-subagents/required-child-extensions";
 import { launchesSubagents } from "./subagents.ts";
 import { HandoffCache } from "./handoffs.ts";
+import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
+import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "./git.ts";
@@ -195,6 +197,7 @@ function titleOf(text: string | undefined): string {
 export class SessionHost {
 	private live = new Map<string, Live>();
 	private appIndex: Record<string, AppId> = {};
+	private workModes: WorkModeIndex;
 	/** Sessions unloaded before their first message was saved, so they can start again where they were. */
 	private unsaved = new Map<string, { app: AppId; cwd: string }>();
 	private summaries: SessionSummary[] = [];
@@ -235,6 +238,7 @@ export class SessionHost {
 		this.emit = options.emit;
 		this.broker = options.broker;
 		this.indexFile = options.indexFile;
+		this.workModes = new WorkModeIndex(join(dirname(options.indexFile), "session-work-modes.json"));
 		this.settings = options.settings;
 		this.onDone = options.onDone;
 		this.thumbnail = options.thumbnail;
@@ -247,6 +251,13 @@ export class SessionHost {
 
 	subagentPatch(path: string, id: string) {
 		return this.require(path).handoffs.patch(id);
+	}
+
+	async setWorkMode(path: string, mode: WorkModeId): Promise<void> {
+		const live = this.require(path);
+		if (live.app !== "code" || isChat(live.cwd) || !isWorkMode(mode)) return;
+		await this.workModes.set(live.session.sessionId, mode);
+		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
 	}
 
 	async init(): Promise<void> {
@@ -356,7 +367,10 @@ export class SessionHost {
 	async newSession(input: NewSessionInput): Promise<SessionView> {
 		const cwd = input.cwd ?? chatsDir;
 		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
-		const live = await this.start(input.app, cwd, SessionManager.create(cwd), true);
+		const manager = SessionManager.create(cwd);
+		const mode = this.settings.app(input.app).workMode;
+		if (input.app === "code" && input.cwd && isWorkMode(mode)) await this.workModes.set(manager.getSessionId(), mode);
+		const live = await this.start(input.app, cwd, manager, true);
 		this.appIndex[live.session.sessionId] = input.app;
 		await this.saveIndex();
 		if (input.message?.trim()) await this.send(live.path, input.message, "prompt");
@@ -437,6 +451,7 @@ export class SessionHost {
 			manager = SessionManager.create(live.cwd, source.getSessionDir());
 			manager.newSession({ parentSession: path });
 		}
+		await this.workModes.set(manager.getSessionId(), this.workModes.get(live.session.sessionId));
 		const forked = await this.start(live.app, manager.getCwd(), manager);
 		this.appIndex[forked.session.sessionId] = live.app;
 		await this.saveIndex();
@@ -732,6 +747,7 @@ export class SessionHost {
 			if (id) {
 				ids.add(id);
 				delete this.appIndex[id];
+				await this.workModes.delete(id);
 				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
 				// And what it kept to tell what the session's commands changed.
 				for (const kept of ["git", "blobs"]) await rm(join(triviumDir, "changes", `${id}.${kept}`), { recursive: true, force: true, maxRetries: 3 });
@@ -1105,6 +1121,7 @@ export class SessionHost {
 					});
 				},
 				...(app === "code" ? [{ name: "permissions", factory: permissionGate(() => this.permissionMode()) }] : []),
+				...(app === "code" && !isChat(cwd) ? [{ name: "work-mode", factory: workModeExtension(() => this.workModes.get(sessionManager.getSessionId())) }] : []),
 				// After the gate, so the project is snapshotted only for a command that was allowed to run.
 				(pi) => {
 					const snapshotted = new Set<string>();
@@ -1356,6 +1373,7 @@ export class SessionHost {
 			queue: this.queueOf(live),
 			changes,
 			permissions: this.permissionsOf(live.app),
+			...(live.app === "code" && !isChat(live.cwd) ? { workMode: this.workModes.get(session.sessionId) } : {}),
 		};
 	}
 

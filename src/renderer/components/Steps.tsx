@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Run, Step } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { useNow } from "../hooks.ts";
@@ -128,11 +128,13 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 }
 
 /**
- * A run as it happened: what the agent said along the way, in full, with the steps it took between folded
- * into groups. A run it worked through without a word is one group, opened from the line that times it.
+ * A run as it happened, with tool calls grouped between progress notes. Once the answer is finished,
+ * the whole history folds into the line that times it.
  */
 export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+	const [expanded, setExpanded] = useState(false);
+	useEffect(() => setExpanded(false), [live]);
 	const preview = usePreviewOpener();
 	const now = useNow(live ? 1000 : 0);
 	const blocks = blocksOf(run.steps);
@@ -152,6 +154,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const folds = (group: { steps: Step[] }) => groups.length === 1 || group.steps.length > 1;
 	const foldable = groups.filter(folds);
 	const allOpen = foldable.length > 0 && foldable.every((group) => opened.has(group.id));
+	const finished = !live && Boolean(run.answer);
 	const toggle = (id: string) =>
 		setOpened((before) => {
 			const next = new Set(before);
@@ -160,17 +163,25 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 		});
 	return (
 		<>
-			{/* With several groups, each opens on its own and this line opens or closes them all. */}
-			<button type="button" className="steps-toggle" aria-expanded={allOpen} onClick={() => setOpened(allOpen ? new Set() : new Set(foldable.map((group) => group.id)))}>
+			{/* After the answer, this line also folds the progress notes away. */}
+			<button
+				type="button"
+				className="steps-toggle"
+				aria-expanded={finished ? expanded : allOpen}
+				onClick={() => {
+					if (finished) setExpanded(!expanded);
+					setOpened(!finished && allOpen ? new Set() : new Set(foldable.map((group) => group.id)));
+				}}
+			>
 				<span>
 					<strong className={live ? "shimmer" : undefined}>{t(live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked")}</strong>
 					{total && ` ${t("for {time}", { time: total })}`}
 				</span>
 				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
 				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
-				{foldable.length > 0 && <Chevron open={allOpen} />}
+				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
 			</button>
-			{blocks.map((block) => {
+			{(!finished || expanded) && blocks.map((block) => {
 				if (block.kind === "note") {
 					return (
 						<div key={block.id} className="answer">

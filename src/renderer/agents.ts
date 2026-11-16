@@ -1,23 +1,8 @@
 import type { Run, Subagent } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
+import { agentSteps } from "../shared/agent-counts.ts";
 
-export function agentCounts(runs: Run[] = []): { running: number; waiting: number } {
-	const children = agentSteps(runs).filter((step) => step.status !== "error").flatMap((step) => step.subagent?.children ?? []);
-	return {
-		running: children.filter((child) => child.status === "running" || child.status === "pending").length,
-		waiting: children.filter((child) => child.waitingOn === "main").length,
-	};
-}
-
-/** Pair detached launch receipts with grouped completion notices, without inventing live progress. */
-export function agentSteps(runs: Run[]) {
-	const notices = runs.flatMap((run) => run.notice?.runIds?.map((id) => ({ id, notice: run.notice! })) ?? []);
-	return runs.flatMap((run) => run.steps).filter((step) => step.subagent).map((step) => {
-		const notice = notices.find((item) => item.id === step.subagent?.asyncId)?.notice;
-		if (!notice) return step;
-		return { ...step, subagent: { ...step.subagent!, children: step.subagent!.children.map((child) => ({ ...child, status: notice.status === "completed" ? "done" as const : notice.status === "stopped" ? "stopped" as const : "error" as const, output: notice.text, durationMs: notice.durationMs })) } };
-	});
-}
+export { agentCounts, agentSteps } from "../shared/agent-counts.ts";
 
 /** Opening the panel acknowledges the state seen, not failures that may arrive in a later phase. */
 export function agentAttentionKey(runs: Run[]): string {

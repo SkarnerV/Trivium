@@ -54,6 +54,7 @@ interface DetailsLike {
 	results?: unknown;
 	progress?: unknown;
 	asyncId?: unknown;
+	asyncDir?: unknown;
 	background?: unknown;
 }
 
@@ -205,6 +206,7 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 	return {
 		children, background,
 		...(typeof info.asyncId === "string" ? { asyncId: info.asyncId } : {}),
+		...(typeof info.asyncDir === "string" ? { asyncDir: info.asyncDir } : {}),
 		...(lanes.length ? { preflight: { lanes } } : {}),
 		...(phases.length ? { phases } : {}),
 		...(typeof record(info.parallelHandoff).path === "string" ? { handoffPath: str(record(info.parallelHandoff).path) } : {}),

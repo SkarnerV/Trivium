@@ -92,6 +92,8 @@ export interface Step {
 
 /** One child agent started by the subagent tool. */
 export interface SubagentChild {
+	/** A background child that stopped running without its result reaching this session. */
+	unreported?: boolean;
 	childId?: string;
 	role?: "mutation" | "review" | "scout" | "gate";
 	worktree?: boolean;
@@ -120,8 +122,15 @@ export interface SubagentChild {
 	error?: string;
 }
 
+/** What a background run is doing, from its status file; `gone` means there is no evidence it is still running. */
+export type BackgroundState = "running" | "done" | "error" | "stopped" | "gone";
+
 export interface Subagent {
 	asyncId?: string;
+	/** The extension's folder for a background run, where its status file is. */
+	asyncDir?: string;
+	/** Set by the host for a background launch: whether its run is still going, and how it ended. */
+	backgroundState?: BackgroundState;
 	preflight?: { lanes: SubagentLane[] };
 	phases?: string[];
 	handoffPath?: string;

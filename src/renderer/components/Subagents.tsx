@@ -151,6 +151,8 @@ export function activity(child: SubagentChild): { text: string; tone: "" | "done
 			tone: "warn",
 		};
 	}
+	// A background child whose run ended, or vanished, without its result reaching this session.
+	if (child.unreported) return { text: t("Not running · its result didn't arrive here"), tone: "warn" };
 	if (child.status === "stopped") return { text: t("Stopped"), tone: "warn" };
 	if (child.status === "done" && child.handoff?.error) return { text: t("Done · changes not captured"), tone: "warn" };
 	if (child.status === "done" && child.handoff?.changed === false) return { text: t("Done · no changes"), tone: "done" };

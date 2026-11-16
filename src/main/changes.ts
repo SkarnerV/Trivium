@@ -100,7 +100,11 @@ export class ChangeTracker {
 	private told = false;
 	private delegations = 0;
 
-	/** Keep the oldest command baseline while detached children can still edit the project. */
+	/**
+	 * Keep the oldest command baseline while subagents can still edit the project. Each call is matched by one
+	 * afterSubagents(): when a foreground launch ends, or when a background launch's window closes, which
+	 * background-runs.ts bounds in time and which never outlives the process.
+	 */
 	async beforeSubagents(): Promise<void> {
 		await this.beforeCommand();
 		this.delegations++;

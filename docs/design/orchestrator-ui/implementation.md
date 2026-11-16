@@ -50,6 +50,39 @@ The root `usageBudget` contract in `src/extension/schemas.js` blocks new launche
 children. The run-level notice therefore says the budget ran out and completed work is kept; it does not claim
 that every unfinished child was stopped.
 
+## Background children and their completion notices
+
+- Launch: `src/runs/background/async-execution.js` returns `details: { asyncId: id, runId: id, asyncDir, ... }` for both
+  a single background child and a background workflow (the two `details:` returns near the end of the file).
+- Notice: `src/runs/background/notify.js`. `buildCompletionDetails` reads the run's result file and sets
+  `runId` from `result.runId ?? result.id`, which is the same `id` as the launch's `asyncId`, plus `asyncDir`,
+  `status`, `durationMs`, `handoffPath` and `childRuns`. `sendCompletion` sends
+  `details: { runs: details.map(notifyRunDetails) }`, one entry per run in a grouped notice. So
+  `details.runs[].runId` equals the launch's `asyncId`, and that is what the host pairs on
+  (`noticeRunIds` in `delegation-hooks.ts`). A workflow's children appear under `childRuns` with their own run ids;
+  they are not paired separately, since the launch step is the workflow.
+- Evidence of life: `<asyncDir>/status.json` (`docs/observability.md`, "Async run artifacts"). `subagent-runner.js`
+  writes `state` (`queued | running | complete | failed | partial | paused | stopped | rejected`), the runner's `pid`,
+  `startedAt` and `lastUpdate`. The extension's own `stale-run-reconciler.js` (`reconcileAsyncRun`) treats a
+  `running` status with a dead pid as failed, and one whose pid is alive but whose status is older than 24 hours as
+  unverifiable. The host does the read-only part of that, without repairing the file: `background-runs.ts`,
+  `stateFromStatus`. It reads the file only when `asyncDir` resolves to a folder named for the run directly in an
+  `async-subagent-runs` folder under the extension's temp root. The rule, the 15-second launch grace, the 6-hour
+  staleness bound and the 30-minute Changes window are documented there and tested in
+  `scripts/background-runs.test.ts`.
+- The status file is reliable for this purpose because the runner writes it on every state change and on its way
+  out, and a runner that dies without writing leaves a dead pid. The cases it cannot settle (a pid reused by
+  another process during the same boot) are bounded by the staleness rule.
+
+## Where handoff files may be
+
+`src/main/extension-paths.ts` lists the roots with the functions that define them: `TEMP_ROOT_DIR`, `ASYNC_DIR` and
+`TEMP_ARTIFACTS_DIR` in `src/shared/types.js`; `getArtifactsDir` in `src/shared/artifacts.js` (`artifactDir` is
+`session`, `temp` or `project`, never a path); `parallelHandoffPath` in `src/runs/shared/parallel-handoff.js`; patch
+folders in `subagent-runner.js` (`<asyncDir>/worktree-diffs/step-<n>`) and `subagent-executor.js`
+(`<artifactsDir>/worktree-diffs/<runId>`). The temp root's scope segment depends on the user name, so any
+`pi-subagents-*` folder directly in the temp directory is accepted.
+
 ## Validation
 
 - TypeScript: `npm run check`.

@@ -1,5 +1,6 @@
 /** Japanese, keyed by the English text the code passes to t(). */
 export default {
+	"Not running · its result didn't arrive here": "実行されていません · 結果はここに届きませんでした",
 	"The patch is not where subagents keep their files.": "パッチがサブエージェントのファイル保存場所にありません。",
 	"Handoff exceeds the display limit": "引き継ぎファイルが表示上限を超えています",
 	"Unknown child patch": "不明な子エージェントのパッチ",

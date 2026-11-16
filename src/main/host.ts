@@ -55,7 +55,7 @@ import type {
 	SlashCommand,
 	TrustChoice,
 } from "../shared/protocol.ts";
-import { APP_IDS } from "../shared/protocol.ts";
+import { APP_IDS, type Run } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, skillDir, triviumDir } from "./apps.ts";
 import * as skillFiles from "./skills.ts";
@@ -65,7 +65,8 @@ import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { registerRequiredChildExtensions } from "pi-subagents/required-child-extensions";
-import { launchesSubagents } from "./subagents.ts";
+import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
+import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
 import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
@@ -81,6 +82,8 @@ import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTrack
 
 interface Live {
 	handoffs: HandoffCache;
+	background: BackgroundRuns;
+	agentWatch: AgentCountWatch;
 	handoffSeen: Set<string>;
 	path: string;
 	app: AppId;
@@ -323,11 +326,19 @@ export class SessionHost {
 
 	refreshAttention(): void { this.scheduleList(); }
 
+	/** Counted as the renderer counts: a background child only while there is evidence it runs (background-runs.ts). */
 	private attentionOf(live: Live) {
-		const runs = live.tracker.all();
-		const completed = new Set(runs.flatMap((run) => run.notice?.runIds ?? []));
-		const children = runs.flatMap((run) => run.steps).filter((step) => step.status === "running" || (step.subagent?.background && !completed.has(step.subagent.asyncId ?? ""))).flatMap((step) => step.subagent?.children ?? []);
-		return { needsYou: this.broker.hasPending(live.path), agents: { running: children.filter((child) => child.status === "running" || child.status === "pending").length, waiting: children.filter((child) => child.waitingOn === "main").length } };
+		return { needsYou: this.broker.hasPending(live.path), agents: agentsOf(live.tracker.all(), live.background) };
+	}
+
+	/** A child started, finished or began waiting: refresh the list, whose counts the sidebar shows when off screen. */
+	private noteAgents(live: Live): void {
+		if (live.app === "code" && live.agentWatch.changed(this.attentionOf(live).agents)) this.scheduleList();
+	}
+
+	/** What the views show beyond the transcript: captured handoffs, and whether background runs still go. */
+	private decorate(live: Live, runs: Run[]): Run[] {
+		return markBackground(live.handoffs.attach(runs), live.background);
 	}
 
 	recentProjects(): string[] {
@@ -782,6 +793,7 @@ export class SessionHost {
 		live.session.dispose();
 		// Reopening reads the manifests again from the session's history; a deleted session's patches go with it.
 		live.handoffs.clear();
+		live.background.dispose();
 		this.live.delete(live.path);
 		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: live.app === "code" ? this.workModes.get(live.session.sessionId) : undefined });
 	}
@@ -1126,6 +1138,22 @@ export class SessionHost {
 			const command = (event.input as { command?: unknown }).command;
 			return (event.toolName === "bash" || event.toolName === "powershell") && typeof command === "string" && !onlyReads(command);
 		};
+		const emitChanges = async () => {
+			const live = this.live.get(sessionPath);
+			if (live) await this.emitChanges(live);
+		};
+		// Background launches: whether each still runs, and the window in which its edits count as this session's.
+		const background = new BackgroundRuns({
+			closeWindow: async () => {
+				if (await changes.afterSubagents()) await emitChanges().catch(() => {});
+			},
+			onChange: () => {
+				const live = this.live.get(sessionPath);
+				if (!live) return;
+				void live.changes.list().then((list) => this.emit({ type: "view", view: this.view(live, list) }), () => {});
+				this.noteAgents(live);
+			},
+		});
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
 			sessionPath: () => sessionPath,
 			factories: [
@@ -1141,46 +1169,23 @@ export class SessionHost {
 				...(app === "code" ? [{ name: "permissions", factory: permissionGate(() => this.permissionMode()) }] : []),
 				...(app === "code" && !isChat(cwd) ? [{ name: "work-mode", factory: workModeExtension(() => this.workModes.get(sessionManager.getSessionId())) }] : []),
 				// After the gate, so the project is snapshotted only for a command that was allowed to run.
-				(pi) => {
-					const snapshotted = new Set<string>();
-					const delegated = new Set<string>();
-					const background = new Set<string>();
-					pi.on("tool_call", async (event) => {
-						if (app === "code" && launchesSubagents(event.toolName, event.input as Record<string, unknown>)) {
-							delegated.add(event.toolCallId);
-							await changes.beforeSubagents();
-							return;
-						}
-						if (!changing(event)) return;
-						snapshotted.add(event.toolCallId);
-						await changes.beforeCommand();
-					});
-					pi.on("tool_result", async (event) => {
-						if (event.toolName === "subagent") await handoffs.capture(event.details);
-						if (delegated.delete(event.toolCallId)) {
-							const details = event.details as { asyncId?: unknown; background?: unknown } | undefined;
-							if (typeof details?.asyncId === "string") background.add(details.asyncId);
-							else await changes.afterSubagents();
-							const live = this.live.get(sessionPath);
-							if (live) await this.emitChanges(live);
-						}
-						if (!snapshotted.delete(event.toolCallId)) return;
+				delegationHooks({
+					app,
+					changes,
+					handoffs,
+					background,
+					changing,
+					afterSubagents: () => changes.afterSubagents(),
+					onChanges: emitChanges,
+					onNotice: async () => {
 						const live = this.live.get(sessionPath);
-						if ((await changes.afterCommand()) && live) await this.emitChanges(live).catch(() => {});
-					});
-					pi.on("message_end", async (event) => {
-						if (event.message.role !== "custom" || event.message.customType !== "subagent-notify") return;
-						const details = event.message.details as { id?: unknown; asyncId?: unknown; runId?: unknown; runs?: { runId?: unknown }[] } | undefined;
-						await handoffs.capture(details);
-						const ids = [details?.id, details?.asyncId, details?.runId, ...(Array.isArray(details?.runs) ? details.runs.map((run) => run?.runId) : [])];
-						for (const id of new Set(ids)) if (typeof id === "string" && background.delete(id)) await changes.afterSubagents();
-						const live = this.live.get(sessionPath);
-						if (live) {
-							await this.emitChanges(live);
-							this.emit({ type: "view", view: this.view(live, await changes.list()) });
-						}
-					});
-				},
+						if (!live) return;
+						await this.emitChanges(live);
+						this.emit({ type: "view", view: this.view(live, await changes.list()) });
+						// The sidebar counts this session's agents too, also while it is not on screen.
+						this.noteAgents(live);
+					},
+				}),
 			],
 		});
 		// Global extensions load first; project resources only once the project is trusted.
@@ -1212,6 +1217,8 @@ export class SessionHost {
 		sessionPath = path;
 		const live: Live = {
 			handoffs,
+			background,
+			agentWatch: new AgentCountWatch(),
 			handoffSeen: new Set(),
 			path,
 			app,
@@ -1229,6 +1236,8 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
+		// Launches in the history whose result never arrived: read their status, and never reopen a Changes window.
+		await background.restore(live.tracker.all());
 		let required: ReturnType<typeof registerRequiredChildExtensions> | undefined;
 		try {
 			// Native pi children must load the gate. External CLI agents and remote machines cannot load an extension;
@@ -1248,6 +1257,7 @@ export class SessionHost {
 			});
 		} catch (error) {
 			required?.dispose();
+			background.dispose();
 			this.live.delete(path);
 			session.dispose();
 			throw error;
@@ -1274,6 +1284,9 @@ export class SessionHost {
 		// Before the tracker, so the finished reply it shows carries its first token's time.
 		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
+		if ((event.type === "tool_execution_start" || event.type === "tool_execution_update" || event.type === "tool_execution_end") && event.toolName === "subagent") {
+			this.noteAgents(live);
+		}
 		if (event.type === "tool_execution_update" && event.toolName === "subagent") {
 			const details = (event.partialResult as { details?: { parallelHandoff?: { path?: unknown } } } | undefined)?.details;
 			const path = details?.parallelHandoff?.path;
@@ -1358,10 +1371,10 @@ export class SessionHost {
 		live.flushTimer = undefined;
 		const current = live.tracker.current();
 		if (!current) return;
-		live.handoffs.attach([current.run]);
+		this.decorate(live, [current.run]);
 		// A run that started since the last flush means earlier runs may have changed too.
 		if (current.index > live.sentRuns) {
-			const all = live.handoffs.attach(live.tracker.all());
+			const all = this.decorate(live, live.tracker.all());
 			for (let index = live.sentRuns; index < all.length; index++) {
 				this.emit({ type: "run", path: live.path, index, run: all[index]! });
 			}
@@ -1403,7 +1416,7 @@ export class SessionHost {
 			chat: isChat(live.cwd),
 			app: live.app,
 			title: this.titleFor(live),
-			runs: live.handoffs.attach(live.tracker.all()),
+			runs: this.decorate(live, live.tracker.all()),
 			running: live.running,
 			compacting: live.compacting,
 			// pi uses an "unknown" placeholder when no model is configured; show that as no model.

@@ -64,7 +64,7 @@ import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
-import { registerRequiredChildExtensions } from "pi-subagents/required-child-extensions";
+import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
 import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
@@ -374,7 +374,7 @@ export class SessionHost {
 			if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
 			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
 			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
-			if (unsaved?.workMode) await this.workModes.set(manager.getSessionId(), unsaved.workMode);
+			await this.workModes.reopened(manager.getSessionId(), unsaved?.workMode);
 			live = await this.start(app, manager.getCwd(), manager);
 			if (unsaved) {
 				this.unsaved.delete(path);
@@ -393,8 +393,7 @@ export class SessionHost {
 		const cwd = input.cwd ?? chatsDir;
 		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
 		const manager = SessionManager.create(cwd);
-		const mode = this.settings.app(input.app).workMode;
-		if (input.app === "code" && input.cwd && isWorkMode(mode)) await this.workModes.set(manager.getSessionId(), mode);
+		await this.workModes.created(manager.getSessionId(), input.app, Boolean(input.cwd), this.settings.app(input.app).workMode);
 		const live = await this.start(input.app, cwd, manager, true);
 		this.appIndex[live.session.sessionId] = input.app;
 		await this.saveIndex();
@@ -476,7 +475,7 @@ export class SessionHost {
 			manager = SessionManager.create(live.cwd, source.getSessionDir());
 			manager.newSession({ parentSession: path });
 		}
-		await this.workModes.set(manager.getSessionId(), this.workModes.get(live.session.sessionId));
+		await this.workModes.forked(live.session.sessionId, manager.getSessionId());
 		const forked = await this.start(live.app, manager.getCwd(), manager);
 		this.appIndex[forked.session.sessionId] = live.app;
 		await this.saveIndex();
@@ -795,7 +794,7 @@ export class SessionHost {
 		live.handoffs.clear();
 		live.background.dispose();
 		this.live.delete(live.path);
-		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: live.app === "code" ? this.workModes.get(live.session.sessionId) : undefined });
+		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: this.workModes.unsaved(live.session.sessionId, live.app) });
 	}
 
 	private unloadIdle(): void {
@@ -1236,34 +1235,30 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
-		// Launches in the history whose result never arrived: read their status, and never reopen a Changes window.
-		await background.restore(live.tracker.all());
-		let required: ReturnType<typeof registerRequiredChildExtensions> | undefined;
-		try {
-			// Native pi children must load the gate. External CLI agents and remote machines cannot load an extension;
-			// they launch as they did before children were gated, under their own permission systems, instead of being
-			// refused. Inside the try: a missing file must not leave this half-built session in `live`.
-			if (app === "code") {
-				required = registerRequiredChildExtensions({
-					sessionId: session.sessionId,
-					extensions: [{ id: "trivium-permissions", path: fileURLToPath(new URL("./child-permissions.mjs", import.meta.url)) }],
+		const release = await bindWithChildGate({
+			app,
+			sessionId: session.sessionId,
+			gatePath: fileURLToPath(new URL(`./${CHILD_GATE_FILE}`, import.meta.url)),
+			bind: async () => {
+				// Launches in the history whose result never arrived: read their status, never reopen a Changes window.
+				await background.restore(live.tracker.all());
+				await session.bindExtensions({
+					uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
+					mode: "rpc",
+					onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
 				});
-			}
-			// session_start may revive detached work, so the mandatory snapshot must exist before binding extensions.
-			await session.bindExtensions({
-				uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
-				mode: "rpc",
-				onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
-			});
-		} catch (error) {
-			required?.dispose();
-			background.dispose();
-			this.live.delete(path);
-			session.dispose();
-			throw error;
-		}
+			},
+			undo: () => {
+				background.dispose();
+				this.live.delete(path);
+				session.dispose();
+			},
+		});
 		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
-		live.unsubscribe = () => { unsubscribe(); required?.dispose(); };
+		live.unsubscribe = () => {
+			unsubscribe();
+			release();
+		};
 		return live;
 	}
 

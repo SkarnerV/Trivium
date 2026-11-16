@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { AppId } from "../shared/protocol.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 
 /** Compact standing instructions; parameter names follow pi-subagents 0.82.1's execution schema. */
@@ -47,6 +48,31 @@ export class WorkModeIndex {
 	delete(id: string): Promise<void> {
 		delete this.modes[id];
 		return this.save();
+	}
+
+	/**
+	 * A new session takes Settings → Code's default. Only Code sessions in a project have a mode: a chat has no
+	 * repository to split work over, and Research and Write never change behavior.
+	 */
+	async created(id: string, app: AppId, inProject: boolean, setting: unknown): Promise<void> {
+		if (app === "code" && inProject && isWorkMode(setting)) await this.set(id, setting);
+	}
+
+	/** A fork works as the session it came from. */
+	forked(from: string, to: string): Promise<void> {
+		return this.set(to, this.get(from));
+	}
+
+	/**
+	 * A session unloaded before its first message has no file yet, and opening it again makes a new session id. The
+	 * host keeps its mode with the rest of what it needs to start it again, and hands it back to reopened().
+	 */
+	unsaved(id: string, app: AppId): WorkModeId | undefined {
+		return app === "code" ? this.get(id) : undefined;
+	}
+
+	async reopened(id: string, mode: WorkModeId | undefined): Promise<void> {
+		if (mode) await this.set(id, mode);
 	}
 
 	private save(): Promise<void> {

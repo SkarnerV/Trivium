@@ -6,6 +6,15 @@ const production = process.argv.includes("--production");
 export const dist = `${root}dist/`;
 
 export const bundles = {
+	childPermissions: {
+		entryPoints: [`${root}src/main/child-permissions.ts`],
+		outfile: `${dist}child-permissions.mjs`,
+		bundle: true,
+		platform: "node",
+		format: "esm",
+		target: "node22",
+		external: ["@earendil-works/*"],
+	},
 	// The pi SDK resolves its own package assets at runtime, so it stays external.
 	main: {
 		entryPoints: [`${root}src/main/main.ts`],

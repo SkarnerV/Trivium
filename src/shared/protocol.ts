@@ -90,12 +90,20 @@ export interface Step {
 
 /** One child agent started by the subagent tool. */
 export interface SubagentChild {
+	childId?: string;
+	role?: "mutation" | "review" | "scout" | "gate";
+	worktree?: boolean;
+	timedOut?: boolean;
+	waitingOn?: "main";
+	inputTokens?: number;
+	outputTokens?: number;
+	handoff?: ChildHandoff;
 	agent: string;
 	/** What it was asked to do. */
 	task: string;
 	/** The workflow's name for it, which tells apart children of the same agent, such as "tests". */
 	label?: string;
-	status: StepStatus | "pending";
+	status: StepStatus | "pending" | "stopped";
 	/** The tool it is using now, such as { tool: "read", target: "src/auth.ts" }. */
 	current?: { tool: string; target: string };
 	/** Its latest tool calls, oldest first. */
@@ -111,9 +119,39 @@ export interface SubagentChild {
 }
 
 export interface Subagent {
+	preflight?: { lanes: SubagentLane[] };
+	phases?: string[];
+	handoffPath?: string;
+	keptWorktrees?: { path: string; branch: string; reason: string }[];
+	budgetExhausted?: boolean;
 	children: SubagentChild[];
 	/** Started in the background: the step ends at launch, and the result arrives later as its own run. */
 	background: boolean;
+}
+
+export interface SubagentLane {
+	key: string;
+	mode?: "mutation" | "review" | "scout" | "gate";
+	claims?: string[];
+	decision?: string;
+	expectedOutput?: string;
+	independence?: string;
+}
+
+export interface ChildHandoff {
+	id: string;
+	path: string;
+	branch: string;
+	changed: boolean;
+	filesChanged: number;
+	insertions: number;
+	deletions: number;
+	error?: string;
+	files: string[];
+}
+
+export interface ChildPatchFile extends GitDiff {
+	file: string;
 }
 
 /** A background subagent's result or a background command's end, which starts a run of its own instead of a user message. */
@@ -893,6 +931,7 @@ export interface UsageReport {
 }
 
 export interface TriviumApi {
+	subagentPatch(path: string, id: string): Promise<ChildPatchFile[]>;
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;
 	windowMinimize(): Promise<void>;

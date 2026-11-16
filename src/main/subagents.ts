@@ -1,4 +1,4 @@
-import type { Step, Subagent, SubagentChild, SubagentNotice } from "../shared/protocol.ts";
+import type { Step, Subagent, SubagentChild, SubagentLane, SubagentNotice } from "../shared/protocol.ts";
 import { commandNotice } from "./long-commands.ts";
 
 /**
@@ -28,6 +28,7 @@ interface ProgressLike {
 }
 
 interface ResultLike {
+	timedOut?: unknown;
 	index?: unknown;
 	agent?: unknown;
 	task?: unknown;
@@ -44,10 +45,32 @@ interface ResultLike {
 }
 
 interface DetailsLike {
+	workflowChildren?: unknown;
+	preflight?: unknown;
+	workflowGraph?: unknown;
+	parallelHandoff?: unknown;
+	usageBudget?: unknown;
+	terminalOutcome?: unknown;
 	results?: unknown;
 	progress?: unknown;
 	asyncId?: unknown;
 	background?: unknown;
+}
+
+/** Details are extension-owned JSON, including nested objects that may be missing or malformed. */
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function lanesOf(value: unknown): SubagentLane[] {
+	return list<Record<string, unknown>>(record(value).lanes).filter((lane) => typeof lane.key === "string").map((lane) => ({
+		key: str(lane.key),
+		mode: ["mutation", "review", "scout", "gate"].includes(str(lane.mode)) ? lane.mode as SubagentLane["mode"] : undefined,
+		claims: Array.isArray(lane.claims) ? lane.claims.filter((item): item is string => typeof item === "string") : undefined,
+		decision: str(lane.decision) || undefined,
+		expectedOutput: str(lane.expectedOutput) || undefined,
+		independence: str(lane.independence) || undefined,
+	}));
 }
 
 function str(value: unknown): string {
@@ -95,6 +118,7 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const usageTokens = (num(usage?.input) ?? 0) + (num(usage?.output) ?? 0);
 	const context = str(result?.context);
 	return {
+		timedOut: result?.timedOut === true || undefined,
 		agent: str(result?.agent) || str(progress?.agent) || "agent",
 		task: str(result?.task) || str(progress?.task),
 		label: str(result?.workflowKey) || undefined,
@@ -138,7 +162,45 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 			tools: 0,
 		});
 	}
-	return { children, background };
+	const lanes = lanesOf(info.preflight ?? record(args.options).preflight);
+	const workflow = list<Record<string, unknown>>(record(info.workflowChildren).children).filter((item) => typeof item.childId === "string");
+	if (workflow.length || lanes.length) {
+		const ordered = [...lanes.map((lane) => lane.key), ...workflow.map((item) => str(item.childId)), ...children.map((item) => item.label).filter((key): key is string => Boolean(key))];
+		const merged: SubagentChild[] = [];
+		for (const key of new Set(ordered)) {
+			const live = workflow.find((item) => item.childId === key);
+			const lane = lanes.find((item) => item.key === key);
+			const existing = children.find((item) => item.label === key);
+			const activity = record(live?.activity);
+			const state = str(live?.state);
+			const status = state === "completed" ? "done" : state === "failed" || state === "rejected" ? "error" : state === "stopped" ? "stopped" : state === "pending" ? "pending" : state ? "running" : undefined;
+			merged.push({
+				...(existing ?? { agent: str(live?.agent) || "agent", task: "", status: "pending", steps: [], tools: 0 }),
+				childId: key, label: key, role: lane?.mode,
+				status: status ?? existing?.status ?? "pending",
+				waitingOn: state === "paused" || activity.currentTool === "contact_supervisor" ? "main" : undefined,
+				current: typeof activity.currentTool === "string" ? { tool: activity.currentTool, target: "" } : existing?.current,
+				tools: num(activity.toolCount) ?? existing?.tools ?? 0,
+				tokens: num(activity.tokens) ?? existing?.tokens,
+				inputTokens: num(activity.inputTokens), outputTokens: num(activity.outputTokens),
+				durationMs: num(activity.durationMs) ?? existing?.durationMs,
+				model: str(live?.model) || existing?.model,
+			});
+		}
+		children.splice(0, children.length, ...merged);
+	}
+	for (const item of children) {
+		if (item.current?.tool === "contact_supervisor") item.waitingOn = "main";
+		item.role ??= /^(worker|delegate)$|writer$/.test(item.agent) ? "mutation" : item.agent === "reviewer" ? "review" : item.agent === "scout" ? "scout" : undefined;
+	}
+	const phases = list<Record<string, unknown>>(record(info.workflowGraph).phases).map((phase) => str(phase.title)).filter(Boolean);
+	return {
+		children, background,
+		...(lanes.length ? { preflight: { lanes } } : {}),
+		...(phases.length ? { phases } : {}),
+		...(typeof record(info.parallelHandoff).path === "string" ? { handoffPath: str(record(info.parallelHandoff).path) } : {}),
+		...(record(info.usageBudget).exhausted === true || record(info.terminalOutcome).reason === "budget_exhausted" ? { budgetExhausted: true } : {}),
+	};
 }
 
 function firstLine(text: string, max = 140): string {

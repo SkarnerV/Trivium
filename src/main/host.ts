@@ -64,6 +64,9 @@ import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
+import { registerRequiredChildExtensions } from "pi-subagents/required-child-extensions";
+import { launchesSubagents } from "./subagents.ts";
+import { HandoffCache } from "./handoffs.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "./git.ts";
@@ -74,6 +77,7 @@ import type { SettingsStore } from "./settings.ts";
 import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
+	handoffs: HandoffCache;
 	path: string;
 	app: AppId;
 	cwd: string;
@@ -239,6 +243,10 @@ export class SessionHost {
 
 	get runtime(): ModelRuntime {
 		return this.modelRuntime;
+	}
+
+	subagentPatch(path: string, id: string) {
+		return this.require(path).handoffs.patch(id);
 	}
 
 	async init(): Promise<void> {
@@ -1068,6 +1076,11 @@ export class SessionHost {
 
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
+		const handoffs = new HandoffCache();
+		const history = branchMessages(sessionManager.getBranch());
+		for (const message of history) {
+			if (message.role === "toolResult" || message.role === "custom") await handoffs.capture(message.details);
+		}
 		let sessionPath = "";
 		// Untrusted until the reload hook below decides: project settings must not apply before that.
 		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
@@ -1095,15 +1108,42 @@ export class SessionHost {
 				// After the gate, so the project is snapshotted only for a command that was allowed to run.
 				(pi) => {
 					const snapshotted = new Set<string>();
+					const delegated = new Set<string>();
+					const background = new Set<string>();
 					pi.on("tool_call", async (event) => {
+						if (app === "code" && launchesSubagents(event.toolName, event.input as Record<string, unknown>)) {
+							delegated.add(event.toolCallId);
+							await changes.beforeSubagents();
+							return;
+						}
 						if (!changing(event)) return;
 						snapshotted.add(event.toolCallId);
 						await changes.beforeCommand();
 					});
 					pi.on("tool_result", async (event) => {
+						if (event.toolName === "subagent") await handoffs.capture(event.details);
+						if (delegated.delete(event.toolCallId)) {
+							const details = event.details as { asyncId?: unknown; background?: unknown } | undefined;
+							if (typeof details?.asyncId === "string") background.add(details.asyncId);
+							else await changes.afterSubagents();
+							const live = this.live.get(sessionPath);
+							if (live) await this.emitChanges(live);
+						}
 						if (!snapshotted.delete(event.toolCallId)) return;
 						const live = this.live.get(sessionPath);
 						if ((await changes.afterCommand()) && live) await this.emitChanges(live).catch(() => {});
+					});
+					pi.on("message_end", async (event) => {
+						if (event.message.role !== "custom" || event.message.customType !== "subagent-notify") return;
+						const details = event.message.details as { id?: unknown; asyncId?: unknown; runId?: unknown } | undefined;
+						await handoffs.capture(details);
+						const id = [details?.id, details?.asyncId, details?.runId].find((id): id is string => typeof id === "string" && background.has(id));
+						if (id) { background.delete(id); await changes.afterSubagents(); }
+						const live = this.live.get(sessionPath);
+						if (live) {
+							await this.emitChanges(live);
+							this.emit({ type: "view", view: this.view(live, await changes.list()) });
+						}
 					});
 				},
 			],
@@ -1136,6 +1176,7 @@ export class SessionHost {
 		const path = session.sessionFile ?? `memory:${randomUUID()}`;
 		sessionPath = path;
 		const live: Live = {
+			handoffs,
 			path,
 			app,
 			cwd,
@@ -1157,7 +1198,13 @@ export class SessionHost {
 			mode: "rpc",
 			onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
 		});
-		live.unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+		const required = app === "code" ? registerRequiredChildExtensions({
+			sessionId: session.sessionId,
+			extensions: [{ id: "trivium-permissions", path: fileURLToPath(new URL("./child-permissions.mjs", import.meta.url)) }],
+			requireForAllRunners: true,
+		}) : undefined;
+		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+		live.unsubscribe = () => { unsubscribe(); required?.dispose(); };
 		return live;
 	}
 
@@ -1253,9 +1300,10 @@ export class SessionHost {
 		live.flushTimer = undefined;
 		const current = live.tracker.current();
 		if (!current) return;
+		live.handoffs.attach([current.run]);
 		// A run that started since the last flush means earlier runs may have changed too.
 		if (current.index > live.sentRuns) {
-			const all = live.tracker.all();
+			const all = live.handoffs.attach(live.tracker.all());
 			for (let index = live.sentRuns; index < all.length; index++) {
 				this.emit({ type: "run", path: live.path, index, run: all[index]! });
 			}
@@ -1297,7 +1345,7 @@ export class SessionHost {
 			chat: isChat(live.cwd),
 			app: live.app,
 			title: this.titleFor(live),
-			runs: live.tracker.all(),
+			runs: live.handoffs.attach(live.tracker.all()),
 			running: live.running,
 			compacting: live.compacting,
 			// pi uses an "unknown" placeholder when no model is configured; show that as no model.

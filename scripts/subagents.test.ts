@@ -8,6 +8,35 @@ type Event = Parameters<RunTracker["apply"]>[0];
 
 const scoutArgs = { agent: "scout", task: "Map the auth flow\nList risks" };
 
+test("workflow preflight precedes live children and preserves lane order", () => {
+	const plan = { version: 1, coverage: "complete", lanes: [{ key: "api", mode: "mutation", claims: ["src/api.ts"] }, { key: "review", mode: "review" }] };
+	const pending = subagentOf({ workflow: true, options: { preflight: plan } }, undefined, "running");
+	assert.deepEqual(pending.children.map((child) => [child.label, child.status]), [["api", "pending"], ["review", "pending"]]);
+	const live = subagentOf({ workflow: true }, {
+		preflight: plan,
+		workflowChildren: { children: [{ childId: "review", agent: "reviewer", state: "completed" }, { childId: "api", agent: "worker", state: "paused", activity: { currentTool: "contact_supervisor", toolCount: 4, tokens: 80 } }] },
+		workflowGraph: { phases: [{ title: "Implementation" }] },
+	}, "running");
+	assert.deepEqual(live.children.map((child) => child.label), ["api", "review"]);
+	assert.equal(live.children[0]!.waitingOn, "main");
+	assert.equal(live.children[0]!.tools, 4);
+	assert.equal(live.children[0]!.role, "mutation");
+	assert.equal(live.children[1]!.status, "done");
+	assert.deepEqual(live.phases, ["Implementation"]);
+});
+
+test("unknown workflow shapes keep the legacy rendering and malformed fields are ignored", () => {
+	for (const value of [null, false, [], "bad", 42, { lanes: [null, false, {}, { key: 3 }] }]) {
+		const result = subagentOf(scoutArgs, { preflight: value, workflowChildren: value, workflowGraph: value }, "running");
+		assert.equal(result.children.length, 1);
+		assert.equal(result.children[0]!.agent, "scout");
+	}
+	const result = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "unknown", claims: ["file", 9, null] }] }, results: [{ workflowKey: "a", agent: "worker", timedOut: true, exitCode: 1 }] }, "done");
+	assert.deepEqual(result.preflight?.lanes[0]!.claims, ["file"]);
+	assert.equal(result.preflight?.lanes[0]!.mode, undefined);
+	assert.equal(result.children[0]!.timedOut, true);
+});
+
 test("a subagent shows its agent and task before any progress arrives", () => {
 	const subagent = subagentOf(scoutArgs, undefined, "running");
 	assert.deepEqual(subagent.children.map((child) => [child.agent, child.status]), [["scout", "running"]]);

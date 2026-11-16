@@ -30,7 +30,13 @@ export function SubagentTarget({ subagent, fallback }: { subagent: Subagent; fal
 			<span className="ellipsis prose">
 				{only
 					? firstLine(only.task)
-					: subagent.preflight ? t("{phase} · {writers} writers, {readers} readers", { phase: phaseOf(subagent), writers: children.filter((child) => child.role === "mutation").length, readers: children.filter((child) => child.role !== "mutation").length }) : `${t("{n} agents", { n: children.length })}${agents.length > 3 ? ` · ${t("+{n} more", { n: agents.length - 3 })}` : ""}`}
+					: subagent.preflight
+						? t("{phase} · {writers} writers, {readers} readers", {
+								phase: phaseOf(subagent),
+								writers: children.filter((child) => child.role === "mutation").length,
+								readers: children.filter((child) => child.role !== "mutation").length,
+							})
+						: `${t("{n} agents", { n: children.length })}${agents.length > 3 ? ` · ${t("+{n} more", { n: agents.length - 3 })}` : ""}`}
 			</span>
 		</span>
 	);
@@ -40,8 +46,17 @@ function firstLine(text: string): string {
 	return text.split("\n").find((line) => line.trim())?.trim() ?? "";
 }
 
+/** The child's usage line: model, context, tokens in and out, tools and time, each only when reported. */
 function usage(child: SubagentChild): string {
-	return [child.model, child.context && t("{context} context", { context: child.context }), child.inputTokens !== undefined && t("{n} in", { n: tokens(child.inputTokens) }), child.outputTokens !== undefined && t("{n} out", { n: tokens(child.outputTokens) }), child.tokens && t("{n} tokens", { n: tokens(child.tokens) }), child.tools > 0 && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }), duration(child.durationMs)]
+	return [
+		child.model,
+		child.context && t("{context} context", { context: child.context }),
+		child.inputTokens !== undefined && t("{n} in", { n: tokens(child.inputTokens) }),
+		child.outputTokens !== undefined && t("{n} out", { n: tokens(child.outputTokens) }),
+		child.tokens && t("{n} tokens", { n: tokens(child.tokens) }),
+		child.tools > 0 && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }),
+		duration(child.durationMs),
+	]
 		.filter(Boolean)
 		.join(" · ");
 }
@@ -91,7 +106,16 @@ export function ChildDetail({ child, heading }: { child: SubagentChild; heading:
 				</>
 			)}
 			{meta && <div className="subagent-usage">{meta}</div>}
-			{child.handoff && <div className="subagent-usage">{t("{adds} added · {dels} removed · {files} files · {branch}", { adds: child.handoff.insertions, dels: child.handoff.deletions, files: child.handoff.filesChanged, branch: child.handoff.branch })}</div>}
+			{child.handoff && (
+				<div className="subagent-usage">
+					{t("{adds} added · {dels} removed · {files} files · {branch}", {
+						adds: child.handoff.insertions,
+						dels: child.handoff.deletions,
+						files: child.handoff.filesChanged,
+						branch: child.handoff.branch,
+					})}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -103,7 +127,15 @@ export function SubagentDetail({ subagent, stepId }: { subagent: Subagent; stepI
 		<div className="subagent-detail">
 			{subagent.background && <p className="subagent-note">{t("Running in the background. Its result arrives as its own message.")}</p>}
 			{subagent.children.map((child, index) => (
-				<div key={index}><ChildDetail child={child} heading={subagent.children.length > 1} />{path && stepId && child.handoff && <button type="button" className="btn ghost" onClick={() => showAgentChild(path, stepId, index)}>{t("Show changes in the panel")}</button>}</div>
+				<div key={index}>
+					<ChildDetail child={child} heading={subagent.children.length > 1} />
+					{/* Only where there is a panel: a chat session has no Agents tab to show the patch in. */}
+					{path && stepId && child.handoff && (
+						<button type="button" className="btn ghost" onClick={() => showAgentChild(path, stepId, index)}>
+							{t("Show changes in the panel")}
+						</button>
+					)}
+				</div>
 			))}
 		</div>
 	);
@@ -112,7 +144,13 @@ export function SubagentDetail({ subagent, stepId }: { subagent: Subagent; stepI
 /** What a running child is doing, in a few words: its tool now, or how it ended. */
 export function activity(child: SubagentChild): { text: string; tone: "" | "done" | "error" | "warn" } {
 	if (child.timedOut) return { text: t("Timed out after {time}", { time: duration(child.durationMs) }), tone: "error" };
-	if (child.waitingOn === "main") return { text: child.current?.target ? t("Waiting on the main agent · {question}", { question: firstLine(child.current.target) }) : t("Waiting on the main agent"), tone: "warn" };
+	if (child.waitingOn === "main") {
+		const question = child.current?.target;
+		return {
+			text: question ? t("Waiting on the main agent · {question}", { question: firstLine(question) }) : t("Waiting on the main agent"),
+			tone: "warn",
+		};
+	}
 	if (child.status === "stopped") return { text: t("Stopped"), tone: "warn" };
 	if (child.status === "done" && child.handoff?.error) return { text: t("Done · changes not captured"), tone: "warn" };
 	if (child.status === "done" && child.handoff?.changed === false) return { text: t("Done · no changes"), tone: "done" };
@@ -134,7 +172,16 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 	const running = step.status === "running";
 	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
 	const { children } = subagent;
-	if (children.length > 1 || subagent.preflight) return <><Fanout step={step} now={now} onChild={(index) => path ? showAgentChild(path, step.id, index) : setDetail(detail === index ? undefined : index)} />{detail !== undefined && children[detail] && <ChildDetail child={children[detail]!} heading />}</>;
+	// With a panel, a row opens the child there; without one (a chat), its detail opens in place.
+	const open = (index: number) => (path ? showAgentChild(path, step.id, index) : setDetail(detail === index ? undefined : index));
+	if (children.length > 1 || subagent.preflight) {
+		return (
+			<>
+				<Fanout step={step} now={now} onChild={open} />
+				{detail !== undefined && children[detail] && <ChildDetail child={children[detail]!} heading />}
+			</>
+		);
+	}
 	if (subagent.background || children.length <= 1) {
 		const child = children[0];
 		const counts =
@@ -155,10 +202,10 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 					<span className="live-cmd-time">{time}</span>
 				</div>
 				{child && running && !subagent.background && (
-						<button type="button" className="subagent-now subagent-single-open" onClick={() => path ? showAgentChild(path, step.id, 0) : setDetail(detail === 0 ? undefined : 0)} title={t("Show in the panel")}>
+					<button type="button" className="subagent-now subagent-single-open" onClick={() => open(0)} title={t("Show in the panel")}>
 						<span className="ellipsis">↳ {activity(child).text}</span>
 						{counts && <span className="subagent-now-count">{counts}</span>}
-						</button>
+					</button>
 				)}
 				{detail === 0 && child && <ChildDetail child={child} heading />}
 			</div>
@@ -167,12 +214,18 @@ export function SubagentLive({ step, now }: { step: Step; now: number }) {
 	return null;
 }
 
+/** Where a child works, in words: what the role glyph says to a screen reader and in its title. */
 export function childRole(child: SubagentChild): string {
 	return child.role === "mutation" ? t(child.worktree ? "Writes in its own worktree" : "Writes in the project folder") : t("Reads only");
 }
 
+/** A branch for a writer in its own worktree, a pen for one in the project folder, nothing for a reader. */
 export function ChildRole({ child }: { child: SubagentChild }) {
-	return <span className="subagent-role" title={childRole(child)} aria-label={childRole(child)}>{child.role === "mutation" && (child.worktree ? <BranchIcon size={11} /> : <PenIcon size={11} />)}</span>;
+	return (
+		<span className="subagent-role" title={childRole(child)} aria-label={childRole(child)}>
+			{child.role === "mutation" && (child.worktree ? <BranchIcon size={11} /> : <PenIcon size={11} />)}
+		</span>
+	);
 }
 
 /** All lanes stay in order; shape and words carry state independently of the segment colors. */
@@ -190,40 +243,130 @@ export function Fanout({ step, now, onChild }: { step: Step; now: number; onChil
 	const rejected = step.status === "error" && plan;
 	const dirtyRejected = rejected && /dirty|uncommitted|clean (?:working|work|source|folder|tree)/i.test(step.output ?? "");
 	const phase = phaseOf(subagent);
-	const summary = plan ? t("{phase} · {writers} writers, {readers} readers", { phase, writers: writers.length, readers: children.length - writers.length }) : t("{phase} · {finished} of {total} finished", { phase, finished, total: children.length });
-	return <div className={`live-cmd subagent-live fanout${plan ? " is-plan" : ""}${rejected ? " not-started" : ""}`} role="group" aria-label={summary}>
-		<div className="live-cmd-head">
-			<span className="live-dot" aria-hidden="true" />
-			{/* Announced when a count changes. The timer beside it stays out, or it would be read out every second. */}
-			<span className="live-cmd-prose" role="status" aria-live="polite">{summary}
-				{failed > 0 && <span className="steps-failed"> · {t("{n} failed", { n: failed })}</span>}
-				{waiting > 0 && <span className="warn"> · {t("{n} waiting on the main agent", { n: waiting })}</span>}
-				{stopped > 0 && <span className="warn"> · {t("{n} stopped", { n: stopped })}</span>}
-			</span>
-			<span className="live-cmd-time">{duration(step.durationMs ?? (step.startedAt ? now - step.startedAt : undefined))}</span>
+	const summary = plan
+		? t("{phase} · {writers} writers, {readers} readers", { phase, writers: writers.length, readers: children.length - writers.length })
+		: t("{phase} · {finished} of {total} finished", { phase, finished, total: children.length });
+	return (
+		<div
+			className={`live-cmd subagent-live fanout${plan ? " is-plan" : ""}${rejected ? " not-started" : ""}`}
+			role="group"
+			aria-label={summary}
+		>
+			<div className="live-cmd-head">
+				<span className="live-dot" aria-hidden="true" />
+				{/* Announced when a count changes. The timer beside it stays out, or it would be read out every second. */}
+				<span className="live-cmd-prose" role="status" aria-live="polite">
+					{summary}
+					{failed > 0 && <span className="steps-failed"> · {t("{n} failed", { n: failed })}</span>}
+					{waiting > 0 && <span className="warn"> · {t("{n} waiting on the main agent", { n: waiting })}</span>}
+					{stopped > 0 && <span className="warn"> · {t("{n} stopped", { n: stopped })}</span>}
+				</span>
+				<span className="live-cmd-time">{duration(step.durationMs ?? (step.startedAt ? now - step.startedAt : undefined))}</span>
+			</div>
+			<div className="fanout-bar" aria-hidden="true">
+				{children.map((child, index) => (
+					<i key={index} className={child.waitingOn ? "waiting" : child.status} />
+				))}
+			</div>
+			<div className="fanout-rows">
+				{children.map((child, index) => (
+					<FanoutRow
+						key={child.childId ?? index}
+						step={step}
+						index={index}
+						child={child}
+						plan={plan}
+						rejected={rejected}
+						onOpen={() => onChild(index)}
+					/>
+				))}
+			</div>
+			{writers.length === 1 && !writers[0]!.worktree && dirty && !dirtyRejected && (
+				<p className="fanout-note">{t("One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.")}</p>
+			)}
+			{dirtyRejected && (
+				<p className="fanout-note warn">
+					{t(
+						"Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.",
+					)}
+				</p>
+			)}
+			{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Completed work is kept.")}</p>}
+			{Boolean(subagent.keptWorktrees?.length) && (
+				<p className="fanout-note warn">
+					{t("{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: subagent.keptWorktrees!.length })}
+				</p>
+			)}
 		</div>
-		<div className="fanout-bar" aria-hidden="true">{children.map((child, index) => <i key={index} className={child.waitingOn ? "waiting" : child.status} />)}</div>
-		<div className="fanout-rows">{children.map((child, index) => {
-			const lane = subagent.preflight?.lanes.find((lane) => lane.key === child.label);
-			const state = child.waitingOn ? "waiting" : child.status;
-			const { text, tone } = activity(child);
-			const display = rejected ? t("Not started") : plan ? lane?.claims?.join(", ") || child.task || t("Starting") : text;
-			const done = child.status === "done" || child.status === "error" || child.status === "stopped";
-			return <button type="button" key={child.childId ?? index} data-agent-step={step.id} data-agent-child={index} className={`subagent-row${done ? " finished" : ""}`} title={t("Show in the panel")}
-				aria-label={t("{label}, {agent}, {role}, {activity}", { label: child.label || child.agent, agent: child.agent, role: childRole(child), activity: display })} onClick={() => onChild(index)}>
-				<span className={`subagent-mark ${state}`} aria-hidden="true">{child.waitingOn ? "Ⅱ" : child.status === "done" ? "✓" : child.status === "error" ? "×" : child.status === "stopped" ? "■" : ""}</span>
-				<AgentTag agent={child.agent} quiet={done} />
-				<span className="subagent-label ellipsis" title={child.label}>{child.label}</span>
-				<ChildRole child={child} />
-				<span className={`subagent-activity ellipsis ${tone}`} title={display}>{display}</span>
-				<span className="subagent-now-count">{child.handoff?.changed && done ? <><span className="plus">+{child.handoff.insertions}</span> <span className="minus">−{child.handoff.deletions}</span></> : <>{!done && child.tools > 0 && <span className="fanout-tools">{t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools })} · </span>}{duration(child.durationMs)}</>}</span>
-			</button>;
-		})}</div>
-		{writers.length === 1 && !writers[0]!.worktree && dirty && !dirtyRejected && <p className="fanout-note">{t("One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.")}</p>}
-		{dirtyRejected && <p className="fanout-note warn">{t("Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.")}</p>}
-		{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Completed work is kept.")}</p>}
-		{Boolean(subagent.keptWorktrees?.length) && <p className="fanout-note warn">{t("{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: subagent.keptWorktrees!.length })}</p>}
-	</div>;
+	);
+}
+
+/**
+ * One child in a fan-out: mark · agent · key · role · activity · meta, on the block's shared grid. Before any child
+ * starts, the activity column shows the lane's claimed files, or its task.
+ */
+function FanoutRow({
+	step,
+	index,
+	child,
+	plan,
+	rejected,
+	onOpen,
+}: {
+	step: Step;
+	index: number;
+	child: SubagentChild;
+	plan: boolean;
+	rejected: boolean;
+	onOpen: () => void;
+}) {
+	const lane = step.subagent!.preflight?.lanes.find((lane) => lane.key === child.label);
+	const state = child.waitingOn ? "waiting" : child.status;
+	const { text, tone } = activity(child);
+	const display = rejected ? t("Not started") : plan ? lane?.claims?.join(", ") || child.task || t("Starting") : text;
+	const done = child.status === "done" || child.status === "error" || child.status === "stopped";
+	return (
+		<button
+			type="button"
+			data-agent-step={step.id}
+			data-agent-child={index}
+			className={`subagent-row${done ? " finished" : ""}`}
+			title={t("Show in the panel")}
+			aria-label={t("{label}, {agent}, {role}, {activity}", {
+				label: child.label || child.agent,
+				agent: child.agent,
+				role: childRole(child),
+				activity: display,
+			})}
+			onClick={onOpen}
+		>
+			<span className={`subagent-mark ${state}`} aria-hidden="true">
+				{child.waitingOn ? "Ⅱ" : child.status === "done" ? "✓" : child.status === "error" ? "×" : child.status === "stopped" ? "■" : ""}
+			</span>
+			<AgentTag agent={child.agent} quiet={done} />
+			<span className="subagent-label ellipsis" title={child.label}>
+				{child.label}
+			</span>
+			<ChildRole child={child} />
+			<span className={`subagent-activity ellipsis ${tone}`} title={display}>
+				{display}
+			</span>
+			<span className="subagent-now-count">
+				{child.handoff?.changed && done ? (
+					<>
+						<span className="plus">+{child.handoff.insertions}</span> <span className="minus">−{child.handoff.deletions}</span>
+					</>
+				) : (
+					<>
+						{!done && child.tools > 0 && (
+							<span className="fanout-tools">{t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools })} · </span>
+						)}
+						{duration(child.durationMs)}
+					</>
+				)}
+			</span>
+		</button>
+	);
 }
 
 const NOTICE_VERBS: Record<SubagentNotice["status"], string> = {

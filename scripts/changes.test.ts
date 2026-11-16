@@ -12,8 +12,10 @@ function setup({ repository = true } = {}) {
 	const repo = join(root, "shop");
 	mkdirSync(join(repo, "src"), { recursive: true });
 	process.env.GIT_CEILING_DIRECTORIES = root;
+	// No automatic maintenance: newer git runs it in the background after a commit, and its lock file coming and
+	// going in .git would look like a change the test didn't make.
 	const git = (...args: string[]) =>
-		execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", ...args], { cwd: repo, stdio: "pipe" });
+		execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "core.autocrlf=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0", ...args], { cwd: repo, stdio: "pipe" });
 	const file = (rel: string) => join(repo, rel);
 	const commit = (message: string) => {
 		git("add", ".");

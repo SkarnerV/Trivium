@@ -204,7 +204,11 @@ function Overview({
 	);
 	return (
 		<>
-			<div className="agents-head" role="status">
+			<div className="agents-head">
+				{/* Announced when the task's state changes. The line below also holds the elapsed time and the tokens, which change every second while it runs, so it is not the live region. */}
+				<span className="sr-only" role="status">
+					{state}
+				</span>
 				<h3>{run?.prompt.split("\n")[0] || view.title}</h3>
 				<p>
 					{t(children.length === 1 ? "{state} · {time} · 1 agent · {tokens} tokens" : "{state} · {time} · {n} agents · {tokens} tokens", {

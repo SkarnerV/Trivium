@@ -12,6 +12,8 @@ export const VERBS: Record<string, { live: string; now: string }> = {
 	edit: { live: "Editing", now: "Now: editing {target}" },
 	write: { live: "Writing", now: "Now: writing {target}" },
 	bash: { live: "Running", now: "Now: running {target}" },
+	// The shell tool on Windows; a command there reads the same as one run through bash.
+	powershell: { live: "Running", now: "Now: running {target}" },
 	grep: { live: "Searching for", now: "Now: searching for {target}" },
 	find: { live: "Finding", now: "Now: finding {target}" },
 	ls: { live: "Listing", now: "Now: listing {target}" },

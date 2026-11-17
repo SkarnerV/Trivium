@@ -153,7 +153,14 @@ export class HandoffCache {
 				if (child.handoff?.branch || manifest.worktrees.includes(child.label ?? String(index))) child.worktree = true;
 			});
 			const patches = subagent.children.flatMap((child) => child.handoff ? [child.handoff] : []);
-			if (patches.length && !subagent.children.some((child) => child.status === "error")) step.meta = t("+{adds} −{dels} · {n} files", { adds: patches.reduce((sum, patch) => sum + patch.insertions, 0), dels: patches.reduce((sum, patch) => sum + patch.deletions, 0), n: patches.reduce((sum, patch) => sum + patch.filesChanged, 0) });
+			if (patches.length && !subagent.children.some((child) => child.status === "error")) {
+				const files = patches.reduce((sum, patch) => sum + patch.filesChanged, 0);
+				step.meta = t(files === 1 ? "+{adds} −{dels} · {n} file" : "+{adds} −{dels} · {n} files", {
+					adds: patches.reduce((sum, patch) => sum + patch.insertions, 0),
+					dels: patches.reduce((sum, patch) => sum + patch.deletions, 0),
+					n: files,
+				});
+			}
 		}
 		return runs;
 	}

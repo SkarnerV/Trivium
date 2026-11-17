@@ -126,6 +126,7 @@ export default {
 	"The subagent budget ran out. Completed work is kept.": "子代理预算已用尽。已完成的工作会保留。",
 	"{n} worktrees were kept. See the Agents tab for their paths and reasons.": "保留了 {n} 个工作树。可在代理标签页查看路径和原因。",
 	"Show changes in the panel": "在面板中查看更改",
+	"+{adds} −{dels} · {n} file": "+{adds} −{dels} · {n} 个文件",
 	"+{adds} −{dels} · {n} files": "+{adds} −{dels} · {n} 个文件",
 	"{n} in": "输入 {n}",
 	"{n} out": "输出 {n}",

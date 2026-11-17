@@ -126,6 +126,7 @@ export default {
 	"The subagent budget ran out. Completed work is kept.": "サブエージェントの予算に達しました。完了した作業は保持されます。",
 	"{n} worktrees were kept. See the Agents tab for their paths and reasons.": "{n} 個のワークツリーを保持しました。エージェントタブでパスと理由を確認できます。",
 	"Show changes in the panel": "変更をパネルに表示",
+	"+{adds} −{dels} · {n} file": "+{adds} −{dels} · {n} ファイル",
 	"+{adds} −{dels} · {n} files": "+{adds} −{dels} · {n} ファイル",
 	"{n} in": "入力 {n}",
 	"{n} out": "出力 {n}",

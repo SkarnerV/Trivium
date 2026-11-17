@@ -102,6 +102,8 @@ interface Live {
 	/** The git status last sent to the renderer, as JSON, so an unchanged one is not sent again. */
 	git?: string;
 	gitTimer?: ReturnType<typeof setTimeout>;
+	/** Set while a recount of this session's agents is waiting to run. */
+	agentTimer?: ReturnType<typeof setTimeout>;
 	/** When the reply being written sent its first token. */
 	firstTokenAt?: number;
 }
@@ -118,6 +120,8 @@ type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: 
 const FLUSH_MS = 40;
 /** Several tool calls in a row read git once. */
 const GIT_MS = 300;
+/** A fan-out reports each child's progress many times a second; its agents are counted at most this often. */
+const AGENTS_MS = 1000;
 const devFaux = fileURLToPath(new URL("../dev/faux-extension.ts", import.meta.url));
 
 function isChat(cwd: string): boolean {
@@ -331,9 +335,18 @@ export class SessionHost {
 		return { needsYou: this.broker.hasPending(live.path), agents: agentsOf(live.tracker.all(), live.background) };
 	}
 
-	/** A child started, finished or began waiting: refresh the list, whose counts the sidebar shows when off screen. */
+	/**
+	 * A child may have started, finished or begun waiting: refresh the list, whose counts the sidebar shows when off
+	 * screen. Counting builds every run of the session again, so it waits for the events to settle rather than
+	 * running on each one: a fan-out sends progress for every child's every tool call.
+	 */
 	private noteAgents(live: Live): void {
-		if (live.app === "code" && live.agentWatch.changed(this.attentionOf(live).agents)) this.scheduleList();
+		if (live.app !== "code" || live.agentTimer) return;
+		live.agentTimer = setTimeout(() => {
+			live.agentTimer = undefined;
+			if (!this.live.has(live.path)) return;
+			if (live.agentWatch.changed(this.attentionOf(live).agents)) this.scheduleList();
+		}, AGENTS_MS);
 	}
 
 	/** What the views show beyond the transcript: captured handoffs, and whether background runs still go. */
@@ -788,6 +801,7 @@ export class SessionHost {
 	private unload(live: Live): void {
 		this.broker.cancelAll(live.path);
 		clearTimeout(live.gitTimer);
+		clearTimeout(live.agentTimer);
 		live.unsubscribe();
 		live.session.dispose();
 		// Reopening reads the manifests again from the session's history; a deleted session's patches go with it.

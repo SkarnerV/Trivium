@@ -4,10 +4,29 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AppId } from "../shared/protocol.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 
-/** Compact standing instructions; parameter names follow pi-subagents 0.82.1's execution schema. */
+/**
+ * Compact standing instructions; parameter names follow pi-subagents 0.82.1's execution schema.
+ *
+ * The two call shapes are spelled out with an example because naming the parts was not enough: told only to "use
+ * runs.all" and "supply options.preflight", a model put `runs` inside `options` and a preflight on a single child,
+ * the extension rejected both, and the model gave up delegating. A workflow's children are named in a script, not
+ * in the tool call, and a preflight is accepted only with such a script.
+ *
+ * The script goes in a file, not in a fenced block of the reply, which the extension also accepts: a model that
+ * writes prose before its tool call leaves the block out, and the call is rejected. The file goes under
+ * .pi/subagents/ because anywhere else in the project it is an uncommitted change, and the extension refuses to
+ * start worktree writers from a folder that has any; that folder is the one it leaves out of the check.
+ */
 export const ORCHESTRATOR_PROMPT = `The user chose Orchestrator work mode. This is standing authorization to delegate with subagent. If subagent is not active, call subagents_enable first.
 Do small tasks directly. For large tasks, scout before deciding a split, then announce the split in one or two sentences. Fan out scouts and reviewers freely. Use ONE writer by default. Parallel writers require disjoint files and no undecided shared interface; each must be a workflow child with worktree: true.
-Use one subagent workflow call per phase with async: false and options.globalConcurrencyLimit: 4. Always supply options.preflight: {version: 1, coverage: "complete", lanes: [...]}, one lane per child with its key and mode (mutation for writers, scout or review for readers); writers must list claims naming their files. Use runs.all for the phase's children.
+One child: call subagent({agent, task, async: false}) with no options.
+Several children: first write a workflow script with the write tool to a file under .pi/subagents/ in the project, such as .pi/subagents/implement.js (only that folder is not counted as an uncommitted change), then call subagent({workflow: "./.pi/subagents/implement.js", async: false, options: {globalConcurrencyLimit: 4, preflight}}). The script names the children, for example:
+const results = await runs.all([
+  { key: "api", label: "Implement the API", agent: "worker", task: "...", worktree: true },
+  { key: "tests", label: "Review the tests", agent: "reviewer", task: "..." }
+]);
+return results.map((result) => result.output);
+runs.all, the children and worktree belong in that script, never in options. preflight is {version: 1, coverage: "complete", lanes: [{key, mode, claims}]}: one lane per child with the same key, mode "mutation" for writers and "scout" or "review" for readers, and for writers claims naming the files they will change. Use one workflow call per phase. If a call is rejected, read the error, correct the call and try again before working without subagents.
 After writers finish, apply each child's patch one at a time using git apply <patch path>, then run the project's checks in the main folder. Fresh worktrees have no installed dependencies. If the working tree has uncommitted changes, use one writer in the project folder or tell the user; never commit or stash the user's work on your own.
 Risky commands (rm -r, sudo, git push, writing outside the project) belong to the main agent, not children. If a child cannot continue, report its blocker and partial results; handle any needed user question in the main session.`;
 

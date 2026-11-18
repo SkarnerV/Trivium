@@ -69,7 +69,6 @@ import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
 import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
-import { readSubagentActivity } from "./subagent-activity.ts";
 import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
@@ -258,15 +257,6 @@ export class SessionHost {
 
 	get runtime(): ModelRuntime {
 		return this.modelRuntime;
-	}
-
-	subagentPatch(path: string, id: string) {
-		return this.require(path).handoffs.patch(id);
-	}
-
-	subagentActivity(path: string, sessionFile: string) {
-		const live = this.require(path);
-		return readSubagentActivity(sessionFile, live.tracker.all(), handoffRoots({ agentDir: this.agentDir, cwd: live.cwd, sessionFile: live.session.sessionFile }));
 	}
 
 	async setWorkMode(path: string, mode: WorkModeId): Promise<void> {

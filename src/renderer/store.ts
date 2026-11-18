@@ -45,7 +45,6 @@ export interface State {
 	sessions: SessionSummary[];
 	views: Record<string, SessionView>;
 	dialogs: DialogRequest[];
-	agentDetail: Record<string, { step: string; child: number } | undefined>;
 	agentsSeen: Record<string, string>;
 	agentsDismissed: Record<string, string>;
 	notices: Notice[];
@@ -151,7 +150,6 @@ let state: State = {
 	sessions: [],
 	views: {},
 	dialogs: [],
-	agentDetail: {},
 	agentsSeen: {},
 	agentsDismissed: {},
 	notices: [],
@@ -497,11 +495,6 @@ export function showPanelView(path: string, name: PanelView): void {
 			changesHidden: { ...s.changesHidden, [path]: false },
 		};
 	});
-}
-
-export function showAgentChild(path: string, step: string, child: number): void {
-	setState((s) => ({ agentDetail: { ...s.agentDetail, [path]: { step, child } } }));
-	showPanelView(path, "agents");
 }
 
 /** Closes a view's tab; the one beside it shows next. Closing the last tab hides the panel. */

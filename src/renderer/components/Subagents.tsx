@@ -1,18 +1,17 @@
-import { createContext, type KeyboardEvent, useContext, useEffect, useState } from "react";
-import type { LimitNotice, Step, Subagent, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
+import { createContext, type KeyboardEvent, useContext, useState } from "react";
+import type { LimitNotice, Step, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, ExternalIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
 import { AgentSession } from "../agent-context.ts";
-import { showAgentChild, trivium, useStore } from "../store.ts";
-import { claimsOf, middle, phaseOf, stateWord, teamOf } from "../agents.ts";
-import { Clamp } from "./Clamp.tsx";
+import { useStore } from "../store.ts";
+import { claimsOf, phaseOf, stateWord, teamOf } from "../agents.ts";
 import { Markdown } from "./Markdown.tsx";
 import { t } from "../i18n.tsx";
 
 /*
  * Two views of the same children. The thread shows each subagent as a row that opens its own session (AgentAvatar,
- * SubagentRow, SubagentGroup, SubagentNoticeLine). The Agents tab shows a fan-out's lanes and each child's detail
- * (Fanout, ChildDetail and the rest).
+ * SubagentRow, SubagentGroup, SubagentNoticeLine). The Agents tab shows each fan-out's lanes (Fanout and its rows);
+ * an agent opens as its own session from either.
  */
 
 /** A subagent whose own session can be opened: its session file, and enough to title it before it loads. */
@@ -383,198 +382,11 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 	);
 }
 
-/* The Agents tab's fan-out and child detail. */
-
-/** How many of a child's steps an opened subagent step lists before "+ N more". */
-const SHOWN_STEPS = 6;
+/* The Agents tab's fan-out. */
 
 /** The agent's name, tinted, so delegated work stands out when scanning the steps. */
 export function AgentTag({ agent, quiet = false }: { agent: string; quiet?: boolean }) {
 	return <span className={`agent-tag${quiet ? " quiet" : ""}`}>{agent}</span>;
-}
-
-/**
- * The step's target column: who was asked, and what. A fan-out reads "Implementing · 2 writers, 1 reviewer", from the
- * plan's lane modes when there is one, else from the agents' names, as the plan state's head does.
- */
-export function SubagentTarget({ subagent, fallback }: { subagent: Subagent; fallback: string }) {
-	const { children } = subagent;
-	if (!children.length) return <span className="target ellipsis prose">{fallback}</span>;
-	const only = children.length === 1 ? children[0] : undefined;
-	const agents = [...new Set(children.map((child) => child.agent))];
-	return (
-		<span className="target subagent-target">
-			{(only ? [only.agent] : agents.slice(0, 3)).map((agent) => (
-				<AgentTag key={agent} agent={agent} />
-			))}
-			<span className="ellipsis prose">
-				{only ? firstLine(only.task) : t("{phase} · {team}", { phase: phaseOf(subagent), team: teamOf(children, false) })}
-			</span>
-		</span>
-	);
-}
-
-/** The child's usage line: model, context, tokens in and out, tools and time, each only when reported. */
-function usage(child: SubagentChild): string {
-	return [
-		child.model,
-		child.context && t("{context} context", { context: child.context }),
-		child.inputTokens !== undefined && t("{n} in", { n: tokens(child.inputTokens) }),
-		child.outputTokens !== undefined && t("{n} out", { n: tokens(child.outputTokens) }),
-		child.tokens && t("{n} tokens", { n: tokens(child.tokens) }),
-		child.tools > 0 && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }),
-		duration(child.durationMs),
-	]
-		.filter(Boolean)
-		.join(" · ");
-}
-
-/** A tool call's end, as a time of day: pi-subagents reports when each call ended, not how long it took. */
-function endTime(endMs: number | undefined): string {
-	return endMs === undefined ? "" : new Date(endMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-/**
- * What a child's state asks the reader to know before its steps: it is waiting on the main agent (§8.4), or it ran
- * out of time (§8.2). Information, not a request: the main agent answers a child, and decides what to do next.
- */
-function ChildCallouts({ child }: { child: SubagentChild }) {
-	const question = child.current?.tool === "contact_supervisor" ? child.current.target : undefined;
-	return (
-		<>
-			{child.waitingOn === "main" && (
-				<p className="fanout-note warn">
-					{question ? t("It asked the main agent: “{question}”", { question: firstLine(question) }) : t("It is waiting on the main agent.")}
-				</p>
-			)}
-			{child.timedOut && (
-				<p className="fanout-note warn">{t(child.output ? "It ran out of time. What it wrote so far is below." : "It ran out of time.")}</p>
-			)}
-		</>
-	);
-}
-
-export function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolean }) {
-	const path = useContext(AgentSession);
-	const [history, setHistory] = useState<{ file: string; steps?: SubagentChild["steps"]; error?: boolean }>();
-	const [expanded, setExpanded] = useState(false);
-	const sessionFile = child.sessionFile;
-	useEffect(() => {
-		let active = true;
-		setExpanded(false);
-		if (path && sessionFile) {
-			setHistory({ file: sessionFile });
-			trivium.subagentActivity(path, sessionFile).then(
-				(steps) => active && setHistory({ file: sessionFile, steps }),
-				() => active && setHistory({ file: sessionFile, error: true }),
-			);
-		}
-		return () => { active = false; };
-	}, [path, sessionFile]);
-	const loaded = history?.file === sessionFile ? history : undefined;
-	const steps = loaded?.steps ?? child.steps;
-	const shown = expanded ? steps : steps.slice(0, SHOWN_STEPS);
-	const more = steps.length - shown.length;
-	const meta = usage({ ...child, tools: Math.max(child.tools, steps.length) });
-	const patch = child.handoff;
-	return (
-		<div className="subagent-child">
-			{heading && (
-				<div className="subagent-child-head">
-					<AgentTag agent={child.agent} />
-					{child.label && <span className="subagent-label">{child.label}</span>}
-					<span className="subagent-child-time">{duration(child.durationMs)}</span>
-				</div>
-			)}
-			{child.task && (
-				<>
-					<div className="step-detail-label">{t("Task")}</div>
-					<Clamp lines={6}>
-						<p className="subagent-task">{child.task}</p>
-					</Clamp>
-				</>
-			)}
-			<ChildCallouts child={child} />
-			<div className="step-detail-label">{t("Activity")}</div>
-			{child.current && <p className="subagent-current">{activity(child).text}</p>}
-			{shown.length > 0 ? (
-					<ol className="subagent-steps">
-						{shown.map((step, index) => (
-							<li key={index}>
-								{step.input !== undefined || step.output !== undefined ? (
-									<details className="subagent-call">
-										<summary>
-											<span className="tool">{step.tool}</span>
-											<span className="ellipsis" title={step.target}>{step.target}</span>
-											<span className={`subagent-call-state${step.status === "error" ? " error" : ""}`}>{t(step.status === "error" ? "Failed" : "Done")}</span>
-											{step.endMs !== undefined && <span className="subagent-step-time">{endTime(step.endMs)}</span>}
-											<span className="subagent-open">{t("Details")} ›</span>
-										</summary>
-										<div className="step-detail">
-											<div className="step-detail-label">{t("Input")}</div>
-											<pre>{step.input ?? step.target}</pre>
-											<div className="step-detail-label">{t("Output")}</div>
-											<pre>{step.output || t("No text output.")}</pre>
-										</div>
-									</details>
-								) : (
-									<><span className="tool">{step.tool}</span><span className="ellipsis">{step.target}</span>{step.endMs !== undefined && <span className="subagent-step-time">{endTime(step.endMs)}</span>}</>
-								)}
-							</li>
-						))}
-						{more > 0 && <li className="more"><button type="button" className="btn ghost" onClick={() => setExpanded(true)}>{t("Show all {n} steps", { n: steps.length })}</button></li>}
-					</ol>
-			) : (
-				<p className="subagent-usage">{t(path && sessionFile && !loaded?.error && !loaded?.steps ? "Loading tool history…" : child.status === "running" || child.status === "pending" ? "Tool history will appear when this agent finishes." : "Tool history is unavailable for this agent.")}</p>
-			)}
-			{(child.output || child.error) && (
-				<>
-					<div className="step-detail-label">{t(child.error ? "Error" : "Result")}</div>
-					{child.status === "error" && child.failedTool && (
-						<p className="subagent-usage">{t("Failed after {time} at {tool}", { time: duration(child.durationMs) || "0s", tool: child.failedTool })}</p>
-					)}
-					{child.error && <pre className="subagent-error">{child.error}</pre>}
-					{child.output && (
-						<div className="subagent-result">
-							<Markdown text={child.output} diagrams />
-						</div>
-					)}
-				</>
-			)}
-			{meta && <div className="subagent-usage">{meta}</div>}
-			{patch && (
-				<div className="subagent-usage" title={patch.branch}>
-					{t(patch.filesChanged === 1 ? "{adds} added · {dels} removed · 1 file · {branch}" : "{adds} added · {dels} removed · {files} files · {branch}", {
-						adds: patch.insertions,
-						dels: patch.deletions,
-						files: patch.filesChanged,
-						branch: middle(patch.branch),
-					})}
-				</div>
-			)}
-		</div>
-	);
-}
-
-/** An opened subagent step: each child's task, its own steps and its answer. */
-export function SubagentDetail({ subagent, stepId }: { subagent: Subagent; stepId?: string }) {
-	const path = useContext(AgentSession);
-	return (
-		<div className="subagent-detail">
-			{subagent.background && <p className="subagent-note">{t("Running in the background. Its result arrives as its own message.")}</p>}
-			{subagent.children.map((child, index) => (
-				<div key={index}>
-					<ChildDetail child={child} heading={subagent.children.length > 1} />
-					{/* Code opens the same child detail from both live and finished steps. */}
-					{path && stepId && (
-						<button type="button" className="btn ghost" onClick={() => showAgentChild(path, stepId, index)}>
-							{t("View details")}
-						</button>
-					)}
-				</div>
-			))}
-		</div>
-	);
 }
 
 /** What a running child is doing, in a few words: its tool now, or how it ended. */
@@ -610,63 +422,6 @@ function PatchCounts({ child }: { child: SubagentChild }) {
 }
 
 const finishedStatus = (child: SubagentChild) => child.status === "done" || child.status === "error" || child.status === "stopped";
-
-/**
- * The live line while subagents run. One child gets a second line for what it is doing now; several get
- * a row each, and finished rows rest so the ones still working stand out.
- */
-export function SubagentLive({ step, now }: { step: Step; now: number }) {
-	const path = useContext(AgentSession);
-	const [detail, setDetail] = useState<number>();
-	const subagent = step.subagent!;
-	const running = step.status === "running";
-	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
-	const { children } = subagent;
-	// With a panel, a row opens the child there; without one (a chat, Research, Write), its detail opens in place.
-	const open = (index: number) => (path ? showAgentChild(path, step.id, index) : setDetail(detail === index ? undefined : index));
-	if (children.length > 1 || subagent.preflight) {
-		return (
-			<>
-				<Fanout step={step} now={now} onChild={open} />
-				{detail !== undefined && children[detail] && <ChildDetail child={children[detail]!} heading />}
-			</>
-		);
-	}
-	const child = children[0];
-	const counts =
-		child &&
-		[child.tools && t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }), child.tokens && t("{n} tok", { n: tokens(child.tokens) })]
-			.filter(Boolean)
-			.join(" · ");
-	// A single writer's +/− once it is done (§5.3); until then the time.
-	const changes = child && child.role === "mutation" && finishedStatus(child) && child.handoff?.changed;
-	return (
-		<div className={`live-cmd subagent-live${running ? "" : " idle"}`}>
-			<div className="live-cmd-head">
-				<span className="live-dot" />
-				<span className="live-cmd-label">{t(subagent.background ? "Started" : running ? "Delegating to" : "Delegated to")}</span>
-				{child && (
-					<>
-						<AgentTag agent={child.agent} />
-						{path && <ChildRole child={child} />}
-					</>
-				)}
-				<span className="live-cmd-prose ellipsis">
-					{child ? firstLine(child.task) : step.target}
-					{subagent.background && <span className="subagent-bg"> · {t("in the background")}</span>}
-				</span>
-				<span className="live-cmd-time">{changes ? <PatchCounts child={child} /> : time}</span>
-			</div>
-			{child && running && !subagent.background && (
-				<button type="button" className="subagent-now subagent-single-open" onClick={() => open(0)} title={t(path ? "Show in the panel" : "Show details")}>
-					<span className="ellipsis">↳ {activity(child).text}</span>
-					{counts && <span className="subagent-now-count">{counts}</span>}
-				</button>
-			)}
-			{detail === 0 && child && <ChildDetail child={child} heading />}
-		</div>
-	);
-}
 
 /** Where a child works, in words: what the role glyph says to a screen reader and in its title. */
 export function childRole(child: SubagentChild): string {

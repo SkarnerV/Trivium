@@ -972,8 +972,6 @@ export interface UsageReport {
 
 export interface TriviumApi {
 	setWorkMode(path: string, mode: import("./work-modes.ts").WorkModeId): Promise<void>;
-	subagentPatch(path: string, id: string): Promise<ChildPatchFile[]>;
-	subagentActivity(path: string, sessionFile: string): Promise<SubagentChild["steps"]>;
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;
 	windowMinimize(): Promise<void>;

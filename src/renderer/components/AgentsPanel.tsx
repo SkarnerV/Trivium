@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import type { ChildPatchFile, Run, SessionView, Step, SubagentChild } from "../../shared/protocol.ts";
+import { useEffect } from "react";
+import type { Run, SessionView, Step, SubagentChild } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { OrchestrateIcon } from "../icons.tsx";
-import { agentAttentionKey, agentCounts, agentSteps, currentStep, middle, phaseOf } from "../agents.ts";
+import { agentAttentionKey, agentCounts, agentSteps, currentStep, phaseOf } from "../agents.ts";
 import { nowLine } from "../verbs.ts";
 import { AgentSession } from "../agent-context.ts";
-import { attempt, openSubagent, setState, showAgentChild, showPanelView, trivium, useStore } from "../store.ts";
-import { activity, ChildDetail, childRole, Fanout, FanoutLimit, targetOf } from "./Subagents.tsx";
+import { attempt, openSubagent, setState, showPanelView, trivium, useStore } from "../store.ts";
+import { Fanout, FanoutLimit, targetOf } from "./Subagents.tsx";
 import { Clamp } from "./Clamp.tsx";
-import { DiffView } from "./DiffView.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { t } from "../i18n.tsx";
 
@@ -71,64 +70,29 @@ function taskRunsOf(runs: Run[]): Run[] {
 	return runs.slice(Math.max(0, runs.findLastIndex((run) => !run.notice)));
 }
 
-/** Overview and drill-in reuse the thread's child data and the existing diff renderer. All actions compose drafts. */
+/**
+ * The task's agents at a glance: the plan, one card per fan-out, what the main agent is doing now, patches and kept
+ * worktrees. An agent opens as its own session in the drawer beside the thread, as it does from the thread's rows.
+ */
 export function AgentsBody({ view }: { view: SessionView }) {
-	const selected = useStore((s) => s.agentDetail[view.path]);
 	const needsYou = useStore((s) => s.dialogs.some((dialog) => dialog.sessionPath === view.path));
 	const now = useNow(view.running ? 1000 : 0);
-	const body = useRef<HTMLDivElement>(null);
-	const scroll = useRef(0);
-	const returnTo = useRef<{ step: string; child: number } | undefined>(undefined);
 	const taskRuns = taskRunsOf(view.runs);
 	const run = taskRuns[0];
 	const phases = agentSteps(taskRuns);
-	const selectedStep = selected ? agentSteps(view.runs).find((step) => step.id === selected.step) : undefined;
-	const child = selectedStep?.subagent?.children[selected?.child ?? -1];
 	const children = phases.flatMap((step) => step.subagent!.children);
 	const used = children.reduce((sum, child) => sum + (child.tokens ?? 0), 0);
 	const time = run?.startedAt ? duration((view.running ? now : (taskRuns.at(-1)?.endedAt ?? now)) - run.startedAt) : "";
 	const attention = agentAttentionKey(view.runs);
-	const back = () => setState((s) => ({ agentDetail: { ...s.agentDetail, [view.path]: undefined } }));
 	useEffect(() => {
 		setState((s) => ({ agentsSeen: { ...s.agentsSeen, [view.path]: attention } }));
 	}, [view.path, attention]);
-	useEffect(() => {
-		if (!child) {
-			// Back on the overview: where the user was, with the row they opened focused again.
-			if (body.current) body.current.scrollTop = scroll.current;
-			const target = returnTo.current;
-			const row =
-				target &&
-				body.current?.querySelector<HTMLButtonElement>(`[data-agent-step="${CSS.escape(target.step)}"][data-agent-child="${target.child}"]`);
-			const disclosure = row?.closest("details");
-			if (disclosure) disclosure.open = true;
-			row?.focus({ preventScroll: true });
-			return;
-		}
-		returnTo.current = selected;
-		body.current?.scrollTo(0, 0);
-		body.current?.querySelector<HTMLButtonElement>(".agents-back")?.focus();
-		const key = (event: KeyboardEvent) => {
-			if ((event.target as HTMLElement)?.closest("input, textarea, [contenteditable]")) return;
-			if (event.key === "Escape" || event.key === "Backspace" || (event.altKey && event.key === "ArrowLeft")) {
-				event.preventDefault();
-				back();
-			}
-		};
-		// On the tab itself, not the document: these keys belong to whatever else has the focus, such as the thread.
-		const tab = body.current;
-		tab?.addEventListener("keydown", key);
-		return () => tab?.removeEventListener("keydown", key);
-	}, [Boolean(child), view.path]);
 	const draft = (text: string) =>
 		setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text, attachments: [], append: true } } }));
 	return (
 		<AgentSession.Provider value={view.path}>
-			<div className="agents" ref={body}>
-				{child ? (
-					<ChildView path={view.path} child={child} onBack={back} onDraft={draft} />
-				) : (
-					<Overview
+			<div className="agents">
+				<Overview
 						view={view}
 						taskRuns={taskRuns}
 						phases={phases}
@@ -138,16 +102,11 @@ export function AgentsBody({ view }: { view: SessionView }) {
 						used={used}
 						needsYou={needsYou}
 						onChild={(step, index) => {
-							// An agent opens as its own session, like the thread's rows; its patch view is a click away from there
-							// and from the Patches list. One with no session file yet opens its detail here.
 							const child = step.subagent?.children[index];
 							const target = child && targetOf(child, { step: step.id, index });
-							if (target) return openSubagent(view.path, target, false);
-							scroll.current = body.current?.scrollTop ?? 0;
-							showAgentChild(view.path, step.id, index);
+							if (target) openSubagent(view.path, target, false);
 						}}
 					/>
-				)}
 				{phases
 					.flatMap((step) => step.subagent?.keptWorktrees ?? [])
 					.map((tree) => (
@@ -245,7 +204,7 @@ function Overview({
 				<PhaseCard key={step.id} step={step} number={index + 1} now={now} onChild={(child) => onChild(step, child)} />
 			))}
 			{!phases.length && <p>{t("Subagents appear here when the main agent delegates work.")}</p>}
-			{writers.length > 0 && !phases.some((step) => step.status === "running") && <Patches path={view.path} writers={writers} />}
+			{writers.length > 0 && !phases.some((step) => step.status === "running") && <Patches writers={writers} />}
 			{view.running && (
 				<div className="agents-now">
 					<p>{nowLine(last, current)}</p>
@@ -285,7 +244,7 @@ function PhaseCard({ step, number, now, onChild }: { step: Step; number: number;
 }
 
 /** One line per writer: what its patch holds, or why there is none to look at. Whether it was applied is v1.1. */
-function Patches({ path, writers }: { path: string; writers: { child: SubagentChild; step: string; index: number }[] }) {
+function Patches({ writers }: { writers: { child: SubagentChild; step: string; index: number }[] }) {
 	return (
 		<section className="agents-after">
 			<div className="step-detail-label">{t("Patches")}</div>
@@ -294,14 +253,9 @@ function Patches({ path, writers }: { path: string; writers: { child: SubagentCh
 					const patch = child.handoff!;
 					return (
 						<li key={child.childId ?? `${step}:${index}`}>
-							<button
-								type="button"
-								className="agents-patch-key ellipsis"
-								title={t("Show its branch, files and patch")}
-								onClick={() => showAgentChild(path, step, index)}
-							>
+							<span className="agents-patch-key ellipsis" title={patch.branch}>
 								{child.label || child.agent}
-							</button>
+							</span>
 							{patch.error ? (
 								<span className="warn">{t("Patch couldn't be captured: {error}", { error: patch.error })}</span>
 							) : patch.changed ? (
@@ -316,120 +270,6 @@ function Patches({ path, writers }: { path: string; writers: { child: SubagentCh
 					);
 				})}
 			</ul>
-		</section>
-	);
-}
-
-/** One child opened from a row: who it is, what it did, and for a writer, its patch file by file. */
-function ChildView({
-	path,
-	child,
-	onBack,
-	onDraft,
-}: {
-	path: string;
-	child: SubagentChild;
-	onBack: () => void;
-	onDraft: (text: string) => void;
-}) {
-	const { text, tone } = activity(child);
-	const target = targetOf(child);
-	return (
-		<>
-			<button type="button" className="btn ghost agents-back" onClick={onBack}>
-				{t("‹ All agents")}
-			</button>
-			<h3>{child.label || child.agent}</h3>
-			<p className={`subagent-activity ${tone}`}>{text}</p>
-			<p className="subagent-usage">
-				{childRole(child)}{" "}
-				{child.handoff?.branch && (
-					<>
-						<code title={child.handoff.branch}>{middle(child.handoff.branch)}</code>{" "}
-						<button type="button" className="btn ghost" onClick={() => void attempt(() => trivium.copyText(child.handoff!.branch))}>
-							{t("Copy branch")}
-						</button>
-					</>
-				)}
-			</p>
-			<ChildDetail child={child} heading />
-			{child.handoff && <ChildChanges path={path} child={child} />}
-			<div className="agents-actions">
-				{/* Its whole conversation, beside the thread or in a window of its own. */}
-				{target && (
-					<button
-						type="button"
-						className="btn ghost"
-						title={t("Open its session. Shift-click opens it in a new window.")}
-						onClick={(event) => openSubagent(path, target, event.shiftKey)}
-					>
-						{t("Open its session")}
-					</button>
-				)}
-				<button
-					type="button"
-					className="btn ghost"
-					onClick={() => onDraft(t("About {label} ({agent}): ", { label: child.label || child.agent, agent: child.agent }))}
-				>
-					{t("Ask about this")}
-				</button>
-				{child.role === "mutation" && (
-					<button type="button" className="btn ghost" onClick={() => onDraft(t("Don't apply the {label} patch: ", { label: child.label || child.agent }))}>
-						{t("Don't apply this")}
-					</button>
-				)}
-				{child.handoff && (
-					<button type="button" className="btn ghost" onClick={() => void attempt(() => trivium.copyText(child.handoff!.path))}>
-						{t("Copy patch path")}
-					</button>
-				)}
-			</div>
-		</>
-	);
-}
-
-/**
- * A writer's patch, read from the main process by id: the host captured it when the child finished, so what shows
- * here is what the child handed back, even if the file on disk changes later.
- */
-function ChildChanges({ path, child }: { path: string; child: SubagentChild }) {
-	const [patch, setPatch] = useState<{ id: string; files: ChildPatchFile[]; error?: string }>();
-	const [file, setFile] = useState<string>();
-	const patchId = child.handoff?.id;
-	useEffect(() => {
-		let active = true;
-		setFile(undefined);
-		if (patchId)
-			trivium.subagentPatch(path, patchId).then(
-				(files) => active && setPatch({ id: patchId, files }),
-				(error: unknown) => active && setPatch({ id: patchId, files: [], error: String(error) }),
-			);
-		return () => {
-			active = false;
-		};
-	}, [path, patchId]);
-	const files = patch && patch.id === patchId ? patch.files : [];
-	const shown = files.find((item) => item.file === file) ?? files[0];
-	return (
-		<section className="agents-changes">
-			<div className="step-detail-label">{t("Changes")}</div>
-			{child.handoff!.error && <p className="fanout-note warn">{t("Patch couldn't be captured: {error}", { error: child.handoff!.error })}</p>}
-			<div className="agents-files">
-				{files.map((item) => (
-					<button type="button" key={item.file} aria-pressed={shown?.file === item.file} onClick={() => setFile(item.file)}>
-						<span className="mono ellipsis">{item.file}</span>
-						<span>
-							<span className="plus">+{item.adds}</span> <span className="minus">−{item.dels}</span>
-						</span>
-					</button>
-				))}
-			</div>
-			{patch && patch.id === patchId && patch.error && <p className="subagent-error">{patch.error}</p>}
-			{shown && (
-				<div className="diff-scroll">
-					<DiffView lines={shown.lines} tooLarge={shown.tooLarge} empty={t(shown.binary ? "Binary file" : "No changes")} />
-				</div>
-			)}
 		</section>
 	);
 }

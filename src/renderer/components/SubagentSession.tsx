@@ -6,7 +6,7 @@ import { attempt, closeSubagent, errorText, openSubagent, showSettings, trivium,
 import { themeVars } from "../theme.ts";
 import { t } from "../i18n.tsx";
 import { RunBlock, useStickToBottom } from "./SessionPane.tsx";
-import { AgentAvatar, type AgentStatus, firstLine, patchLine, type SubagentOpener, SubagentOpenerContext, type SubagentTarget, statusWord } from "./Subagents.tsx";
+import { AgentAvatar, type AgentStatus, firstLine, type SubagentOpener, SubagentOpenerContext, type SubagentTarget, statusWord } from "./Subagents.tsx";
 
 const settled = (child: SubagentChild | undefined) => child?.status === "done" || child?.status === "error";
 
@@ -59,13 +59,7 @@ function fromMainAgent(run: Run, task: string): boolean {
  */
 export function SubagentThread({ parent, target, place, app, crumb }: { parent: string; target: SubagentTarget; place: "drawer" | "window"; app: AppId; crumb?: string }) {
 	const { session, error } = useSubagentSession(parent, target.file);
-	// In the main window the parent's view has the child as the thread shows it, its patch included.
-	const shown = useStore((s) =>
-		s.views[parent]?.runs
-			.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
-			.findLast((item) => item.sessionFile === target.file),
-	);
-	const child = session?.child && shown ? { ...session.child, handoff: session.child.handoff ?? shown.handoff } : (session?.child ?? shown);
+	const child = session?.child;
 	const runs = session?.runs ?? [];
 	const lastRun = runs.at(-1);
 	const status: AgentStatus | undefined = child?.status ?? (session && !session.missing ? (lastRun?.status === "running" ? "running" : "done") : undefined);
@@ -84,7 +78,6 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 		[parent, target.file, place, app, crumb],
 	);
 	const time = child?.durationMs !== undefined ? duration(child.durationMs) : "";
-	const patch = patchLine(child);
 	const spent = child?.tokens ?? ((child?.inputTokens ?? 0) + (child?.outputTokens ?? 0) || undefined);
 	const name = [target.agent, target.label].filter(Boolean).join(" ");
 	const back = () => (place === "drawer" ? closeSubagent(parent) : void trivium.showSession(parent));
@@ -118,7 +111,6 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 						)}
 					</span>
 				</div>
-				{patch && <span className="subagent-session-patch">{patch}</span>}
 				{place === "drawer" && (
 					<>
 						<button

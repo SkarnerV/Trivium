@@ -103,14 +103,6 @@ function rowActivity(child: SubagentChild, claims?: string[]): { text: string; c
 	return { text: t(child.tools ? "Thinking" : "Starting"), code: false };
 }
 
-/** A writer's handed-back changes, as `+113 −12 · 3 files`, once there are any. */
-export function patchLine(child: SubagentChild | undefined): string {
-	const handoff = child?.handoff;
-	if (!handoff?.changed) return "";
-	const files = handoff.filesChanged || handoff.files.length;
-	return [`+${handoff.insertions} −${handoff.deletions}`, files ? t(files === 1 ? "{n} file" : "{n} files", { n: files }) : ""].filter(Boolean).join(" · ");
-}
-
 /** What it is using now, how many tools it called and the tokens it spent, in one line. */
 function workLine(child: SubagentChild): string {
 	return [
@@ -125,7 +117,6 @@ function workLine(child: SubagentChild): string {
 /** The card a thread row shows while hovered or focused: which agent, its model, how it is doing, its branch and its work. */
 function RowCard({ child, status, time, opens }: { child: SubagentChild; status: AgentStatus; time: string; opens: boolean }) {
 	const work = workLine(child);
-	const patch = patchLine(child);
 	return (
 		<span className="agent-card" role="tooltip">
 			<strong>{[child.agent, child.label].filter(Boolean).join(" · ")}</strong>
@@ -143,7 +134,6 @@ function RowCard({ child, status, time, opens }: { child: SubagentChild; status:
 				<span className="agent-card-line">
 					<BranchIcon size={12} />
 					<span className="mono ellipsis">{child.handoff.branch}</span>
-					{patch && <span className="mono agent-card-patch">{patch}</span>}
 				</span>
 			)}
 			{work && (

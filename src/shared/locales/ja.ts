@@ -1345,7 +1345,6 @@ export default {
 	"Loading tool history…": "ツール履歴を読み込み中…",
 	"Tool history will appear when this agent finishes.": "このエージェントが完了するとツール履歴が表示されます。",
 	"Tool history is unavailable for this agent.": "このエージェントのツール履歴は利用できません。",
-	"{n} file": "{n} 個のファイル",
 	"Click to open its session · Shift-click for a new window": "クリックでセッションを開く · Shift+クリックで新しいウィンドウ",
 	"Its result arrives as its own message": "結果は別のメッセージとして届きます",
 	"Completed": "完了",

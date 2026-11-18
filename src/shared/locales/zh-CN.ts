@@ -1345,7 +1345,6 @@ export default {
 	"Loading tool history…": "正在加载工具调用记录…",
 	"Tool history will appear when this agent finishes.": "此子代理完成后会显示工具调用记录。",
 	"Tool history is unavailable for this agent.": "此子代理的工具调用记录不可用。",
-	"{n} file": "{n} 个文件",
 	"Click to open its session · Shift-click for a new window": "点击打开其会话 · Shift+点击在新窗口打开",
 	"Its result arrives as its own message": "其结果会作为单独的消息送达",
 	"Completed": "已完成",

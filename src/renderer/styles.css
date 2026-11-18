@@ -1799,15 +1799,9 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
-.agent-card-line .mono:not(.agent-card-patch) {
+.agent-card-line .mono {
 	color: var(--ink-2);
 	overflow-wrap: anywhere;
-}
-
-.agent-card .agent-card-patch {
-	flex: none;
-	margin-left: auto;
-	color: var(--add);
 }
 
 .agent-card-hint {
@@ -2326,13 +2320,6 @@ body.resizing * {
 	font-family: var(--mono);
 	font-size: 11.5px;
 	color: var(--ink-4);
-}
-
-.subagent-session-patch {
-	flex: none;
-	font-family: var(--mono);
-	font-size: 11.5px;
-	color: var(--add);
 }
 
 .subagent-chips {

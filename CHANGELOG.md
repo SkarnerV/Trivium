@@ -2,6 +2,16 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-11-18
+
+### Added
+
+- **Open subagent sessions.** Each subagent appears in the thread with its activity and elapsed time. Click it to see its conversation beside the thread, or Shift-click to open it in a separate window. The session header lists subagents from the current and earlier runs, including background agents.
+
+### Changed
+
+- After the final answer, progress notes and intermediate steps fold under the run's timing line. Open it to see them again.
+
 ## [0.12.0] - 2026-11-13
 
 ### Changed

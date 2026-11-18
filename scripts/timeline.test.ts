@@ -5,7 +5,8 @@ import { blocksOf } from "../src/renderer/timeline.ts";
 
 const step = (id: string, tool: string, content?: string): Step => ({ id, tool, target: content?.split("\n")[0] ?? id, content, meta: "", tone: "plain", status: "done" });
 
-const shape = (steps: Step[]) => blocksOf(steps).map((block) => (block.kind === "note" ? block.text : block.steps.map((s) => s.id)));
+const shape = (steps: Step[]) =>
+	blocksOf(steps).map((block) => (block.kind === "note" ? block.text : block.kind === "subagents" ? `agents:${block.step.id}` : block.steps.map((s) => s.id)));
 
 test("what the agent says between tool calls splits its steps into groups", () => {
 	const steps = [
@@ -27,6 +28,11 @@ test("a run with nothing said along the way is one group", () => {
 
 test("an empty note neither shows nor splits the steps around it", () => {
 	assert.deepEqual(shape([step("a", "read"), step("b", "note", " \n"), step("c", "edit")]), [["a", "c"]]);
+});
+
+test("a subagent call stands on its own between the steps around it", () => {
+	const launch: Step = { ...step("b", "subagent"), subagent: { children: [], background: false } };
+	assert.deepEqual(shape([step("a", "read"), launch, step("c", "edit"), step("d", "bash")]), [["a"], "agents:b", ["c", "d"]]);
 });
 
 test("notes that follow each other stay separate, and a group keeps the id of its first step", () => {

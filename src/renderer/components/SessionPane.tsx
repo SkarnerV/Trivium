@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
-import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
+import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, openSubagent, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
 import { PreviewOpener, PreviewSession } from "../preview.ts";
 import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
@@ -13,7 +13,9 @@ import { serviceCount, useServices } from "./ServicesPanel.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
-import { SubagentNoticeLine } from "./Subagents.tsx";
+import { type SubagentOpener, SubagentNoticeLine, SubagentOpenerContext } from "./Subagents.tsx";
+import { SubagentDrawer } from "./SubagentSession.tsx";
+import { backgroundSubagents, SubagentsMenu } from "./SubagentsMenu.tsx";
 import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
@@ -230,10 +232,31 @@ function ReplyStats({ run }: { run: Run }) {
 	);
 }
 
-function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: SessionView; index: number }) {
+/** A message in a session that can't be edited here, such as the task a subagent was given. */
+function QuotedMessage({ run, from }: { run: Run; from?: string }) {
+	const text = run.prompt.trim();
+	return (
+		<div className="prompt quoted">
+			{from && <span className="prompt-from">{from}</span>}
+			{text && <div className="bubble">{text}</div>}
+			{text && (
+				<div className="prompt-actions">
+					<CopyButton text={text} label={t("Copy message")} />
+				</div>
+			)}
+		</div>
+	);
+}
+
+/**
+ * One run of a thread. Without a view it is read-only, as in a subagent's session: its message can't be
+ * edited or forked from, and `from` says who sent it.
+ */
+export function RunBlock({ run, live, view, index, from }: { run: Run; live: boolean; view?: SessionView; index: number; from?: string }) {
 	return (
 		<div className="run">
-			{Boolean(run.prompt.trim() || run.attachments?.length) && <UserMessage run={run} view={view} index={index} />}
+			{Boolean(run.prompt.trim() || run.attachments?.length) &&
+				(view ? <UserMessage run={run} view={view} index={index} /> : <QuotedMessage run={run} from={from} />)}
 			<div className="agent">
 				{run.notice && <SubagentNoticeLine notice={run.notice} />}
 				<Steps run={run} live={live} />
@@ -266,7 +289,7 @@ function RunBlock({ run, live, view, index }: { run: Run; live: boolean; view: S
  * Keeps the thread pinned to the bottom while new output arrives, unless the user scrolled up. Opening
  * another session pins it again.
  */
-function useStickToBottom(path: string, dep: unknown) {
+export function useStickToBottom(path: string, dep: unknown) {
 	const ref = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
 	const [away, setAway] = useState(false);
@@ -375,84 +398,94 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	// Research's panel has no Preview view.
 	const preview = useMemo(() => (app !== "research" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
+	const subagent = useStore((s) => s.subagentShown[view.path]);
+	const background = useMemo(() => backgroundSubagents(view.runs, view.running), [view.runs, view.running]);
+	const opener = useMemo<SubagentOpener>(
+		() => ({ current: subagent?.file, background, open: (target, newWindow) => openSubagent(view.path, target, newWindow) }),
+		[view.path, subagent?.file, background],
+	);
 	return (
-		<main className={`pane${summary ? " has-summary" : ""}`} aria-label={split ? view.title : undefined}>
-			<header className="pane-head drag">
-				{split?.tabs ? (
-					<SplitTabs tabs={split.tabs} current={view.path} />
-				) : (
-					<div className="crumb">
-						<span className="project-name" title={view.cwd}>
-							{view.chat ? t("Chats") : baseName(view.cwd)}
-						</span>
-						<span className="project-name">/</span>
-						<h1 className="ellipsis">{view.title}</h1>
-					</div>
-				)}
-				<ServicesButton view={view} />
-				{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
-				{app === "code" ? (
-					<SummaryButton path={view.path} />
-				) : (
-					<button
-						type="button"
-						className="changes-toggle"
-						aria-pressed={open}
-						title={t(open ? "Hide panel" : "Show panel")}
-						onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
-					>
-						<PanelRightIcon size={15} />
-						<span>{t({ changes: "Changes", note: "Note", document: "Document" }[panelKind(app)])}</span>
-					</button>
-				)}
-				{split && (
-					<button
-						type="button"
-						className="icon-btn pane-close"
-						aria-label={t(split.tabs ? "Close split view" : "Close this pane")}
-						title={t(split.tabs ? "Close split view" : "Close this pane")}
-						// With tabs, closing keeps the session showing.
-						onClick={() => closePane(split.tabs?.find((tab) => tab.path !== view.path)?.path ?? view.path)}
-					>
-						<CloseIcon size={14} />
-					</button>
-				)}
-			</header>
-			<div className="thread-frame">
-				<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
-					<div className="scroll-row">
-						<div className="thread">
-							<PreviewOpener.Provider value={preview}>
-								<PreviewSession.Provider value={preview && view.path}>
-									{view.runs.map((run, index) => (
-										<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
-									))}
-								</PreviewSession.Provider>
-							</PreviewOpener.Provider>
-							{dialogs.map((request) => (
-								<AskCard key={request.id} request={request} />
-							))}
-						</div>
-						{summary && <SummaryCards view={view} />}
-					</div>
-				</div>
-				{scroll.away && (
-					<button type="button" className="to-latest" onClick={scroll.toBottom} aria-label={t("Scroll to latest")} title={t("Scroll to latest")}>
-						{/* While the agent works, the dots say there is more coming below. */}
-						{view.running ? (
-							<span className="to-latest-dots">
-								<span />
-								<span />
-								<span />
+		<SubagentOpenerContext.Provider value={opener}>
+			<main className={`pane${summary ? " has-summary" : ""}${subagent ? " has-subagent" : ""}`} aria-label={split ? view.title : undefined}>
+				<header className="pane-head drag">
+					{split?.tabs ? (
+						<SplitTabs tabs={split.tabs} current={view.path} />
+					) : (
+						<div className="crumb">
+							<span className="project-name" title={view.cwd}>
+								{view.chat ? t("Chats") : baseName(view.cwd)}
 							</span>
-						) : (
-							<Chevron open={false} down size={12} />
-						)}
-					</button>
-				)}
-			</div>
-			<Composer key={view.path} view={view} focus={!split || split.focused} />
-		</main>
+							<span className="project-name">/</span>
+							<h1 className="ellipsis">{view.title}</h1>
+						</div>
+					)}
+					<SubagentsMenu runs={view.runs} running={view.running} />
+					<ServicesButton view={view} />
+					{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
+					{app === "code" ? (
+						<SummaryButton path={view.path} />
+					) : (
+						<button
+							type="button"
+							className="changes-toggle"
+							aria-pressed={open}
+							title={t(open ? "Hide panel" : "Show panel")}
+							onClick={() => setState((s) => ({ changesHidden: { ...s.changesHidden, [view.path]: open } }))}
+						>
+							<PanelRightIcon size={15} />
+							<span>{t({ changes: "Changes", note: "Note", document: "Document" }[panelKind(app)])}</span>
+						</button>
+					)}
+					{split && (
+						<button
+							type="button"
+							className="icon-btn pane-close"
+							aria-label={t(split.tabs ? "Close split view" : "Close this pane")}
+							title={t(split.tabs ? "Close split view" : "Close this pane")}
+							// With tabs, closing keeps the session showing.
+							onClick={() => closePane(split.tabs?.find((tab) => tab.path !== view.path)?.path ?? view.path)}
+						>
+							<CloseIcon size={14} />
+						</button>
+					)}
+				</header>
+				<div className="thread-frame">
+					<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
+						<div className="scroll-row">
+							<div className="thread">
+								<PreviewOpener.Provider value={preview}>
+									<PreviewSession.Provider value={preview && view.path}>
+										{view.runs.map((run, index) => (
+											<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+										))}
+									</PreviewSession.Provider>
+								</PreviewOpener.Provider>
+								{dialogs.map((request) => (
+									<AskCard key={request.id} request={request} />
+								))}
+							</div>
+							{summary && <SummaryCards view={view} />}
+						</div>
+					</div>
+					{scroll.away && (
+						<button type="button" className="to-latest" onClick={scroll.toBottom} aria-label={t("Scroll to latest")} title={t("Scroll to latest")}>
+							{/* While the agent works, the dots say there is more coming below. */}
+							{view.running ? (
+								<span className="to-latest-dots">
+									<span />
+									<span />
+									<span />
+								</span>
+							) : (
+								<Chevron open={false} down size={12} />
+							)}
+						</button>
+					)}
+				</div>
+				<Composer key={view.path} view={view} focus={!split || split.focused} />
+				{subagent && <SubagentDrawer parent={view.path} target={subagent} app={app} />}
+			</main>
+		</SubagentOpenerContext.Provider>
 	);
 }
 

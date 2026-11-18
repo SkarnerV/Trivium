@@ -177,14 +177,69 @@ const login = new LoginFlow(
 	() => loginSettings.getOrCreateDeviceId(),
 );
 
-/** Only the app's own page may call into the main process. */
-function handle<T extends unknown[], R>(channel: string, fn: (...args: T) => R | Promise<R>): void {
+/** Windows that each show one subagent's session, by the session file they show. */
+const subagentWindows = new Map<string, BrowserWindow>();
+
+/** A subagent window's page: the app's own page, told by its hash which session to show. */
+function fromSubagentWindow(event: IpcMainInvokeEvent): boolean {
+	const url = event.senderFrame?.url ?? "";
+	return url.startsWith(`${page}#`) && [...subagentWindows.values()].some((other) => !other.isDestroyed() && event.sender === other.webContents);
+}
+
+/**
+ * Only the app's own page may call into the main process. A subagent window may make the few calls marked
+ * shared, which read its session and open links, and nothing that changes a session.
+ */
+function handle<T extends unknown[], R>(channel: string, fn: (...args: T) => R | Promise<R>, shared = false): void {
 	ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-		if (!window || event.sender !== window.webContents || event.senderFrame?.url !== page) {
+		const main = window && event.sender === window.webContents && event.senderFrame?.url === page;
+		if (!main && !(shared && fromSubagentWindow(event))) {
 			throw new Error("Untrusted request.");
 		}
 		return fn(...(args as T));
 	});
+}
+
+/** Opens a subagent's session in a window of its own, or brings forward the one already showing it. */
+function openSubagentWindow(input: { parent: string; file: string; title: string; app: AppId }): void {
+	// Refuses a file that isn't one of this session's subagents.
+	host.subagentSession(input.parent, input.file);
+	if (!APP_IDS.includes(input.app)) throw new Error("Invalid app.");
+	const open = subagentWindows.get(input.file);
+	if (open && !open.isDestroyed()) {
+		open.show();
+		open.focus();
+		return;
+	}
+	const child = new BrowserWindow({
+		width: 920,
+		height: 880,
+		minWidth: 520,
+		minHeight: 420,
+		title: input.title,
+		backgroundColor: "#FFFFFF",
+		icon: join(assets, appIconFilename(input.app, process.platform === "win32" ? "ico" : "png")),
+		autoHideMenuBar: true,
+		show: false,
+		webPreferences: {
+			preload: join(assets, "preload.cjs"),
+			contextIsolation: true,
+			sandbox: true,
+			nodeIntegration: false,
+		},
+	});
+	child.webContents.setWindowOpenHandler(({ url }) => {
+		if (/^https?:/.test(url)) void shell.openExternal(url);
+		return { action: "deny" };
+	});
+	child.webContents.on("will-navigate", (event) => event.preventDefault());
+	child.webContents.on("did-finish-load", () => child.webContents.setZoomFactor(settings.get().textSize));
+	child.once("ready-to-show", () => child.show());
+	child.on("closed", () => {
+		if (subagentWindows.get(input.file) === child) subagentWindows.delete(input.file);
+	});
+	subagentWindows.set(input.file, child);
+	void child.loadURL(`${page}#${new URLSearchParams({ subagent: input.file, parent: input.parent, title: input.title, app: input.app })}`);
 }
 
 function setAppIcon(id: AppId): void {
@@ -257,7 +312,19 @@ function registerIpc(): void {
 	handle("trivium:answerDialog", (id: string, answer: DialogAnswer) => broker.answer(id, answer));
 	handle("trivium:keepChanges", (path: string, files?: string[]) => host.keepChanges(path, files));
 	handle("trivium:revertChanges", (path: string, files?: string[]) => host.revertChanges(path, files));
-	handle("trivium:getSettings", () => settings.get());
+	handle("trivium:getSettings", () => settings.get(), true);
+	handle("trivium:subagentSession", (parent: string, file: string) => host.subagentSession(parent, file), true);
+	handle("trivium:openSubagentWindow", (input: { parent: string; file: string; title: string; app: AppId }) => openSubagentWindow(input), true);
+	handle(
+		"trivium:showSession",
+		(path: string) => {
+			if (!window) return;
+			window.show();
+			window.focus();
+			send({ type: "focus_session", path });
+		},
+		true,
+	);
 	handle("trivium:updateSettings", async (patch: Partial<TriviumSettings>) => {
 		const next = await settings.update(patch);
 		if (patch.textSize) window?.webContents.setZoomFactor(next.textSize);
@@ -340,7 +407,7 @@ function registerIpc(): void {
 		else await writeFile(result.filePath, sessionMarkdown(info));
 		return result.filePath;
 	});
-	handle("trivium:copyText", (text: string) => clipboard.writeText(text));
+	handle("trivium:copyText", (text: string) => clipboard.writeText(text), true);
 	handle("trivium:deleteSessions", (paths: string[]) => host.deleteSessions(paths, (path) => shell.trashItem(path)));
 	handle("trivium:archiveSessions", (paths: string[], archived: boolean) => host.archiveSessions(paths, archived));
 	handle("trivium:providers", () =>
@@ -492,10 +559,14 @@ function registerIpc(): void {
 	handle("trivium:gitStatus", (path: string) => host.gitStatus(path));
 	handle("trivium:services", () => services.list());
 	handle("trivium:stopService", (id: string) => services.stop(id));
-	handle("trivium:openExternal", async (url: string) => {
-		if (!/^https?:\/\//i.test(url)) throw new Error("Only web addresses open in the browser.");
-		await shell.openExternal(url);
-	});
+	handle(
+		"trivium:openExternal",
+		async (url: string) => {
+			if (!/^https?:\/\//i.test(url)) throw new Error("Only web addresses open in the browser.");
+			await shell.openExternal(url);
+		},
+		true,
+	);
 	handle("trivium:gitDiff", (path: string, file: Pick<GitFile, "rel" | "area">) => host.gitDiff(path, file));
 	handle("trivium:gitHistory", (path: string, limit: number) => host.gitHistory(path, limit));
 	handle("trivium:gitCommit", (path: string, id: string) => host.gitCommit(path, id));
@@ -644,6 +715,8 @@ function createWindow(): void {
 	void window.loadURL(page);
 	window.on("closed", () => {
 		window = undefined;
+		// A subagent's window belongs to the main one; it would otherwise keep the app open with nothing to return to.
+		for (const child of subagentWindows.values()) if (!child.isDestroyed()) child.close();
 	});
 }
 

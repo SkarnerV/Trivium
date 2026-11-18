@@ -108,6 +108,8 @@ export interface SubagentChild {
 	/** Its answer, once it finishes. */
 	output?: string;
 	error?: string;
+	/** The pi session file it writes, which holds its whole conversation. It may not exist until it starts. */
+	sessionFile?: string;
 }
 
 export interface Subagent {
@@ -125,6 +127,17 @@ export interface SubagentNotice {
 	durationMs?: number;
 	/** The child's result, as pi-subagents previewed it. */
 	text: string;
+	/** The child's session file, when the notice names one. */
+	sessionFile?: string;
+}
+
+/** A subagent's own conversation, read from its session file, and what the parent session last heard of it. */
+export interface SubagentSession {
+	runs: Run[];
+	/** The file isn't there yet: the child hasn't started writing it. */
+	missing: boolean;
+	/** The child as the parent session last reported it, while that session is open. */
+	child?: SubagentChild;
 }
 
 /** A provider's usage-limit, quota or balance error, explained. */
@@ -1020,6 +1033,12 @@ export interface TriviumApi {
 	/** Saves a session's conversation as Markdown, or its file as is, where the user picks. Resolves with the path. */
 	exportSession(path: string): Promise<string | undefined>;
 	copyText(text: string): Promise<void>;
+	/** Reads a subagent's session file, which must belong to the given parent session. */
+	subagentSession(parent: string, file: string): Promise<SubagentSession>;
+	/** Opens a subagent's session in a window of its own, or brings that window forward. */
+	openSubagentWindow(input: { parent: string; file: string; title: string; app: AppId }): Promise<void>;
+	/** Brings the main window forward on a session, from a subagent's window. */
+	showSession(path: string): Promise<void>;
 	providers(): Promise<ProviderInfo[]>;
 	login(providerId: string, type: "api_key" | "oauth"): Promise<void>;
 	answerLogin(id: string, value: string | undefined): Promise<void>;

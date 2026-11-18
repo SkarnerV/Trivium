@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { describeSubagent, noticeOf, subagentOf } from "../src/main/subagents.ts";
+import { join } from "node:path";
+import { childSessionFile, describeSubagent, noticeOf, subagentOf } from "../src/main/subagents.ts";
 import { RunTracker } from "../src/main/transcript.ts";
 
 type Messages = ConstructorParameters<typeof RunTracker>[0];
@@ -73,8 +74,21 @@ test("a background result reads as agent, status, time and the result alone", ()
 		status: "completed",
 		durationMs: 198_000,
 		text: "Electron is slower.\n\nIt loads Chromium.",
+		sessionFile: "/tmp/a.jsonl",
 	});
 	assert.equal(noticeOf({ role: "custom", customType: "other", content: "x" }), undefined);
+});
+
+test("a running child's session file is where pi-subagents writes it, beside the parent's", () => {
+	const parent = join("sessions", "proj", "2026-11-18_abc.jsonl");
+	const details = { mode: "parallel", runId: "r1", progress: [{ index: 0, agent: "scout", status: "running" }, { index: 1, agent: "worker", status: "running" }] };
+	const files = subagentOf({ workflow: true }, details, "running", parent).children.map((child) => child.sessionFile);
+	assert.deepEqual(files, [0, 1].map((index) => join("sessions", "proj", "2026-11-18_abc", "r1", `run-${index}`, "session.jsonl")));
+	// The finished result names its file, which wins; without a parent file or run id there is none to guess.
+	const done = { mode: "single", runId: "r1", results: [{ index: 0, agent: "scout", task: "t", exitCode: 0, sessionFile: "/elsewhere/s.jsonl" }] };
+	assert.equal(subagentOf(scoutArgs, done, "done", parent).children[0]!.sessionFile, "/elsewhere/s.jsonl");
+	assert.equal(subagentOf(scoutArgs, { ...details, runId: undefined }, "running", parent).children[0]!.sessionFile, undefined);
+	assert.equal(childSessionFile(parent, "../up", 0), undefined);
 });
 
 test("a background result starts its own run, in history and live", () => {

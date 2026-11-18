@@ -898,6 +898,7 @@ body.resizing * {
 /* Session pane */
 
 .pane {
+	position: relative;
 	flex: 1;
 	min-width: 0;
 	display: flex;
@@ -1615,247 +1616,313 @@ body.resizing * {
 	white-space: pre;
 }
 
-/* Subagents: the agent's name is the one tinted thing, so delegated work stands out among the steps. */
-.agent-tag {
+/* Subagents: a row per agent with its mark, name and what it is doing, under a header when there are several.
+   Each row opens the agent's own session. */
+.agent-avatar {
+	position: relative;
 	flex: none;
-	padding: 0 6px;
-	border-radius: 4px;
-	background: var(--soft);
-	color: var(--accent-text);
-	font-family: var(--mono);
-	font-size: 11.5px;
-	line-height: 18px;
+	width: var(--avatar, 24px);
+	height: var(--avatar, 24px);
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--border);
+	border-radius: 50%;
+	background: var(--tray);
+	color: var(--ink-2);
 }
 
-.agent-tag.quiet {
+/* How the agent is doing, in its corner. The row's word says the same, for anyone who can't tell the colours apart. */
+.agent-avatar-dot {
+	position: absolute;
+	right: -1px;
+	bottom: -1px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--ink-4);
+	box-shadow: 0 0 0 2px #fff;
+}
+
+.agent-avatar.is-running .agent-avatar-dot {
+	background: var(--accent);
+}
+
+.agent-avatar.is-pending .agent-avatar-dot {
+	background: #fff;
+	box-shadow:
+		inset 0 0 0 1.5px var(--accent),
+		0 0 0 2px #fff;
+}
+
+.agent-avatar.is-done .agent-avatar-dot {
+	background: var(--add);
+}
+
+.agent-avatar.is-error .agent-avatar-dot {
+	background: var(--del);
+}
+
+.agent-avatar.is-stopped .agent-avatar-dot {
+	background: #9c9eae;
+}
+
+.avatar-stack {
+	flex: none;
+	display: flex;
+	align-items: center;
+}
+
+.avatar-stack > * {
+	box-shadow: 0 0 0 2px #fff;
+}
+
+.avatar-stack > * + * {
+	margin-left: calc(var(--avatar, 24px) * -0.25);
+}
+
+.avatar-more {
+	width: var(--avatar, 24px);
+	height: var(--avatar, 24px);
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
 	background: var(--line);
 	color: var(--ink-3);
+	font-size: 10px;
+	font-weight: 500;
 }
 
-/* The task is prose, so the target here leaves the monospace to the agent's name. */
-.step .subagent-target {
+.subagent-row {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 10px;
+	width: 100%;
 	min-width: 0;
-	font-family: inherit;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
 }
 
-.step .subagent-target > .prose {
-	margin-left: 2px;
+.subagent-row.is-button {
+	cursor: pointer;
+	transition: background 120ms ease;
 }
 
-.subagent-detail {
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
+.subagent-row.is-button:hover,
+.subagent-row.current {
+	background: var(--soft);
 }
 
-.subagent-child + .subagent-child {
-	padding-top: 12px;
-	border-top: 1px solid var(--border);
+.subagent-row.current {
+	box-shadow: inset 0 0 0 1px var(--border);
 }
 
-.subagent-child-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 8px;
+.subagent-row.is-button:disabled {
+	opacity: 1;
+	cursor: default;
 }
 
-.subagent-label {
-	font-family: var(--mono);
-	font-size: 11.5px;
+.subagent-row > svg {
+	flex: none;
 	color: var(--ink-4);
 }
 
-.subagent-child-time {
-	margin-left: auto;
+.subagent-row-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.subagent-row-name {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	font-size: 12.5px;
+	line-height: 1.45;
+}
+
+.subagent-agent {
+	flex: none;
+	font-weight: 500;
+	color: var(--ink);
+}
+
+.subagent-label {
+	flex: none;
 	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--ink-4);
 }
 
 .subagent-task {
-	margin: 0 0 12px;
-	font-size: 12.5px;
-	white-space: pre-wrap;
+	color: var(--ink-3);
 }
 
-.subagent-steps {
-	list-style: none;
-	margin: 0 0 12px;
-	padding: 0 0 0 10px;
-	border-left: 1.5px solid var(--border);
+.subagent-command {
 	font-family: var(--mono);
-	font-size: 11.5px;
-	line-height: 1.75;
-	color: var(--ink-2);
-}
-
-.subagent-steps li {
-	display: flex;
-	gap: 8px;
-	min-width: 0;
-}
-
-.subagent-steps .tool {
-	flex: none;
-	width: 44px;
-	color: var(--ink-4);
-}
-
-.subagent-steps .more {
-	color: var(--ink-4);
-}
-
-.subagent-result {
-	margin-bottom: 12px;
-	font-size: 13px;
-	line-height: 1.55;
-}
-
-.subagent-result > :first-child {
-	margin-top: 0;
-}
-
-.subagent-result > :last-child,
-.subagent-child > :last-child {
-	margin-bottom: 0;
-}
-
-.subagent-detail .subagent-error {
-	color: var(--del);
-}
-
-.subagent-usage {
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--ink-4);
-}
-
-.subagent-note {
-	margin: 0;
 	font-size: 12px;
-	color: var(--ink-3);
-}
-
-/* The live line's second line: what the child is doing now. */
-.subagent-now {
-	display: flex;
-	gap: 8px;
-	min-width: 0;
-	padding-left: 14px;
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--ink-3);
-}
-
-.subagent-now-count {
-	flex: none;
-	margin-left: auto;
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--ink-4);
-}
-
-.subagent-bg {
-	color: var(--ink-4);
-}
-
-.subagent-row {
-	display: grid;
-	grid-template-columns: auto auto minmax(0, 1fr) auto;
-	align-items: center;
-	column-gap: 8px;
-	min-height: 22px;
-	padding-left: 14px;
-	font-family: var(--mono);
-	font-size: 11.5px;
-}
-
-/* One width for every row's label, so what each child is doing lines up. */
-.subagent-row .subagent-label {
-	width: 96px;
+	font-weight: 500;
+	color: var(--ink);
 }
 
 .subagent-activity {
-	color: var(--ink-2);
+	font-size: 11.5px;
+	line-height: 1.6;
+	color: var(--ink-3);
 }
 
-.subagent-activity.done {
-	color: var(--add);
+.subagent-activity.code {
+	font-family: var(--mono);
+	font-size: 11px;
 }
 
 .subagent-activity.error {
 	color: var(--del);
 }
 
-.subagent-row.finished .subagent-activity {
-	opacity: 0.85;
+.subagent-status {
+	flex: none;
+	font-size: 11.5px;
+	color: var(--ink-3);
 }
 
-/* A background subagent's result, opening the run it started in place of a user message. */
-.subagent-notice {
+.subagent-status.is-running,
+.subagent-status.is-pending {
+	color: var(--accent-text);
+}
+
+.subagent-status.is-done {
+	color: var(--add);
+}
+
+.subagent-status.is-error {
+	color: var(--del);
+}
+
+.subagent-time {
+	flex: none;
+	min-width: 30px;
+	text-align: right;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-pill {
+	flex: none;
+	padding: 0 8px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: var(--ink-3);
+	font-size: 11px;
+	line-height: 20px;
+}
+
+/* A single row lines its mark up with the thread's edge. */
+.subagent-single {
+	margin: 0 -8px;
+}
+
+.subagent-group {
 	display: flex;
 	flex-direction: column;
+}
+
+/* Once its agents are done the header rests, like the steps around it, until it is opened again. */
+.subagent-group-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 6px 4px 6px 0;
+	border: 0;
+	background: transparent;
+	color: var(--ink);
+	font: inherit;
+	text-align: left;
+	opacity: 0.6;
+	transition: opacity 120ms ease;
+}
+
+.subagent-group.open .subagent-group-head,
+.subagent-group.live .subagent-group-head,
+.subagent-group-head:hover {
+	opacity: 1;
+}
+
+.subagent-group-head > svg {
+	flex: none;
+	color: var(--ink-4);
+}
+
+.subagent-group-title {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.4;
+}
+
+.subagent-group-title strong {
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+.subagent-group-summary {
+	font-size: 11.5px;
+	color: var(--ink-3);
+}
+
+.subagent-group-summary.active {
+	color: var(--accent-text);
+}
+
+.subagent-group-summary.error {
+	color: var(--del);
+}
+
+.subagent-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 2px;
+	padding: 4px;
 	border: 1px solid var(--line);
 	border-radius: 10px;
-	background: var(--tray);
-	font-size: 12.5px;
+	background: color-mix(in srgb, var(--tray) 60%, #fff);
+}
+
+/* A background result, opening the run it started in place of a user message. */
+.subagent-notice {
+	margin: 0 -8px;
+	border-radius: 10px;
+}
+
+.subagent-notice.open {
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--line),
+		0 1px 2px rgba(22, 23, 27, 0.05);
 }
 
 .subagent-notice-head {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	padding: 6px 6px 6px 10px;
+	gap: 2px;
 }
 
-.subagent-notice-icon {
-	display: flex;
+.subagent-notice-open {
 	flex: none;
-	color: var(--ink-4);
-}
-
-.subagent-notice-status {
-	flex: none;
-	color: var(--ink-2);
-}
-
-.subagent-notice.problem .subagent-notice-status {
-	color: var(--del);
-}
-
-.subagent-notice-command {
-	min-width: 0;
-	color: var(--ink-2);
-}
-
-.subagent-notice-preview {
-	flex: 1;
-	color: var(--ink-4);
-}
-
-.subagent-notice-toggle {
-	flex: none;
-	margin-left: auto;
-	padding: 2px 8px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--ink-3);
-	font-size: 12px;
-}
-
-.subagent-notice-toggle:hover {
-	background: var(--line);
-	color: var(--ink);
 }
 
 .subagent-notice-body {
-	padding: 4px 12px 12px 32px;
+	padding: 2px 14px 12px 42px;
 	font-size: 13px;
 	line-height: 1.55;
 	overflow-wrap: anywhere;
@@ -1867,6 +1934,293 @@ body.resizing * {
 
 .subagent-notice-body > :last-child {
 	margin-bottom: 0;
+}
+
+/* The header menu of every subagent in the session. */
+.subagents-menu {
+	position: relative;
+}
+
+.subagents-working {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--accent-text);
+}
+
+.subagents-popover {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	z-index: 30;
+	width: 420px;
+	max-width: calc(100vw - 32px);
+	max-height: min(560px, 70vh);
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: #fff;
+	box-shadow:
+		0 16px 40px rgba(22, 23, 27, 0.12),
+		0 2px 6px rgba(22, 23, 27, 0.06);
+	overflow: hidden;
+}
+
+.subagents-popover-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px 10px;
+}
+
+.subagents-popover-title {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	font-size: 11.5px;
+	color: var(--ink-3);
+}
+
+.subagents-popover-title strong {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.segmented {
+	display: flex;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--line);
+}
+
+.segmented button {
+	padding: 2px 9px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 11.5px;
+}
+
+.segmented button[aria-pressed="true"] {
+	background: #fff;
+	color: var(--ink);
+	box-shadow: 0 0 0 1px var(--border);
+}
+
+.subagents-popover-list {
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.subagents-popover-group {
+	padding: 4px 6px 6px;
+	border-top: 1px solid var(--line);
+}
+
+.subagents-popover-label {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 8px 4px;
+	color: var(--ink-4);
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.subagents-popover-label > span:last-child {
+	flex: none;
+	font-family: var(--mono);
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.subagents-popover-row {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	border-radius: 8px;
+}
+
+.subagents-popover-row:hover {
+	background: var(--soft);
+}
+
+.subagents-popover-row .subagent-row:hover {
+	background: transparent;
+}
+
+.subagents-popover-window {
+	flex: none;
+	opacity: 0;
+}
+
+.subagents-popover-row:hover .subagents-popover-window,
+.subagents-popover-window:focus-visible {
+	opacity: 1;
+}
+
+.subagents-popover-empty {
+	margin: 0;
+	padding: 14px;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.subagents-popover-foot {
+	padding: 9px 14px;
+	border-top: 1px solid var(--line);
+	background: var(--tray);
+	color: var(--ink-3);
+	font-size: 11.5px;
+}
+
+/* A subagent's own session: in a drawer over the right of the pane, or filling a window of its own. */
+.subagent-drawer {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 20;
+	width: min(640px, 62%);
+	display: flex;
+	border-left: 1px solid var(--border);
+	background: #fff;
+	box-shadow: -12px 0 32px rgba(22, 23, 27, 0.08);
+}
+
+/* The drawer pushes the thread aside, header and message box too, so both stay in view; a narrow pane gives it all the room. */
+.pane.has-subagent > :not(.subagent-drawer) {
+	margin-right: min(640px, 62%);
+}
+
+@container pane (max-width: 760px) {
+	.subagent-drawer {
+		width: 100%;
+	}
+
+	.pane.has-subagent > :not(.subagent-drawer) {
+		margin-right: 0;
+	}
+}
+
+.subagent-window {
+	height: 100%;
+	display: flex;
+	background: #fff;
+	color: var(--ink);
+}
+
+.subagent-session {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	background: #fff;
+	container: subagent / inline-size;
+}
+
+.subagent-session-head {
+	gap: 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+.subagent-session.drawer .subagent-session-head {
+	padding: 10px 12px 10px 20px;
+}
+
+.subagent-session-title {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.35;
+}
+
+.subagent-session-crumb {
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.subagent-session-name {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	min-width: 0;
+}
+
+.subagent-session-name strong {
+	font-size: 13.5px;
+	font-weight: 600;
+}
+
+.subagent-session .thread {
+	padding-top: 20px;
+}
+
+.prompt-from {
+	margin-bottom: -4px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.subagent-session-wait {
+	margin: 0;
+	color: var(--ink-3);
+	font-size: 13px;
+}
+
+/* Where the message box would be: how the agent is doing, and the way back to the main thread. */
+.subagent-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: calc(100% - 32px);
+	max-width: calc(var(--conversation-width, 720px) - 2 * var(--thread-gutter, 24px));
+	min-height: 48px;
+	margin: 0 auto 16px;
+	padding: 6px 6px 6px 16px;
+	border: 1px solid var(--edge);
+	border-radius: 16px;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba(22, 23, 27, 0.05);
+	font-size: 12.5px;
+}
+
+.subagent-bar-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.subagent-bar-main strong {
+	font-weight: 500;
+}
+
+.subagent-bar-note {
+	flex: none;
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+@container subagent (max-width: 520px) {
+	.subagent-bar-note {
+		display: none;
+	}
+}
+
+.subagent-bar-back {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 }
 
 /* Changes panel */

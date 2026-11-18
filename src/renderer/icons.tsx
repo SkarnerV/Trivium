@@ -296,6 +296,25 @@ export const CloudOffIcon = (p: IconProps) => (
 		<path d="m3 3 18 18" />
 	</Svg>
 );
+export const BookIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3z" />
+		<path d="M21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z" />
+	</Svg>
+);
+export const BotIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<rect x="4" y="8" width="16" height="12" rx="3" />
+		<path d="M12 4v4M9 13.5h.01M15 13.5h.01" />
+	</Svg>
+);
+/** Back up to the session a subagent works for. */
+export const ParentIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M18 18 6 6" />
+		<path d="M6 15V6h9" />
+	</Svg>
+);
 export const BackIcon = (p: IconProps) => (
 	<Svg size={14} width={2.2} {...p}>
 		<path d="m15 18-6-6 6-6" />

@@ -1,4 +1,5 @@
 import type { Step, Subagent, SubagentChild, SubagentNotice } from "../shared/protocol.ts";
+import { basename, dirname, join } from "node:path";
 import { commandNotice } from "./long-commands.ts";
 
 /**
@@ -41,11 +42,13 @@ interface ResultLike {
 	progress?: ProgressLike;
 	progressSummary?: ProgressLike;
 	toolCalls?: unknown;
+	sessionFile?: unknown;
 }
 
 interface DetailsLike {
 	results?: unknown;
 	progress?: unknown;
+	runId?: unknown;
 	asyncId?: unknown;
 	background?: unknown;
 }
@@ -83,7 +86,16 @@ function childStatus(progress: ProgressLike | undefined, result: ResultLike | un
 	return result?.error || (exitCode !== undefined && exitCode !== 0) || toolStatus === "error" ? "error" : "done";
 }
 
-function child(result: ResultLike | undefined, progress: ProgressLike | undefined, toolStatus: Step["status"]): SubagentChild {
+/**
+ * Where pi-subagents writes a child's session while it runs: beside the parent's session file, in a folder
+ * named after it, then the run and the child's place in it. The finished result names the file itself.
+ */
+export function childSessionFile(parentSessionFile: string | undefined, runId: string, index: number): string | undefined {
+	if (!parentSessionFile || !/^[\w.-]+$/.test(runId)) return undefined;
+	return join(dirname(parentSessionFile), basename(parentSessionFile, ".jsonl"), runId, `run-${index}`, "session.jsonl");
+}
+
+function child(result: ResultLike | undefined, progress: ProgressLike | undefined, toolStatus: Step["status"], sessionFile?: string): SubagentChild {
 	const summary = result?.progressSummary;
 	const status = childStatus(progress, result, toolStatus);
 	const recent = list<ToolCallLike>(progress?.recentTools ?? summary?.recentTools);
@@ -108,21 +120,24 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 		context: context === "fresh" || context === "fork" ? context : undefined,
 		output: status === "running" ? undefined : str(result?.finalOutput) || undefined,
 		error: status === "error" ? str(result?.error) || str(progress?.error) || undefined : undefined,
+		sessionFile: str(result?.sessionFile) || sessionFile,
 	};
 }
 
 /** The children a `subagent` call started, from its arguments until its details say more. */
-export function subagentOf(args: Record<string, unknown>, details: unknown, toolStatus: Step["status"]): Subagent {
+export function subagentOf(args: Record<string, unknown>, details: unknown, toolStatus: Step["status"], parentSessionFile?: string): Subagent {
 	const info = (details && typeof details === "object" ? details : {}) as DetailsLike;
 	const background = typeof info.asyncId === "string" || info.background === true;
 	const results = list<ResultLike>(info.results);
 	const progress = list<ProgressLike>(info.progress);
 	const count = Math.max(results.length, progress.length);
+	const runId = str(info.runId) || str(info.asyncId);
 	const children: SubagentChild[] = [];
 	for (let index = 0; index < count; index++) {
 		const result = results.find((item) => item.index === index) ?? results[index];
 		const live = result?.progress ?? progress.find((item) => item.index === index) ?? progress[index];
-		children.push(child(result, live, toolStatus));
+		const position = num(result?.index) ?? num(live?.index) ?? index;
+		children.push(child(result, live, toolStatus, childSessionFile(parentSessionFile, runId, position)));
 	}
 	// A single child's progress may leave out what the call already said.
 	if (children.length === 1 && typeof args.agent === "string") {
@@ -136,6 +151,7 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 			status: background || toolStatus === "done" ? "done" : toolStatus === "error" ? "error" : "running",
 			steps: [],
 			tools: 0,
+			sessionFile: childSessionFile(parentSessionFile, runId, 0),
 		});
 	}
 	return { children, background };
@@ -185,11 +201,13 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 	// A workflow's receipt sits right under the header, before the result.
 	while (lines.length && (!lines[0]!.trim() || lines[0]!.startsWith("Workflow receipt: "))) lines.shift();
 	const end = lines.findIndex((line) => TRAILER.test(line));
+	const sessionFile = /^Session(?: file)?: (.+\.jsonl)\s*$/m.exec(content)?.[1];
 	const durations = runs.map((run) => num(run.durationMs)).filter((value) => value !== undefined);
 	return {
 		agent: agents.join(", ") || header?.[2] || "subagent",
 		status: ["completed", "failed", "paused", "stopped"].includes(status) ? status : "completed",
 		durationMs: durations.length ? Math.max(...durations) : undefined,
 		text: (end < 0 ? lines : lines.slice(0, end)).join("\n").trim(),
+		sessionFile,
 	};
 }

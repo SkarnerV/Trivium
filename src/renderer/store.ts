@@ -24,6 +24,7 @@ import { type Locale, resolveLocale, setLocale, t } from "../shared/i18n.ts";
 import type { PermissionModeId } from "../shared/permissions.ts";
 import { type PanelView, panelViews, shownView } from "./panels.ts";
 import type { DrawnDiagram } from "./preview.ts";
+import type { SubagentTarget } from "./components/Subagents.tsx";
 import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
 
@@ -67,6 +68,8 @@ export interface State {
 	panelTab: Record<string, PanelView>;
 	/** Sessions showing the summary cards beside the conversation. */
 	summaryShown: Record<string, boolean>;
+	/** The subagent whose own session shows in a drawer beside each session's thread. */
+	subagentShown: Record<string, SubagentTarget>;
 	/** The files open in each session's Preview panel, oldest first, and the one showing. */
 	previews: Record<string, { files: ReaderFile[]; active?: string }>;
 	/** The document each Write session's panel last went to on its own, so returning to the session leaves what the user chose. */
@@ -152,6 +155,7 @@ let state: State = {
 	panelTabs: {},
 	panelTab: {},
 	summaryShown: {},
+	subagentShown: {},
 	previews: {},
 	followed: {},
 	git: {},
@@ -230,6 +234,23 @@ export function errorText(error: unknown): string {
 	const text = error instanceof Error ? error.message : String(error);
 	// Electron prefixes IPC errors with the channel name.
 	return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+}
+
+/** Shows a subagent's own session in a drawer beside the thread, or in a window of its own. */
+export function openSubagent(parent: string, target: SubagentTarget, newWindow: boolean): void {
+	if (newWindow) {
+		const title = [target.agent, target.label].filter(Boolean).join(" ");
+		void attempt(() => trivium.openSubagentWindow({ parent, file: target.file, title, app: getState().app }));
+		return;
+	}
+	setState((s) => ({ subagentShown: { ...s.subagentShown, [parent]: target } }));
+}
+
+export function closeSubagent(parent: string): void {
+	setState((s) => {
+		const { [parent]: _closed, ...rest } = s.subagentShown;
+		return { subagentShown: rest };
+	});
 }
 
 export async function attempt<T>(fn: () => Promise<T>): Promise<T | undefined> {
@@ -848,6 +869,7 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		panelTabs: Object.fromEntries(Object.entries(s.panelTabs).filter(([path]) => !gone.has(path))),
 		followed: Object.fromEntries(Object.entries(s.followed).filter(([path]) => !gone.has(path))),
 		summaryShown: Object.fromEntries(Object.entries(s.summaryShown).filter(([path]) => !gone.has(path))),
+		subagentShown: Object.fromEntries(Object.entries(s.subagentShown).filter(([path]) => !gone.has(path))),
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));
 	notify(deleted.length === 1 ? t("Session moved to the Trash") : t("{n} sessions moved to the Trash", { n: deleted.length }), "info");

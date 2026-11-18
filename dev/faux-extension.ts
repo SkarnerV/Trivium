@@ -20,6 +20,8 @@ import {
 	fauxThinking,
 	fauxToolCall,
 } from "@earendil-works/pi-ai";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -218,13 +220,68 @@ const RESEARCHER: FauxChild = {
 
 const BACKGROUND_MS = 6000;
 
+/** What a scripted tool call takes and gives back, close enough for the transcript to describe it. */
+function fauxCall(tool: string, arg: string): { args: Record<string, string>; result: string } {
+	if (tool === "bash") return { args: { command: arg }, result: "ok" };
+	if (tool === "grep") return { args: { pattern: arg }, result: "src/auth/session.ts:12\nsrc/auth/refresh.ts:40" };
+	return { args: { path: arg }, result: `// ${arg}\nexport {};` };
+}
+
+/**
+ * Writes a child's session where pi-subagents would, an entry at a time as the child works, so its session
+ * can be opened from the thread while it runs.
+ */
+class FauxChildSession {
+	readonly file: string;
+	private parentId: string | null = null;
+	private seq = 0;
+	private written = 0;
+	private ended = false;
+
+	constructor(parentFile: string, runId: string, index: number, private readonly child: FauxChild, cwd: string) {
+		this.file = join(dirname(parentFile), basename(parentFile, ".jsonl"), runId, `run-${index}`, "session.jsonl");
+		mkdirSync(dirname(this.file), { recursive: true });
+		appendFileSync(this.file, `${JSON.stringify({ type: "session", version: 3, id: `faux-${runId}-${index}`, timestamp: new Date().toISOString(), cwd })}\n`);
+		this.append({ role: "user", content: [{ type: "text", text: child.task }], timestamp: Date.now() });
+	}
+
+	private append(message: Record<string, unknown>): void {
+		const id = `f${this.seq++}`;
+		appendFileSync(this.file, `${JSON.stringify({ type: "message", id, parentId: this.parentId, timestamp: new Date().toISOString(), message })}\n`);
+		this.parentId = id;
+	}
+
+	private assistant(content: unknown[], stopReason: string): void {
+		const usage = { input: 2400, output: 180, cacheRead: 0, cacheWrite: 0, totalTokens: 2580, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+		this.append({ role: "assistant", content, api: "trivium-faux", provider: "trivium-faux", model: "scripted", usage, stopReason, timestamp: Date.now() });
+	}
+
+	/** Writes the calls made so far, and the answer once the child is done. */
+	advance(done: number, finished: boolean): void {
+		while (this.written < done) {
+			const [tool, arg] = this.child.calls[this.written]!;
+			const { args, result } = fauxCall(tool, arg);
+			const id = `call-${this.written}`;
+			const say = this.written === 0 ? [{ type: "text", text: "I'll start by looking at where this lives." }] : [];
+			this.assistant([...say, { type: "toolCall", id, name: tool, arguments: args }], "toolUse");
+			this.append({ role: "toolResult", toolCallId: id, toolName: tool, content: [{ type: "text", text: result }], isError: false, timestamp: Date.now() });
+			this.written++;
+		}
+		if (finished && !this.ended) {
+			this.ended = true;
+			this.assistant([{ type: "text", text: this.child.output }], "stop");
+		}
+	}
+}
+
 /** The details pi-subagents streams while its children work, shaped closely enough for Trivium to read. */
-function fauxDetails(children: FauxChild[], elapsed: number, mode: string) {
+function fauxDetails(children: FauxChild[], elapsed: number, mode: string, runId?: string, sessions: (FauxChildSession | undefined)[] = []) {
 	const views = children.map((child, index) => {
 		const done = Math.min(child.calls.length, Math.floor(elapsed / child.pace));
 		const finished = elapsed >= child.pace * (child.calls.length + 1);
 		const current = finished ? undefined : child.calls[done];
 		const durationMs = finished ? child.pace * (child.calls.length + 1) : elapsed;
+		sessions[index]?.advance(done, finished);
 		return {
 			result: {
 				index,
@@ -236,6 +293,7 @@ function fauxDetails(children: FauxChild[], elapsed: number, mode: string) {
 				context: "fresh",
 				usage: { input: 2400 * (done + 1), output: 180 * (done + 1), cacheRead: 0, cacheWrite: 0, cost: 0, turns: done + 1 },
 				finalOutput: finished ? child.output : "",
+				...(finished && sessions[index] ? { sessionFile: sessions[index]!.file } : {}),
 			},
 			progress: {
 				index,
@@ -257,6 +315,7 @@ function fauxDetails(children: FauxChild[], elapsed: number, mode: string) {
 		finished: views.every((view) => view.finished),
 		details: {
 			mode,
+			runId,
 			results: views.map((view) => ({ ...view.result, progress: view.progress })),
 			progress: views.map((view) => view.progress),
 		},
@@ -479,13 +538,17 @@ export default function (pi: ExtensionAPI) {
 			workflow: Type.Optional(Type.Boolean()),
 			async: Type.Optional(Type.Boolean()),
 		}),
-		execute: async (_id, params, signal, update) => {
+		execute: async (_id, params, signal, update, ctx) => {
+			const parentFile = ctx.sessionManager.getSessionFile();
+			const runId = `faux${Date.now().toString(36)}`;
 			if (params.agent === RESEARCHER.agent) {
+				const session = parentFile ? new FauxChildSession(parentFile, runId, 0, RESEARCHER, ctx.cwd) : undefined;
 				setTimeout(() => {
+					session?.advance(0, true);
 					pi.sendMessage(
 						{
 							customType: "subagent-notify",
-							content: `Background task completed: **${RESEARCHER.agent}**\n\n${RESEARCHER.output}\n\nSession file: /tmp/faux-researcher.jsonl\n\nParent action: Report the result.`,
+							content: `Background task completed: **${RESEARCHER.agent}**\n\n${RESEARCHER.output}\n\nSession file: ${session?.file ?? "/tmp/faux-researcher.jsonl"}\n\nParent action: Report the result.`,
 							display: false,
 							details: { runs: [{ agent: RESEARCHER.agent, status: "completed", durationMs: BACKGROUND_MS }] },
 						},
@@ -494,15 +557,16 @@ export default function (pi: ExtensionAPI) {
 				}, BACKGROUND_MS);
 				return {
 					content: [{ type: "text", text: `Started ${RESEARCHER.agent} in the background.` }],
-					details: { mode: "single", asyncId: "faux-researcher", background: true, results: [] },
+					details: { mode: "single", asyncId: runId, background: true, results: [] },
 				};
 			}
 			const children = params.workflow ? REVIEWERS : [SCOUT];
 			const mode = params.workflow ? "workflow" : "single";
 			const started = Date.now();
+			const sessions = parentFile ? children.map((child, index) => new FauxChildSession(parentFile, runId, index, child, ctx.cwd)) : [];
 			for (;;) {
 				if (signal?.aborted) throw new Error("Stopped");
-				const { finished, details } = fauxDetails(children, Date.now() - started, mode);
+				const { finished, details } = fauxDetails(children, Date.now() - started, mode, runId, sessions);
 				const text = details.results.map((result) => result.finalOutput).filter(Boolean).join("\n\n");
 				if (finished) return { content: [{ type: "text", text }], details };
 				update?.({ content: [{ type: "text", text: text || "(running...)" }], details });

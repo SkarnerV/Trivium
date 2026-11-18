@@ -4,11 +4,15 @@ import type { Step } from "../shared/protocol.ts";
  * A stretch of a run, in the order it happened: something the agent said between tool calls, or the steps
  * it took between two of those.
  */
-export type Block = { kind: "note"; id: string; text: string } | { kind: "steps"; id: string; steps: Step[] };
+export type Block =
+	| { kind: "note"; id: string; text: string }
+	| { kind: "steps"; id: string; steps: Step[] }
+	| { kind: "subagents"; id: string; step: Step };
 
 /**
  * Splits a run's steps where the agent spoke. Some models save what they have to say for the answer and
  * others say it as they go, so a note is shown like the answer rather than folded in with the tool calls.
+ * A subagent call stands on its own too, so the agents it started can be opened from the thread.
  */
 export function blocksOf(steps: Step[]): Block[] {
 	const blocks: Block[] = [];
@@ -16,6 +20,10 @@ export function blocksOf(steps: Step[]): Block[] {
 		if (step.tool === "note") {
 			const text = (step.content ?? step.target).trim();
 			if (text) blocks.push({ kind: "note", id: step.id, text });
+			continue;
+		}
+		if (step.subagent) {
+			blocks.push({ kind: "subagents", id: step.id, step });
 			continue;
 		}
 		const last = blocks.at(-1);

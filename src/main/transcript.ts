@@ -237,9 +237,12 @@ export class RunTracker {
 	private readonly thumbnail: Thumbnail | undefined;
 	/** Full images by id, for preview and download. These are the strings already in the session's messages. */
 	private images = new Map<string, ImagePart>();
+	/** The session's own file, beside which its subagents write theirs. */
+	sessionFile: string | undefined;
 
-	constructor(messages: AgentMessage[], thumbnail?: Thumbnail) {
+	constructor(messages: AgentMessage[], thumbnail?: Thumbnail, sessionFile?: string) {
 		this.thumbnail = thumbnail;
+		this.sessionFile = sessionFile;
 		for (const message of messages) this.applyMessage(message, false);
 	}
 
@@ -525,7 +528,7 @@ export class RunTracker {
 				output: tool.result,
 				images: tool.images,
 				tail: tool.tail,
-				subagent: launchesSubagents(tool.name, tool.args) ? subagentOf(tool.args, tool.details, status) : undefined,
+				subagent: launchesSubagents(tool.name, tool.args) ? subagentOf(tool.args, tool.details, status, this.sessionFile) : undefined,
 			});
 		});
 		return {

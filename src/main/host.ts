@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -53,6 +53,7 @@ import type {
 	SkillImport,
 	SkillInfo,
 	SlashCommand,
+	SubagentSession,
 	TrustChoice,
 } from "../shared/protocol.ts";
 import { APP_IDS } from "../shared/protocol.ts";
@@ -400,7 +401,7 @@ export class SessionHost {
 		if (!text.trim() && !attached) throw new Error(t("Write a message to send."));
 		const result = await live.session.navigateTree(entry.id);
 		if (result.cancelled) return;
-		live.tracker = new RunTracker(branchMessages(live.session.sessionManager.getBranch()), this.thumbnail);
+		live.tracker = new RunTracker(branchMessages(live.session.sessionManager.getBranch()), this.thumbnail, live.session.sessionManager.getSessionFile() ?? path);
 		// The shorter transcript must reach the window before the new run's events do.
 		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
 		this.scheduleList();
@@ -667,6 +668,34 @@ export class SessionHost {
 				// The last status stays up; the next run or window focus reads again.
 				.catch(() => {});
 		}, GIT_MS);
+	}
+
+	/**
+	 * A subagent's conversation, read from the session file pi-subagents writes for it. The file must sit in
+	 * the parent session's own subagent folder (or the temporary folder pi-subagents uses for a session
+	 * without a file), so a page can't ask for any file it likes. The child's last reported state comes
+	 * from the parent, while it is open, so a window knows whether the child is still working.
+	 */
+	subagentSession(parent: string, file: string): SubagentSession {
+		const known = this.live.has(parent) || this.summaries.some((summary) => summary.path === parent);
+		const target = resolve(file);
+		const roots = [join(dirname(parent), basename(parent, ".jsonl"))];
+		const temporary = relative(tmpdir(), target).split(/[\\/]/)[0] ?? "";
+		const allowed = target.endsWith(".jsonl") && (roots.some((root) => isInside(root, target) && root !== target) || (temporary.startsWith("pi-subagent-session-") && isInside(tmpdir(), target)));
+		if (!known || !allowed) throw new Error(t("That isn't a subagent of this session."));
+		const child = this.live
+			.get(parent)
+			?.tracker.all()
+			.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
+			.findLast((item) => item.sessionFile && resolve(item.sessionFile) === target);
+		if (!existsSync(target)) return { runs: [], missing: true, child };
+		try {
+			const manager = SessionManager.open(target);
+			return { runs: new RunTracker(branchMessages(manager.getBranch()), this.thumbnail, target).all(), missing: false, child };
+		} catch {
+			// A file the child is still writing can end in half a line; the next read gets it whole.
+			return { runs: [], missing: true, child };
+		}
 	}
 
 	/** The conversation on a session's current branch, read from its file, for export. Compacted messages are kept. */
@@ -1141,7 +1170,7 @@ export class SessionHost {
 			cwd,
 			session,
 			// The whole branch rather than session.messages, so messages from before a compaction still show.
-			tracker: new RunTracker(branchMessages(sessionManager.getBranch()), this.thumbnail),
+			tracker: new RunTracker(branchMessages(sessionManager.getBranch()), this.thumbnail, sessionManager.getSessionFile() ?? path),
 			changes,
 			running: false,
 			compacting: false,

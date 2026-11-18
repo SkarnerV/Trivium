@@ -6,7 +6,7 @@ import { Chevron, EyeIcon } from "../icons.tsx";
 import { usePreviewOpener } from "../preview.ts";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
-import { SubagentDetail, SubagentLive, SubagentTarget } from "./Subagents.tsx";
+import { SubagentGroup } from "./Subagents.tsx";
 import { t } from "../i18n.tsx";
 import { blocksOf } from "../timeline.ts";
 
@@ -27,7 +27,8 @@ const VERBS: Record<string, string> = {
  * step starts, so quick reads and edits do not flash by. Commands also show their latest line of output.
  */
 function LiveStep({ step, now }: { step: Step; now: number }) {
-	if (step.subagent) return <SubagentLive step={step} now={now} />;
+	// A subagent call's rows already show what each agent is doing.
+	if (step.subagent) return null;
 	const running = step.status === "running";
 	const prose = step.tool === "think";
 	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
@@ -72,11 +73,7 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 				<summary className="step-summary" title={step.target}>
 					<span className="mark" aria-hidden="true" />
 					<span className="tool">{step.tool}</span>
-					{step.subagent ? (
-						<SubagentTarget subagent={step.subagent} fallback={step.target} />
-					) : (
-						<span className={`target ellipsis${step.tool === "think" ? " prose" : ""}`}>{step.target}</span>
-					)}
+					<span className={`target ellipsis${step.tool === "think" ? " prose" : ""}`}>{step.target}</span>
 					<span className="meta">
 						{preview && FILE_TOOLS.has(step.tool) && step.target && step.status !== "error" && (
 							<button
@@ -99,9 +96,7 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 					<span className="step-chevron"><Chevron open={false} /></span>
 				</summary>
 				<div className="step-detail">
-					{step.subagent ? (
-						<SubagentDetail subagent={step.subagent} />
-					) : step.tool === "think" ? (
+					{step.tool === "think" ? (
 						<Markdown text={step.content ?? step.target} />
 					) : (
 						<>
@@ -140,7 +135,7 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const blocks = blocksOf(run.steps);
 	if (!blocks.length && !live) return null;
 	const groups = blocks.filter((block) => block.kind === "steps");
-	const steps = groups.flatMap((group) => group.steps);
+	const steps = blocks.flatMap((block) => (block.kind === "steps" ? block.steps : block.kind === "subagents" ? [block.step] : []));
 	const end = live ? now : run.endedAt;
 	const total = run.startedAt && end ? duration(end - run.startedAt) : "";
 	const count = steps.length;
@@ -181,7 +176,10 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
 				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
 			</button>
-			{(!finished || expanded) && blocks.map((block) => {
+			{blocks.map((block) => {
+				// Once the answer is in, the agents it started stay in view, so they can still be opened.
+				if (block.kind === "subagents") return <SubagentGroup key={block.id} step={block.step} now={now} />;
+				if (finished && !expanded) return null;
 				if (block.kind === "note") {
 					return (
 						<div key={block.id} className="answer">

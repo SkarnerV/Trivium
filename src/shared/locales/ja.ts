@@ -1351,4 +1351,8 @@ export default {
 	"Open main thread": "メインスレッドを開く",
 	"Click opens the session beside the thread": "クリックでスレッドの横にセッションを開く",
 	"+ click: new window": "+ クリック：新しいウィンドウ",
+	"{n} file": "{n} 個のファイル",
+	"{n} subagent": "{n} 個のサブエージェント",
+	"{n} subagents": "{n} 個のサブエージェント",
+	"{n}% context": "コンテキスト {n}%",
 } satisfies Record<string, string>;

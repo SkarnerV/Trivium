@@ -69,6 +69,7 @@ import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
 import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
+import { sessionUsage } from "./subagents.ts";
 import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
@@ -739,15 +740,18 @@ export class SessionHost {
 		const temporary = relative(tmpdir(), target).split(/[\\/]/)[0] ?? "";
 		const allowed = target.endsWith(".jsonl") && (roots.some((root) => isInside(root, target) && root !== target) || (temporary.startsWith("pi-subagent-session-") && isInside(tmpdir(), target)));
 		if (!known || !allowed) throw new Error(t("That isn't a subagent of this session."));
-		const child = this.live
-			.get(parent)
-			?.tracker.all()
-			.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
-			.findLast((item) => item.sessionFile && resolve(item.sessionFile) === target);
+		const live = this.live.get(parent);
+		// As the thread shows it: with the patch a writer handed back.
+		const child = live
+			? this.decorate(live, live.tracker.all())
+					.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
+					.findLast((item) => item.sessionFile && resolve(item.sessionFile) === target)
+			: undefined;
 		if (!existsSync(target)) return { runs: [], missing: true, child };
 		try {
 			const manager = SessionManager.open(target);
-			return { runs: new RunTracker(branchMessages(manager.getBranch()), this.thumbnail, target).all(), missing: false, child };
+			const branch = manager.getBranch();
+			return { runs: new RunTracker(branchMessages(branch), this.thumbnail, target).all(), missing: false, child, ...sessionUsage(branch, (provider, model) => this.modelRuntime.getModel(provider, model)?.contextWindow) };
 		} catch {
 			// A file the child is still writing can end in half a line; the next read gets it whole.
 			return { runs: [], missing: true, child };

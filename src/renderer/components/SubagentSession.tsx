@@ -10,6 +10,14 @@ import { AgentAvatar, type AgentStatus, firstLine, type SubagentOpener, Subagent
 
 const settled = (child: SubagentChild | undefined) => child?.status === "done" || child?.status === "error";
 
+/** A writer's handed-back changes, as `+113 −12 · 3 files`, once there are any. */
+function patchLine(child: SubagentChild | undefined): string {
+	const handoff = child?.handoff;
+	if (!handoff?.changed) return "";
+	const files = handoff.filesChanged || handoff.files.length;
+	return [`+${handoff.insertions} −${handoff.deletions}`, files ? t(files === 1 ? "{n} file" : "{n} files", { n: files }) : ""].filter(Boolean).join(" · ");
+}
+
 /** Its own session says it completed, where a row in the thread says done. */
 const sessionWord = (status: AgentStatus) => (status === "done" ? t("Completed") : statusWord(status));
 
@@ -78,6 +86,8 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 		[parent, target.file, place, app, crumb],
 	);
 	const time = child?.durationMs !== undefined ? duration(child.durationMs) : "";
+	// Its own window says what it changed, as the main thread's summary does; the drawer sits beside that thread.
+	const patch = place === "window" ? patchLine(child) : "";
 	const spent = child?.tokens ?? ((child?.inputTokens ?? 0) + (child?.outputTokens ?? 0) || undefined);
 	const name = [target.agent, target.label].filter(Boolean).join(" ");
 	const back = () => (place === "drawer" ? closeSubagent(parent) : void trivium.showSession(parent));
@@ -111,6 +121,7 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 						)}
 					</span>
 				</div>
+				{patch && <span className="subagent-session-patch">{patch}</span>}
 				{place === "drawer" && (
 					<>
 						<button
@@ -144,9 +155,10 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 									/>
 								))}
 							</SubagentOpenerContext.Provider>
-							{!working && spent ? (
+							{!working && (spent || session?.context !== undefined) ? (
 								<div className="subagent-chips">
-									<span>{t("{n} tokens", { n: tokens(spent) })}</span>
+									{session?.context !== undefined && <span>{t("{n}% context", { n: session.context })}</span>}
+									{spent ? <span>{t("{n} tokens", { n: tokens(spent) })}</span> : null}
 								</div>
 							) : null}
 							{error && <div className="run-error">{error}</div>}
@@ -168,6 +180,7 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 			<div className="subagent-bar">
 				<span className="subagent-bar-main">
 					{child?.model && <strong>{child.model}</strong>}
+					{session?.thinking && <span className="subagent-bar-thinking">{session.thinking}</span>}
 					{status && (
 						<span className={`agent-status is-${status} ellipsis`}>
 							{[sessionWord(status), child?.tools ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : "", time].filter(Boolean).join(" · ")}
@@ -199,7 +212,7 @@ export function SubagentWindow() {
 	const target = useMemo(() => ({ file, agent, label: label.join(" ") || undefined, task: "" }), [file, title]);
 	const locale = useStore((s) => s.locale);
 	useEffect(() => {
-		document.title = `${title} · Trivium`;
+		document.title = `Trivium · ${title}`;
 		void attempt(() => trivium.getSettings()).then((settings) => settings && showSettings(settings));
 	}, [title]);
 	return (

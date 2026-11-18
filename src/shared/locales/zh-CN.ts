@@ -1351,4 +1351,8 @@ export default {
 	"Open main thread": "打开主线程",
 	"Click opens the session beside the thread": "点击在对话旁打开该会话",
 	"+ click: new window": "+ 点击：新窗口",
+	"{n} file": "{n} 个文件",
+	"{n} subagent": "{n} 个子代理",
+	"{n} subagents": "{n} 个子代理",
+	"{n}% context": "已用 {n}% 上下文",
 } satisfies Record<string, string>;

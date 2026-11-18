@@ -205,3 +205,11 @@ test("a queued workflow's children, a failed child's tool and step end times are
 	assert.equal(failed.children[0]!.outputPartial, true);
 	assert.equal(failed.children[0]!.steps[0]!.endMs, 1700000000000);
 });
+
+test("a subagent session says its thinking level and how full its context was at its latest response", async () => {
+	const { sessionUsage } = await import("../src/main/subagents.ts");
+	const reply = (input: number) => ({ type: "message", message: { role: "assistant", provider: "anthropic", model: "m", usage: { input, output: 0, totalTokens: input } } });
+	const window = (provider: string, model: string) => (provider === "anthropic" && model === "m" ? 200_000 : undefined);
+	assert.deepEqual(sessionUsage([{ type: "thinking_level_change", thinkingLevel: "high" }, reply(40_000), reply(82_000)], window), { thinking: "high", context: 41 });
+	assert.deepEqual(sessionUsage([{ type: "thinking_level_change", thinkingLevel: "off" }, reply(10)], () => undefined), { thinking: undefined, context: undefined });
+});

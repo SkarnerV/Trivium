@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import type { LimitNotice, Step, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
-import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, ExternalIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
+import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
 import { AgentSession } from "../agent-context.ts";
 import { claimsOf } from "../agents.ts";
 import { Markdown } from "./Markdown.tsx";
@@ -114,6 +114,34 @@ function workLine(child: SubagentChild): string {
 		.join(" · ");
 }
 
+/** A model's chip, for the card's model line. */
+function ChipIcon() {
+	return (
+		<svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<rect x="3" y="4" width="10" height="9" rx="2" />
+			<path d="M8 1.75V4M6 8.25h.01M10 8.25h.01" />
+		</svg>
+	);
+}
+
+/** A shell prompt, for the card's line of what it is doing. */
+function PromptIcon() {
+	return (
+		<svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M3 4.5L6.5 8 3 11.5M8 12h5" />
+		</svg>
+	);
+}
+
+/** The status's shape beside its word: a dashed ring while it works, a tick, a cross, or a square once stopped. */
+function StatusIcon({ status }: { status: AgentStatus }) {
+	const props = { "aria-hidden": true, width: 12, height: 12, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+	if (status === "done") return <svg {...props}><path d="M3.5 8.5l3 3 6-7" /></svg>;
+	if (status === "error") return <svg {...props}><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>;
+	if (status === "stopped") return <svg {...props}><rect x="4.5" y="4.5" width="7" height="7" rx="1" /></svg>;
+	return <svg {...props} strokeDasharray="2.2 2.2"><circle cx="8" cy="8" r="5.75" /></svg>;
+}
+
 /** The card a thread row shows while hovered or focused: which agent, its model, how it is doing, its branch and its work. */
 function RowCard({ child, status, time, opens }: { child: SubagentChild; status: AgentStatus; time: string; opens: boolean }) {
 	const work = workLine(child);
@@ -122,12 +150,15 @@ function RowCard({ child, status, time, opens }: { child: SubagentChild; status:
 			<strong>{[child.agent, child.label].filter(Boolean).join(" · ")}</strong>
 			{child.model && (
 				<span className="agent-card-line">
-					<BotIcon size={12} />
+					<ChipIcon />
 					<span className="ellipsis">{child.model}</span>
 				</span>
 			)}
 			<span className="agent-card-line spread">
-				<span className={`agent-status is-${status}`}>{statusWord(status)}</span>
+				<span className={`agent-status is-${status} agent-card-status`}>
+					<StatusIcon status={status} />
+					{statusWord(status)}
+				</span>
 				{time && <span className="mono">{time}</span>}
 			</span>
 			{child.handoff?.branch && (
@@ -138,7 +169,7 @@ function RowCard({ child, status, time, opens }: { child: SubagentChild; status:
 			)}
 			{work && (
 				<span className="agent-card-line">
-					<CodeIcon size={12} />
+					<PromptIcon />
 					<span className="mono">{work}</span>
 				</span>
 			)}
@@ -353,12 +384,10 @@ const NOTICE_STATUS: Record<SubagentNotice["status"], { status: AgentStatus; wor
 /** The row that opens a run started by a background subagent's result, in place of a user message. */
 export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 	const [open, setOpen] = useState(false);
-	const opener = useContext(SubagentOpenerContext);
 	const { status, word } = NOTICE_STATUS[notice.status];
 	const command = notice.command !== undefined;
 	// A command's verdict is what it printed last.
 	const line = command ? firstLine(notice.text.trim().split("\n").at(-1) ?? "") : preview(notice.text);
-	const sessionFile = notice.sessionFile;
 	return (
 		<div className={`agent-notice${open ? " open" : ""}`}>
 			<div className="agent-notice-head">
@@ -381,17 +410,6 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 					<span className="agent-row-time">{duration(notice.durationMs)}</span>
 					{notice.text && <Chevron open={open} />}
 				</button>
-				{sessionFile && opener && (
-					<button
-						type="button"
-						className="icon-btn agent-notice-open"
-						aria-label={t("Open its session")}
-						title={t("Open its session. Shift-click opens it in a new window.")}
-						onClick={(event) => opener.open({ file: sessionFile, agent: notice.agent, task: "" }, event.shiftKey)}
-					>
-						<ExternalIcon size={13} />
-					</button>
-				)}
 			</div>
 			{open && (
 				<div className="agent-notice-body">

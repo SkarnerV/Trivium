@@ -4,7 +4,7 @@ import { duration } from "../format.ts";
 import { Chevron, ExternalIcon } from "../icons.tsx";
 import { t } from "../i18n.tsx";
 import { agentSteps } from "../agents.ts";
-import { type AgentStatus, agentStatus, AvatarStack, firstLine, type SubagentOpener, SubagentOpenerContext, SubagentRow, statusSummary, targetOf } from "./Subagents.tsx";
+import { type AgentStatus, agentStatus, AvatarStack, type SubagentOpener, SubagentOpenerContext, SubagentRow, statusSummary, targetOf } from "./Subagents.tsx";
 
 interface Entry {
 	child: SubagentChild;
@@ -40,9 +40,10 @@ export function sessionSubagents(runs: Run[], running: boolean): { groups: Group
 		if (!entries.length) return;
 		const last = index === runs.length - 1;
 		const end = last && running ? undefined : run.endedAt;
+		const count = t(entries.length === 1 ? "{n} subagent" : "{n} subagents", { n: entries.length });
 		groups.push({
 			id: run.id,
-			title: last && running ? t("This turn") : firstLine(run.prompt) || t("Earlier"),
+			title: `${t(last ? "This turn" : "Earlier")} · ${count}`,
 			time: run.startedAt && end ? duration(end - run.startedAt) : "",
 			entries,
 		});

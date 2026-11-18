@@ -208,6 +208,10 @@ export interface SubagentSession {
 	missing: boolean;
 	/** The child as the parent session last reported it, while that session is open. */
 	child?: SubagentChild;
+	/** Its thinking level, such as "high", when it thinks. */
+	thinking?: string;
+	/** How full its model's context was at its latest response, in percent. */
+	context?: number;
 }
 
 /** A provider's usage-limit, quota or balance error, explained. */

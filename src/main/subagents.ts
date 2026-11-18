@@ -302,3 +302,27 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 		sessionFile,
 	};
 }
+
+/**
+ * A subagent session's thinking level, as it last set it, and how full its model's context was at its latest response,
+ * as a whole percent. `contextWindow` looks a model up; one it doesn't know leaves the percent out.
+ */
+export function sessionUsage(
+	entries: readonly unknown[],
+	contextWindow: (provider: string, model: string) => number | undefined,
+): { thinking?: string; context?: number } {
+	let thinking: string | undefined;
+	let context: number | undefined;
+	for (const item of entries) {
+		const entry = item as { type?: string; thinkingLevel?: unknown; message?: unknown };
+		if (entry.type === "thinking_level_change" && typeof entry.thinkingLevel === "string") thinking = entry.thinkingLevel;
+		const message = entry.type === "message" ? (entry.message as { role?: string; provider?: string; model?: string; usage?: Record<string, unknown> }) : undefined;
+		if (message?.role !== "assistant" || !message.usage || !message.provider || !message.model) continue;
+		const num = (value: unknown) => (typeof value === "number" ? value : 0);
+		const usage = message.usage;
+		const used = num(usage.totalTokens) || num(usage.input) + num(usage.output) + num(usage.cacheRead) + num(usage.cacheWrite);
+		const window = contextWindow(message.provider, message.model);
+		if (used && window) context = Math.min(100, Math.round((used / window) * 100));
+	}
+	return { thinking: thinking && thinking !== "off" ? thinking : undefined, context };
+}

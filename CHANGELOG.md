@@ -2,7 +2,7 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.13.1] - 2026-11-18
 
 ### Added
 

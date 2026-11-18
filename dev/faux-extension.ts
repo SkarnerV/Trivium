@@ -420,7 +420,7 @@ function orchestratorStory(scenario: string): Step[] {
 }
 
 /** Real artifact files exercise the same manifest validation and patch IPC as the package. No git writes. */
-async function orchestratorFanout(id: string, scenario: string, signal: AbortSignal | undefined, update: ((value: any) => void) | undefined) {
+async function orchestratorFanout(id: string, scenario: string, signal: AbortSignal | undefined, update: ((value: any) => void) | undefined, parentFile?: string, cwd = process.cwd()) {
 	const eight = scenario.includes("eight");
 	const queued = scenario.includes("queued");
 	const limited = scenario.includes("limit");
@@ -440,16 +440,19 @@ async function orchestratorFanout(id: string, scenario: string, signal: AbortSig
 	}
 	const manifest = { version: 1, runId: id, mode: "parallel", source: "foreground", cwd: process.cwd(), createdAt: Date.now(), updatedAt: Date.now(), groups: [{ stepIndex: 0, baseCommit: "faux", repoRoot: process.cwd(), children: patches, cleanup: { state: "partial", pruned: false, tasks: eight ? [] : [{ index: 1, path: join(dir, "kept-web"), branch: "pi-sub/faux-web", worktreeRemoved: false, branchRemoved: false, preserved: true, reason: "changes were not captured" }] } }] };
 	await writeFile(manifestPath, JSON.stringify({ ...manifest, groups: manifest.groups.map((group) => ({ ...group, children: [], laneBindings: patches.map((child) => ({ index: child.index, taskIndex: child.taskIndex, workflowKey: child.workflowKey })), cleanup: { ...group.cleanup, tasks: patches.map((child) => ({ index: child.index, branch: child.patch.branch, path: join(dir, child.workflowKey!), worktreeRemoved: false })) } })) }));
+	// As pi-subagents runs them: each child is a run of its own, whose session sits in that run's first folder.
+	const childRuns = children.map((_, index) => `faux-run-${index}-${Date.now().toString(36)}`);
+	const sessions = parentFile ? children.map((child, index) => new FauxChildSession(parentFile, childRuns[index]!, 0, child, cwd)) : [];
 	const started = Date.now();
 	for (;;) {
 		if (signal?.aborted) throw new Error("Stopped");
 		const elapsed = Date.now() - started;
-		const { finished, details } = fauxDetails(children, Math.max(0, elapsed - 1800), "workflow");
-		const results = details.results.map((result, index) => ({ ...result, ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
+		const { finished, details } = fauxDetails(children, Math.max(0, elapsed - 1800), "workflow", undefined, elapsed < 1800 ? [] : sessions);
+		const results = details.results.map((result, index) => ({ ...result, runId: childRuns[index], ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
 		const snapshot = { ...details, results, preflight: { version: 1, coverage: "complete", lanes }, workflowGraph: { phases: [{ title: eight ? "Reviewing" : "Implementing", nodeIds: [] }] },
 			workflowChildren: { version: 1, workflowRunId: id, parentToolCallId: id, inventoryComplete: true, workflowState: finished ? "completed" : queued && elapsed < 1800 ? "queued" : "running", children: children.map((child, index) => {
 				const progress = details.progress[index]!;
-				return { childId: child.label, agent: child.agent, model: "scripted", state: elapsed < 1800 ? "pending" : finished ? (results[index]!.exitCode ? "failed" : "completed") : progress.status,
+				return { childId: child.label, runId: childRuns[index], agent: child.agent, model: "scripted", state: elapsed < 1800 ? "pending" : finished ? (results[index]!.exitCode ? "failed" : "completed") : progress.status,
 					activity: { currentTool: progress.currentTool, toolCount: progress.toolCount, tokens: progress.tokens, durationMs: progress.durationMs } };
 			}) }, parallelHandoff: { version: 1, path: manifestPath } };
 		// A usage limit cuts the fan-out short once one child has finished: the others stop where they are.
@@ -646,7 +649,7 @@ export default function (pi: ExtensionAPI) {
 			options: Type.Optional(Type.Object({ scenario: Type.Optional(Type.String()), globalConcurrencyLimit: Type.Optional(Type.Number()), preflight: Type.Optional(Type.Any()) })),
 		}),
 		execute: async (_id, params, signal, update, ctx) => {
-			if (params.workflow && params.options?.scenario) return orchestratorFanout(_id, params.options.scenario, signal, update);
+			if (params.workflow && params.options?.scenario) return orchestratorFanout(_id, params.options.scenario, signal, update, ctx?.sessionManager?.getSessionFile(), ctx?.cwd);
 			// Tests call the tool without a session; then no child sessions are written.
 			const parentFile = ctx?.sessionManager?.getSessionFile();
 			const runId = `faux${Date.now().toString(36)}`;

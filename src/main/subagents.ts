@@ -37,6 +37,8 @@ interface ResultLike {
 	agent?: unknown;
 	task?: unknown;
 	workflowKey?: unknown;
+	/** A workflow child's own run, whose folder holds its session; the call's run id names the workflow. */
+	runId?: unknown;
 	sessionFile?: unknown;
 	exitCode?: unknown;
 	error?: unknown;
@@ -169,7 +171,8 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		const result = results.find((item) => item.index === index) ?? results[index];
 		const live = result?.progress ?? progress.find((item) => item.index === index) ?? progress[index];
 		const position = num(result?.index) ?? num(live?.index) ?? index;
-		children.push(child(result, live, toolStatus, childSessionFile(parentSessionFile, runId, position)));
+		const own = str(result?.runId);
+		children.push(child(result, live, toolStatus, own ? childSessionFile(parentSessionFile, own, 0) : childSessionFile(parentSessionFile, runId, position)));
 	}
 	// A single child's progress may leave out what the call already said.
 	if (children.length === 1 && typeof args.agent === "string") {
@@ -211,6 +214,8 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 				inputTokens: num(activity.inputTokens) ?? existing?.inputTokens, outputTokens: num(activity.outputTokens) ?? existing?.outputTokens,
 				durationMs: num(activity.durationMs) ?? existing?.durationMs,
 				model: str(live?.model) || existing?.model,
+				// A workflow child runs as a run of its own, so its session sits in that run's first folder.
+				sessionFile: existing?.sessionFile ?? childSessionFile(parentSessionFile, str(live?.runId), 0),
 			});
 		}
 		for (const existing of children) {

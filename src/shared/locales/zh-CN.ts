@@ -793,6 +793,8 @@ export default {
 	"Loading its session…": "正在加载会话…",
 	"Its answer went back to the main agent": "它的回答已交回主 Agent",
 	"Show in the Agents panel": "在代理面板中显示",
+	"Show its branch, files and patch": "显示它的分支、文件和补丁",
+	"Show its branch, files and patch in the Agents tab": "在代理标签页中显示它的分支、文件和补丁",
 	"This turn": "本轮",
 	"Earlier": "更早",
 	"Background": "后台",

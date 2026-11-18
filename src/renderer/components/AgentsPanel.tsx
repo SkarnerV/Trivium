@@ -138,6 +138,11 @@ export function AgentsBody({ view }: { view: SessionView }) {
 						used={used}
 						needsYou={needsYou}
 						onChild={(step, index) => {
+							// An agent opens as its own session, like the thread's rows; its patch view is a click away from there
+							// and from the Patches list. One with no session file yet opens its detail here.
+							const child = step.subagent?.children[index];
+							const target = child && targetOf(child, { step: step.id, index });
+							if (target) return openSubagent(view.path, target, false);
 							scroll.current = body.current?.scrollTop ?? 0;
 							showAgentChild(view.path, step.id, index);
 						}}
@@ -197,7 +202,9 @@ function Overview({
 	const last = taskRuns.at(-1);
 	const current = currentStep(last);
 	// Every writer that finished, for the Patches list once the agents are done (§6.5). Applied state is v1.1.
-	const writers = phases.flatMap((step) => step.subagent!.children).filter((child) => child.role === "mutation" && child.handoff && child.status !== "running" && child.status !== "pending");
+	const writers = phases
+		.flatMap((step) => step.subagent!.children.map((child, index) => ({ child, step: step.id, index })))
+		.filter(({ child }) => child.role === "mutation" && child.handoff && child.status !== "running" && child.status !== "pending");
 	const state = t(
 		view.running ? "Working" : taskRuns.at(-1)?.status === "aborted" ? "Stopped" : taskRuns.at(-1)?.status === "error" ? "Failed" : "Done",
 	);
@@ -238,7 +245,7 @@ function Overview({
 				<PhaseCard key={step.id} step={step} number={index + 1} now={now} onChild={(child) => onChild(step, child)} />
 			))}
 			{!phases.length && <p>{t("Subagents appear here when the main agent delegates work.")}</p>}
-			{writers.length > 0 && !phases.some((step) => step.status === "running") && <Patches writers={writers} />}
+			{writers.length > 0 && !phases.some((step) => step.status === "running") && <Patches path={view.path} writers={writers} />}
 			{view.running && (
 				<div className="agents-now">
 					<p>{nowLine(last, current)}</p>
@@ -278,16 +285,23 @@ function PhaseCard({ step, number, now, onChild }: { step: Step; number: number;
 }
 
 /** One line per writer: what its patch holds, or why there is none to look at. Whether it was applied is v1.1. */
-function Patches({ writers }: { writers: SubagentChild[] }) {
+function Patches({ path, writers }: { path: string; writers: { child: SubagentChild; step: string; index: number }[] }) {
 	return (
 		<section className="agents-after">
 			<div className="step-detail-label">{t("Patches")}</div>
 			<ul className="agents-patches">
-				{writers.map((child, index) => {
+				{writers.map(({ child, step, index }) => {
 					const patch = child.handoff!;
 					return (
-						<li key={child.childId ?? index}>
-							<span className="agents-patch-key ellipsis">{child.label || child.agent}</span>
+						<li key={child.childId ?? `${step}:${index}`}>
+							<button
+								type="button"
+								className="agents-patch-key ellipsis"
+								title={t("Show its branch, files and patch")}
+								onClick={() => showAgentChild(path, step, index)}
+							>
+								{child.label || child.agent}
+							</button>
 							{patch.error ? (
 								<span className="warn">{t("Patch couldn't be captured: {error}", { error: patch.error })}</span>
 							) : patch.changed ? (

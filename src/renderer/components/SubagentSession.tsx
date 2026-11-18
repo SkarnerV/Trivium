@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type AppId, APP_IDS, type Run, type SubagentChild, type SubagentSession } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { CloseIcon, ExternalIcon, ParentIcon } from "../icons.tsx";
-import { attempt, closeSubagent, errorText, openSubagent, showSettings, trivium, useStore } from "../store.ts";
+import { attempt, closeSubagent, errorText, openSubagent, showAgentChild, showSettings, trivium, useStore } from "../store.ts";
 import { themeVars } from "../theme.ts";
 import { t } from "../i18n.tsx";
 import { RunBlock, useStickToBottom } from "./SessionPane.tsx";
@@ -74,6 +74,10 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 		}),
 		[parent, target.file, place, app],
 	);
+	// The patch the host captured is on the session's own view of the child, which the main window has.
+	const handoff = useStore((s) =>
+		target.at ? Boolean(s.views[parent]?.runs.flatMap((run) => run.steps).find((step) => step.id === target.at!.step)?.subagent?.children[target.at!.index]?.handoff) : false,
+	);
 	const name = [target.agent, target.label].filter(Boolean).join(" ");
 	const back = () => (place === "drawer" ? closeSubagent(parent) : void trivium.showSession(parent));
 	return (
@@ -102,6 +106,17 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 						)}
 					</span>
 				</div>
+				{/* A writer's branch, files and patch are in the Agents tab, beside this drawer. */}
+				{place === "drawer" && target.at && handoff && (
+					<button
+						type="button"
+						className="btn ghost"
+						title={t("Show its branch, files and patch in the Agents tab")}
+						onClick={() => showAgentChild(parent, target.at!.step, target.at!.index)}
+					>
+						{t("Changes")}
+					</button>
+				)}
 				{place === "drawer" && (
 					<>
 						<button
@@ -130,7 +145,8 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 										run={run}
 										index={index}
 										live={working && index === runs.length - 1}
-										from={fromMainAgent(run, task) ? t("From the main agent") : undefined}
+										// Without the task to compare, a child's session still begins with what the main agent asked.
+										from={fromMainAgent(run, task) || (!task && index === 0) ? t("From the main agent") : undefined}
 									/>
 								))}
 							</SubagentOpenerContext.Provider>

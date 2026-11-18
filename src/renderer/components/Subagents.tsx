@@ -21,6 +21,8 @@ export interface SubagentTarget {
 	agent: string;
 	label?: string;
 	task: string;
+	/** The subagent call and the child's place in it, which the Agents tab's patch view is opened by. */
+	at?: { step: string; index: number };
 }
 
 /** Opens a subagent's session beside the thread, or in a window of its own. */
@@ -117,22 +119,32 @@ function usageLine(child: SubagentChild): string {
 		.join(" · ");
 }
 
-export function targetOf(child: SubagentChild): SubagentTarget | undefined {
-	return child.sessionFile ? { file: child.sessionFile, agent: child.agent, label: child.label, task: child.task } : undefined;
+export function targetOf(child: SubagentChild, at?: SubagentTarget["at"]): SubagentTarget | undefined {
+	return child.sessionFile ? { file: child.sessionFile, agent: child.agent, label: child.label, task: child.task, at } : undefined;
 }
 
 /**
  * One subagent: its mark, name and what it is doing now (or its answer's first line once done). Clicking
  * opens its own session; Shift-click opens it in a new window.
  */
-export function SubagentRow({ child: reported, background = false, claims }: { child: SubagentChild; background?: boolean; claims?: string[] }) {
+export function SubagentRow({
+	child: reported,
+	background = false,
+	claims,
+	at,
+}: {
+	child: SubagentChild;
+	background?: boolean;
+	claims?: string[];
+	at?: SubagentTarget["at"];
+}) {
 	const opener = useContext(SubagentOpenerContext);
 	// Roles and worktrees are Code's, shown where the session has an Agents tab.
 	const code = Boolean(useContext(AgentSession));
 	// A background child works on after its launch step ends, until its result says otherwise.
 	const later = background && reported.sessionFile ? opener?.background?.get(reported.sessionFile) : undefined;
 	const child: SubagentChild = background ? (later ?? { ...reported, status: "running" }) : reported;
-	const target = targetOf(child);
+	const target = targetOf(child, at);
 	const { text, code: asCode, warn } =
 		background && child.status === "running" ? { text: t("Running in the background. Its result arrives as its own message."), code: false, warn: false } : rowActivity(child, claims);
 	const status = agentStatus(child);
@@ -280,7 +292,7 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 		return (
 			<div className="agent-single">
 				{children.map((child, index) => (
-					<SubagentRow key={child.childId ?? index} child={child} background={background} claims={claims(child)} />
+					<SubagentRow key={child.childId ?? index} child={child} background={background} claims={claims(child)} at={{ step: step.id, index }} />
 				))}
 				<GroupNotes step={step} limit={limit} />
 			</div>
@@ -303,7 +315,7 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 			{shown && (
 				<div className="agent-rows">
 					{children.map((child, index) => (
-						<SubagentRow key={child.childId ?? index} child={child} claims={claims(child)} />
+						<SubagentRow key={child.childId ?? index} child={child} claims={claims(child)} at={{ step: step.id, index }} />
 					))}
 				</div>
 			)}

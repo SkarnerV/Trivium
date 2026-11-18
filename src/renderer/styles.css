@@ -8641,6 +8641,19 @@ body.resizing * {
 	font-weight: 500;
 }
 
+/* A writer's name opens its branch, files and patch. */
+button.agents-patch-key {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--accent-text);
+	text-align: left;
+}
+
+button.agents-patch-key:hover {
+	text-decoration: underline;
+}
+
 .agents-patches .warn {
 	color: var(--warn);
 }

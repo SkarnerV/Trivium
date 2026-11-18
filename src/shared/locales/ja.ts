@@ -793,6 +793,8 @@ export default {
 	"Loading its session…": "セッションを読み込んでいます…",
 	"Its answer went back to the main agent": "回答はメインエージェントに返されました",
 	"Show in the Agents panel": "エージェントパネルで表示",
+	"Show its branch, files and patch": "ブランチ、ファイル、パッチを表示",
+	"Show its branch, files and patch in the Agents tab": "エージェントタブでブランチ、ファイル、パッチを表示",
 	"This turn": "このターン",
 	"Earlier": "以前",
 	"Background": "バックグラウンド",

@@ -138,6 +138,23 @@ test("a running child's session file is where pi-subagents writes it, beside the
 	assert.equal(childSessionFile(parent, "../up", 0), undefined);
 });
 
+test("a workflow child's session is in its own run's folder, while it runs and once it is done", () => {
+	const parent = join("sessions", "proj", "2026-11-18_abc.jsonl");
+	const root = join("sessions", "proj", "2026-11-18_abc");
+	// The call's run id names the tool call, not a folder; each child reports a run of its own.
+	const running = {
+		mode: "workflow",
+		runId: "call_3ef9%7Cfc_0dee",
+		workflowChildren: { children: [{ childId: "slug", runId: "1435-a294", state: "running" }, { childId: "csv", runId: "1e69-e619", state: "pending" }] },
+	};
+	assert.deepEqual(
+		subagentOf({ workflow: true }, running, "running", parent).children.map((child) => [child.label, child.sessionFile]),
+		[["slug", join(root, "1435-a294", "run-0", "session.jsonl")], ["csv", join(root, "1e69-e619", "run-0", "session.jsonl")]],
+	);
+	const done = { mode: "workflow", runId: "call_3ef9%7Cfc_0dee", results: [{ index: 0, agent: "worker", workflowKey: "slug", runId: "1435-a294", exitCode: 0 }] };
+	assert.equal(subagentOf({ workflow: true }, done, "done", parent).children[0]!.sessionFile, join(root, "1435-a294", "run-0", "session.jsonl"));
+});
+
 test("a background result starts its own run, in history and live", () => {
 	const messages = [
 		{ role: "user", content: "Research startup times", timestamp: 1000 },

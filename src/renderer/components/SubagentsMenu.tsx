@@ -60,7 +60,7 @@ export function backgroundSubagents(runs: Run[], running: boolean): ReadonlyMap<
 }
 
 /** The header button that lists every subagent in the session, and opens any of them. */
-export function SubagentsMenu({ runs, running, onPanel }: { runs: Run[]; running: boolean; onPanel?: () => void }) {
+export function SubagentsMenu({ runs, running }: { runs: Run[]; running: boolean }) {
 	const [open, setOpen] = useState(false);
 	const [filter, setFilter] = useState<"all" | "working">("all");
 	const ref = useRef<HTMLDivElement>(null);
@@ -148,7 +148,7 @@ export function SubagentsMenu({ runs, running, onPanel }: { runs: Run[]; running
 										const target = targetOf(entry.child);
 										return (
 											<div key={index} className="subagents-popover-row">
-												<SubagentRow child={entry.child} background={entry.background} />
+												<SubagentRow child={entry.child} background={entry.background} place="menu" />
 												{target && (
 													<button
 														type="button"
@@ -169,20 +169,9 @@ export function SubagentsMenu({ runs, running, onPanel }: { runs: Run[]; running
 						</SubagentOpenerContext.Provider>
 					</div>
 					<div className="subagents-popover-foot">
-						<span>{t("Click opens its session beside the thread. Shift-click opens a new window.")}</span>
-						{/* In Code, the Agents tab has each fan-out's plan, patches and kept worktrees. */}
-						{onPanel && (
-							<button
-								type="button"
-								className="btn ghost"
-								onClick={() => {
-									setOpen(false);
-									onPanel();
-								}}
-							>
-								{t("Show in the Agents panel")}
-							</button>
-						)}
+						<span className="subagents-popover-hint">{t("Click opens the session beside the thread")}</span>
+						<kbd>Shift</kbd>
+						<span>{t("+ click: new window")}</span>
 					</div>
 				</div>
 			)}

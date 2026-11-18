@@ -164,7 +164,9 @@ export function App() {
 	const path = useStore((s) => s.selected[s.app]);
 	const view = useStore((s) => (path ? s.views[path] : undefined));
 	const hidden = useStore((s) => (path ? s.changesHidden[path] : undefined));
-	const open = view ? panelOpen(app, view, hidden) : false;
+	// A subagent's session opens where the panel would be, beside the thread; the panel comes back when it closes.
+	const drawer = useStore((s) => Boolean(view && s.subagentShown[view.path]));
+	const open = view && !drawer ? panelOpen(app, view, hidden) : false;
 	const panel = view && open ? panelFor(app, view) : undefined;
 	const page = useStore((s) => s.page);
 	const section = useStore((s) => s.settingsSection);

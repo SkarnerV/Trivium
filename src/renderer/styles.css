@@ -1619,73 +1619,8 @@ body.resizing * {
 }
 
 /* Subagents: the agent's name is the one tinted thing, so delegated work stands out among the steps. */
-.agent-tag {
-	flex: none;
-	padding: 0 6px;
-	border-radius: 4px;
-	background: var(--soft);
-	color: var(--accent-text);
-	font-family: var(--mono);
-	font-size: 11.5px;
-	line-height: 18px;
-}
-
-.agent-tag.quiet {
-	background: var(--line);
-	color: var(--ink-3);
-}
-
-.subagent-label {
-	font-family: var(--mono);
-	font-size: 11.5px;
-	color: var(--ink-4);
-}
-
-.subagent-open {
-	flex: none;
-	margin-left: 8px;
-	color: var(--accent-text);
-}
-
-.subagent-now-count {
-	flex: none;
-	margin-left: auto;
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--ink-4);
-}
-
-.subagent-row {
-	display: grid;
-	grid-template-columns: auto auto minmax(0, 1fr) auto;
-	align-items: center;
-	column-gap: 8px;
-	min-height: 22px;
-	padding-left: 14px;
-	font-family: var(--mono);
-	font-size: 11.5px;
-}
 
 /* One width for every row's label, so what each child is doing lines up. */
-.subagent-row .subagent-label {
-	max-width: 120px;
-}
-
-.subagent-activity {
-	color: var(--ink-2);
-}
-
-.subagent-activity.done {
-	color: var(--add);
-}
-
-.subagent-activity.error {
-	color: var(--del);
-}
-
-.subagent-row.finished .subagent-activity {
-	opacity: 0.85;
-}
 
 /* Subagents: a row per agent with its mark, name and what it is doing, under a header when there are several.
    Each row opens the agent's own session. */
@@ -1797,6 +1732,104 @@ body.resizing * {
 	box-shadow: inset 0 0 0 1px var(--border);
 }
 
+/* A thread row's card, shown after a moment's hover or on focus: which agent, model, status, branch and work. */
+.agent-row {
+	position: relative;
+}
+
+.agent-card {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 8px;
+	z-index: 30;
+	width: 300px;
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 12px 14px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: 0 8px 24px rgba(22, 23, 27, 0.1), 0 1px 3px rgba(22, 23, 27, 0.06);
+	color: var(--ink-2);
+	font-size: 12px;
+	line-height: 1.5;
+	text-align: left;
+	white-space: normal;
+	pointer-events: none;
+	visibility: hidden;
+	opacity: 0;
+	transition: opacity 120ms ease, visibility 0s linear 120ms;
+}
+
+.agent-row.is-button:hover > .agent-card,
+.agent-row.is-button:focus-visible > .agent-card {
+	visibility: visible;
+	opacity: 1;
+	transition: opacity 120ms ease 500ms, visibility 0s linear 500ms;
+}
+
+.agent-card strong {
+	color: var(--ink);
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+.agent-card-line {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	min-width: 0;
+}
+
+.agent-card-line > svg {
+	flex: none;
+	margin-top: 3px;
+	color: var(--ink-4);
+}
+
+.agent-card-line.spread {
+	justify-content: space-between;
+	align-items: center;
+}
+
+.agent-card .mono {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.agent-card-line .mono:not(.agent-card-patch) {
+	color: var(--ink-2);
+	overflow-wrap: anywhere;
+}
+
+.agent-card .agent-card-patch {
+	flex: none;
+	margin-left: auto;
+	color: var(--add);
+}
+
+.agent-card-hint {
+	margin-top: 2px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.agent-card,
+	.agent-row.is-button:hover > .agent-card {
+		transition: none;
+	}
+}
+
+/* In the menu, a row is one of a list; no card. */
+.subagents-popover .agent-card {
+	display: none;
+}
+
 .agent-row.is-button:disabled {
 	opacity: 1;
 	cursor: default;
@@ -1888,16 +1921,6 @@ body.resizing * {
 }
 
 /* A writer's changes once it is done, in place of a word. */
-.agent-row-patch {
-	flex: none;
-	font-family: var(--mono);
-	font-size: 11px;
-}
-
-.agent-row-name .subagent-role {
-	flex: none;
-	align-self: center;
-}
 
 .agent-row-time {
 	flex: none;
@@ -2170,22 +2193,26 @@ body.resizing * {
 .subagents-popover-foot {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 9px 8px 9px 14px;
+	gap: 8px;
+	padding: 9px 14px;
 	border-top: 1px solid var(--line);
 	background: var(--tray);
 	color: var(--ink-3);
 	font-size: 11.5px;
 }
 
-.subagents-popover-foot > span {
+.subagents-popover-hint {
 	flex: 1;
 	min-width: 0;
 }
 
-.subagents-popover-foot .btn {
-	flex: none;
-	font-size: 12px;
+.subagents-popover-foot kbd {
+	padding: 0 5px;
+	border: 1px solid var(--edge);
+	border-radius: 4px;
+	background: #fff;
+	font-family: var(--mono);
+	font-size: 10.5px;
 }
 
 /* A subagent's own session: in a drawer over the right of the pane, or filling a window of its own. */
@@ -2281,6 +2308,46 @@ body.resizing * {
 	margin: 0;
 	color: var(--ink-3);
 	font-size: 13px;
+}
+
+/* A subagent session's steps line: "› 11 steps · read 2 · edit 4", its time at the end. */
+.subagent-session .steps-toggle {
+	align-self: stretch;
+	gap: 8px;
+}
+
+.steps-tally {
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+.steps-time {
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.subagent-session-patch {
+	flex: none;
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--add);
+}
+
+.subagent-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.subagent-chips > span {
+	padding: 1px 8px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: var(--ink-3);
+	font-family: var(--mono);
+	font-size: 11px;
 }
 
 /* Where the message box would be: how the agent is doing, and the way back to the main thread. */
@@ -8090,309 +8157,38 @@ body.resizing * {
 	}
 }
 
-.agents-toggle {
-	color: var(--accent-text);
-}
-
 .attn, .warn, .subagent-activity.warn {
 	color: var(--warn);
-}
-
-.agents-toggle.attn, .agents-attn {
-	background: var(--warn-bg);
 }
 
 .live-dot.attn {
 	background: var(--warn);
 }
 
-.agents-tab-dot {
-	width: 5px;
-	height: 5px;
-	background: var(--accent);
-	border-radius: 50%;
-}
-
-.fanout {
-	container: fanout / inline-size;
-}
-
-.fanout .live-cmd-head {
-	align-items: start;
-}
-
-.fanout .live-cmd-prose {
-	min-width: 0;
-}
-
-.fanout-bar {
-	display: flex;
-	gap: 3px;
-	margin: 8px 0;
-}
-
-.fanout-bar i {
-	flex: 1;
-	height: 3px;
-	border-radius: 2px;
-	background: var(--line);
-}
-
-.fanout-bar .running {
-	background: var(--accent);
-}
-
-.fanout-bar .done {
-	background: var(--add);
-}
-
-.fanout-bar .error {
-	background: var(--del);
-}
-
-.fanout-bar .waiting {
-	background: var(--warn);
-}
-
-.fanout-bar .stopped {
-	background: var(--ink-4);
-}
-
-.fanout-rows {
-	display: grid;
-	grid-template-columns: 12px auto auto 14px minmax(0, 1fr) auto;
-	column-gap: 8px;
-}
-
-.fanout .subagent-row {
-	grid-column: 1 / -1;
-	grid-template-columns: subgrid;
-	padding: 3px 0;
-	border: 0;
-	background: transparent;
-	text-align: left;
-	min-width: 0;
-	border-radius: 3px;
-}
-
-.fanout .subagent-row:hover {
-	background: var(--soft);
-}
-
-.fanout .subagent-row:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-
-.subagent-mark {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 12px;
-	height: 12px;
-	font: 12px var(--sans);
-	color: var(--ink-4);
-}
-
-.subagent-mark.pending {
-	border: 1px solid var(--ink-4);
-	border-radius: 50%;
-	width: 8px;
-	height: 8px;
-	margin: 2px;
-}
-
-.subagent-mark.running {
-	border: 1px solid var(--accent);
-	border-radius: 50%;
-}
-
-.subagent-mark.running::after {
-	content: '';
-	width: 5px;
-	height: 5px;
-	border-radius: 50%;
-	background: var(--accent);
-}
-
-.subagent-mark.done {
-	color: var(--add);
-}
-
-.subagent-mark.error {
-	color: var(--del);
-}
-
-.subagent-mark.waiting {
-	color: var(--warn);
-}
-
-.subagent-role {
-	color: var(--ink-4);
-	display: inline-flex;
-	align-items: center;
-}
-
-.fanout .subagent-activity {
-	font: 12px/1.5 var(--sans);
-}
-
 .fanout-note {
-	margin: 8px 0 0;
-	padding: 8px 10px;
-	border: 1px solid var(--line);
-	border-radius: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 6px 0 0;
+	padding: 0 8px;
 	font: 12px/1.5 var(--sans);
 	overflow-wrap: anywhere;
-	background: white;
+}
+
+.agent-kept-path {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-3);
 }
 
 .fanout-note p {
 	margin: 0 0 5px;
 }
 
-.not-started .fanout-rows {
-	opacity: .55;
-}
-
-@container fanout (max-width: 420px) {
-	.fanout-rows {
-		grid-template-columns: 12px minmax(0, auto) 14px minmax(0, 1fr) auto;
-		column-gap: 6px;
-	}
-	.fanout .subagent-row > .agent-tag {
-		display: none;
-	}
-	.fanout .subagent-label {
-		max-width: 72px;
-	}
-	.fanout-tools {
-		display: none;
-	}
-}
-
-.agents {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	padding: 12px;
-	overflow: auto;
-	min-width: 0;
-	min-height: 0;
-	flex: 1;
-	container: agents / inline-size;
-}
-
-.agents h3, .agents p {
-	margin: 0;
-}
-
-.agents-head h3 {
-	font-size: 14px;
-	font-weight: 600;
-	overflow-wrap: anywhere;
-}
-
-.agents-head p, .agents-foot, .agents .subagent-usage {
-	font: 11px/1.6 var(--mono);
-	color: var(--ink-4);
-}
-
-.agents-head p {
-	margin-top: 5px;
-}
-
-.agents-plan, .agents-phase, .agents-now, .agents-attn {
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	padding: 10px;
-	min-width: 0;
-}
-
-.agents-phase {
-	background: white;
-}
-
-.agents-phase > summary {
-	cursor: pointer;
-	font-size: 12px;
-}
-
-.agents-phase .fanout {
-	margin: 10px 0 0;
-	padding: 0;
-	background: transparent;
-}
-
-.agents .fanout-rows {
-	display: flex;
-	flex-direction: column;
-}
-
-.agents .fanout .subagent-row {
-	display: grid;
-	grid-template-columns: 12px auto minmax(0, 1fr) 14px auto;
-	gap: 4px 6px;
-	padding: 6px 0;
-}
-
-.agents .fanout .subagent-row > .agent-tag {
-	display: inline-flex;
-}
-
-.agents .subagent-activity {
-	overflow-wrap: anywhere;
-}
-
-.agents .fanout .subagent-activity {
-	grid-column: 2 / -1;
-	grid-row: 2;
-	white-space: normal;
-}
-
-.agents .fanout .subagent-now-count {
-	grid-column: 5;
-	grid-row: 1;
-}
-
-.agents-now {
-	font-size: 12px;
-}
-
-.agents-now p + p {
-	color: var(--ink-3);
-	margin-top: 3px;
-}
-
-.agents .diff-scroll {
-	max-height: 420px;
-	overflow: auto;
-	border: 1px solid var(--line);
-	border-radius: 8px;
-}
-
-.agents-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	margin-top: 6px;
-}
-
-.agents-foot {
-	margin-top: auto;
-	padding-top: 8px;
-	border-top: 1px solid var(--line);
-}
-
 .agents-count {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
-}
-
-/* A list item that takes no box, so its row keeps the fan-out's grid; it is there for the list semantics. */
-.fanout-item {
-	display: contents;
 }
 
 /* Text cut to a few lines until "Show all": the plan (3) and a child's task (6). */
@@ -8412,47 +8208,4 @@ body.resizing * {
 	cursor: pointer;
 }
 
-.agents-after {
-	border-radius: 10px;
-	padding: 10px;
-	background: var(--soft);
-	min-width: 0;
-}
-
-.agents-patches {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	font-size: 12px;
-}
-
-.agents-patches li {
-	display: flex;
-	gap: 8px;
-	align-items: baseline;
-	min-width: 0;
-	padding: 2px 0;
-}
-
-.agents-patch-key {
-	flex: none;
-	max-width: 120px;
-	font-weight: 500;
-}
-
 /* A writer's name opens its branch, files and patch. */
-button.agents-patch-key {
-	padding: 0;
-	border: 0;
-	background: none;
-	color: var(--accent-text);
-	text-align: left;
-}
-
-button.agents-patch-key:hover {
-	text-decoration: underline;
-}
-
-.agents-patches .warn {
-	color: var(--warn);
-}

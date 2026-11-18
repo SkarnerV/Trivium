@@ -127,8 +127,8 @@ export interface SubagentChild {
 	output?: string;
 	error?: string;
 	/**
-	 * The pi session file it writes, which holds its whole conversation: opened beside the thread, and read for the
-	 * Agents tab's tool history. It may not exist until the child starts.
+	 * The pi session file it writes, which holds its whole conversation: opened beside the thread or
+	 * in a window of its own. It may not exist until the child starts.
 	 */
 	sessionFile?: string;
 }
@@ -193,6 +193,15 @@ export interface SubagentNotice {
 }
 
 /** A subagent's own conversation, read from its session file, and what the parent session last heard of it. */
+/** A subagent's window: whose session, which file, its title, the app it is styled as, and the parent's project and title. */
+export interface SubagentWindowInput {
+	parent: string;
+	file: string;
+	title: string;
+	app: AppId;
+	crumb?: string;
+}
+
 export interface SubagentSession {
 	runs: Run[];
 	/** The file isn't there yet: the child hasn't started writing it. */
@@ -1102,7 +1111,7 @@ export interface TriviumApi {
 	/** Reads a subagent's session file, which must belong to the given parent session. */
 	subagentSession(parent: string, file: string): Promise<SubagentSession>;
 	/** Opens a subagent's session in a window of its own, or brings that window forward. */
-	openSubagentWindow(input: { parent: string; file: string; title: string; app: AppId }): Promise<void>;
+	openSubagentWindow(input: SubagentWindowInput): Promise<void>;
 	/** Brings the main window forward on a session, from a subagent's window. */
 	showSession(path: string): Promise<void>;
 	providers(): Promise<ProviderInfo[]>;

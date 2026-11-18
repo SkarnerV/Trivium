@@ -27,6 +27,7 @@ import type { DrawnDiagram } from "./preview.ts";
 import type { SubagentTarget } from "./components/Subagents.tsx";
 import { type Split, placeInSplit, showInSplit, visibleSessions, withoutSessions } from "./split.ts";
 import { transition } from "./transition.ts";
+import { baseName } from "./format.ts";
 
 declare global {
 	interface Window {
@@ -45,8 +46,6 @@ export interface State {
 	sessions: SessionSummary[];
 	views: Record<string, SessionView>;
 	dialogs: DialogRequest[];
-	agentsSeen: Record<string, string>;
-	agentsDismissed: Record<string, string>;
 	notices: Notice[];
 	models: ModelOption[];
 	folded: boolean;
@@ -150,8 +149,6 @@ let state: State = {
 	sessions: [],
 	views: {},
 	dialogs: [],
-	agentsSeen: {},
-	agentsDismissed: {},
 	notices: [],
 	models: [],
 	peek: false,
@@ -244,7 +241,9 @@ export function errorText(error: unknown): string {
 export function openSubagent(parent: string, target: SubagentTarget, newWindow: boolean): void {
 	if (newWindow) {
 		const title = [target.agent, target.label].filter(Boolean).join(" ");
-		void attempt(() => trivium.openSubagentWindow({ parent, file: target.file, title, app: getState().app }));
+		const view = getState().views[parent];
+		const crumb = view ? `${view.chat ? t("Chats") : baseName(view.cwd)} / ${view.title}` : undefined;
+		void attempt(() => trivium.openSubagentWindow({ parent, file: target.file, title, app: getState().app, crumb }));
 		return;
 	}
 	setState((s) => ({ subagentShown: { ...s.subagentShown, [parent]: target } }));
@@ -482,14 +481,16 @@ export function followDocument(path: string, file: string): void {
 
 function openViews(s: State, path: string): PanelView[] {
 	const view = s.views[path];
-	return view ? panelViews(view, s.panelTabs[path], s.agentsDismissed[path]) : (s.panelTabs[path] ?? []);
+	return view ? panelViews(view, s.panelTabs[path]) : (s.panelTabs[path] ?? []);
 }
 
-/** Opens a view as a tab in a session's panel, or goes to its tab when it is open already, and shows the panel. */
+/** Opens a view as a tab in a session's panel, or goes to its tab when it is open already, and shows the panel in place of a subagent's drawer. */
 export function showPanelView(path: string, name: PanelView): void {
 	setState((s) => {
 		const open = openViews(s, path);
+		const { [path]: _drawer, ...subagentShown } = s.subagentShown;
 		return {
+			subagentShown,
 			panelTabs: { ...s.panelTabs, [path]: open.includes(name) ? open : [...open, name] },
 			panelTab: { ...s.panelTab, [path]: name },
 			changesHidden: { ...s.changesHidden, [path]: false },
@@ -503,15 +504,12 @@ export function closePanelView(path: string, name: PanelView): void {
 		const open = openViews(s, path);
 		const index = open.indexOf(name);
 		const next = open.filter((other) => other !== name);
-		const fanout = name === "agents" ? s.views[path]?.runs.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 0)?.id : undefined;
-		const dismissed = fanout ? { agentsDismissed: { ...s.agentsDismissed, [path]: fanout } } : {};
 		if (!next.length) {
 			const { [path]: _, ...rest } = s.panelTabs;
-			return { ...dismissed, panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
+			return { panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
 		}
 		const showing = shownView(open, s.panelTab[path]);
 		return {
-			...dismissed,
 			panelTabs: { ...s.panelTabs, [path]: next },
 			panelTab: { ...s.panelTab, [path]: showing === name ? next[Math.min(index, next.length - 1)]! : showing },
 		};

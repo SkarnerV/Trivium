@@ -222,7 +222,7 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 	useEffect(() => {
 		if (!draft) return;
 		if (draft.append) {
-			// A draft offered from elsewhere, such as the Agents tab, must not cost the user what they had typed.
+			// A draft offered from elsewhere, such as a subagent's session, must not cost the user what they had typed.
 			setText((current) => (current.trim() ? `${current.trimEnd()}\n${draft.text}` : draft.text));
 		} else {
 			setText(draft.text);

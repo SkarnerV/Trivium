@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { type AppId, APP_IDS, type Run, type SubagentChild, type SubagentSession } from "../../shared/protocol.ts";
-import { duration } from "../format.ts";
+import { duration, tokens } from "../format.ts";
 import { CloseIcon, ExternalIcon, ParentIcon } from "../icons.tsx";
 import { attempt, closeSubagent, errorText, openSubagent, showSettings, trivium, useStore } from "../store.ts";
 import { themeVars } from "../theme.ts";
 import { t } from "../i18n.tsx";
 import { RunBlock, useStickToBottom } from "./SessionPane.tsx";
-import { AgentAvatar, type AgentStatus, firstLine, type SubagentOpener, SubagentOpenerContext, type SubagentTarget, statusWord } from "./Subagents.tsx";
+import { AgentAvatar, type AgentStatus, firstLine, patchLine, type SubagentOpener, SubagentOpenerContext, type SubagentTarget, statusWord } from "./Subagents.tsx";
 
 const settled = (child: SubagentChild | undefined) => child?.status === "done" || child?.status === "error";
+
+/** Its own session says it completed, where a row in the thread says done. */
+const sessionWord = (status: AgentStatus) => (status === "done" ? t("Completed") : statusWord(status));
 
 /**
  * Reads a subagent's session and keeps reading while it works: every second while it runs or hasn't
@@ -54,9 +57,15 @@ function fromMainAgent(run: Run, task: string): boolean {
  * its answer. It is read-only; the bar at the bottom, where the message box would be, says how it is doing
  * and goes back to the main thread.
  */
-export function SubagentThread({ parent, target, place, app }: { parent: string; target: SubagentTarget; place: "drawer" | "window"; app: AppId }) {
+export function SubagentThread({ parent, target, place, app, crumb }: { parent: string; target: SubagentTarget; place: "drawer" | "window"; app: AppId; crumb?: string }) {
 	const { session, error } = useSubagentSession(parent, target.file);
-	const child = session?.child;
+	// In the main window the parent's view has the child as the thread shows it, its patch included.
+	const shown = useStore((s) =>
+		s.views[parent]?.runs
+			.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
+			.findLast((item) => item.sessionFile === target.file),
+	);
+	const child = session?.child && shown ? { ...session.child, handoff: session.child.handoff ?? shown.handoff } : (session?.child ?? shown);
 	const runs = session?.runs ?? [];
 	const lastRun = runs.at(-1);
 	const status: AgentStatus | undefined = child?.status ?? (session && !session.missing ? (lastRun?.status === "running" ? "running" : "done") : undefined);
@@ -69,11 +78,14 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 			current: target.file,
 			open: (next, newWindow) => {
 				if (place === "drawer") openSubagent(parent, next, newWindow);
-				else void trivium.openSubagentWindow({ parent, file: next.file, title: [next.agent, next.label].filter(Boolean).join(" "), app });
+				else void trivium.openSubagentWindow({ parent, file: next.file, title: [next.agent, next.label].filter(Boolean).join(" "), app, crumb });
 			},
 		}),
-		[parent, target.file, place, app],
+		[parent, target.file, place, app, crumb],
 	);
+	const time = child?.durationMs !== undefined ? duration(child.durationMs) : "";
+	const patch = patchLine(child);
+	const spent = child?.tokens ?? ((child?.inputTokens ?? 0) + (child?.outputTokens ?? 0) || undefined);
 	const name = [target.agent, target.label].filter(Boolean).join(" ");
 	const back = () => (place === "drawer" ? closeSubagent(parent) : void trivium.showSession(parent));
 	return (
@@ -90,18 +102,23 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 			<header className="pane-head subagent-session-head">
 				<AgentAvatar agent={target.agent} status={status} size={28} />
 				<div className="subagent-session-title">
-					{place === "drawer" && <span className="subagent-session-crumb">{t("Main thread")} ›</span>}
+					{place === "drawer" ? (
+						<span className="subagent-session-crumb">{t("Main thread")} ›</span>
+					) : (
+						crumb && <span className="subagent-session-crumb ellipsis">{crumb}</span>
+					)}
 					<span className="subagent-session-name">
 						<strong>{target.agent}</strong>
 						{target.label && <span className="agent-row-key">{target.label}</span>}
 						{status && (
 							<span className={`agent-status is-${status}`}>
-								{statusWord(status)}
-								{child?.durationMs !== undefined && ` · ${duration(child.durationMs)}`}
+								{sessionWord(status)}
+								{time && ` · ${time}`}
 							</span>
 						)}
 					</span>
 				</div>
+				{patch && <span className="subagent-session-patch">{patch}</span>}
 				{place === "drawer" && (
 					<>
 						<button
@@ -135,6 +152,11 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 									/>
 								))}
 							</SubagentOpenerContext.Provider>
+							{!working && spent ? (
+								<div className="subagent-chips">
+									<span>{t("{n} tokens", { n: tokens(spent) })}</span>
+								</div>
+							) : null}
 							{error && <div className="run-error">{error}</div>}
 							{!error && (!session || session.missing) && (
 								<div className="run">
@@ -154,13 +176,16 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 			<div className="subagent-bar">
 				<span className="subagent-bar-main">
 					{child?.model && <strong>{child.model}</strong>}
-					{status && <span className={`agent-status is-${status}`}>{statusWord(status)}</span>}
-					{child?.tools ? <span>{t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools })}</span> : null}
+					{status && (
+						<span className={`agent-status is-${status} ellipsis`}>
+							{[sessionWord(status), child?.tools ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : "", time].filter(Boolean).join(" · ")}
+						</span>
+					)}
 				</span>
 				<span className="subagent-bar-note">{t(working ? "Runs on its own" : "Its answer went back to the main agent")}</span>
 				<button type="button" className="btn ghost subagent-bar-back" onClick={back}>
 					<ParentIcon size={13} />
-					{t("Main thread")}
+					{t(place === "drawer" ? "Main thread" : "Open main thread")}
 				</button>
 			</div>
 		</section>
@@ -176,6 +201,7 @@ export function SubagentWindow() {
 	const file = params.get("subagent") ?? "";
 	const parent = params.get("parent") ?? "";
 	const title = params.get("title") ?? "";
+	const crumb = params.get("crumb") || undefined;
 	const app = (APP_IDS as readonly string[]).includes(params.get("app") ?? "") ? (params.get("app") as AppId) : "code";
 	const [agent = "", ...label] = title.split(" ");
 	const target = useMemo(() => ({ file, agent, label: label.join(" ") || undefined, task: "" }), [file, title]);
@@ -186,7 +212,7 @@ export function SubagentWindow() {
 	}, [title]);
 	return (
 		<div className="subagent-window" style={themeVars(app)} key={locale}>
-			<SubagentThread parent={parent} target={target} place="window" app={app} />
+			<SubagentThread parent={parent} target={target} place="window" app={app} crumb={crumb} />
 		</div>
 	);
 }

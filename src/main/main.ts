@@ -9,6 +9,7 @@ import { app, BrowserWindow, clipboard, dialog, type IpcMainInvokeEvent, ipcMain
 import { APP_USER_MODEL_ID, appIconFilename } from "../shared/branding.ts";
 import type {
 	AppId,
+	SubagentWindowInput,
 	ConnectorInput,
 	CustomProvider,
 	DialogAnswer,
@@ -202,7 +203,7 @@ function handle<T extends unknown[], R>(channel: string, fn: (...args: T) => R |
 }
 
 /** Opens a subagent's session in a window of its own, or brings forward the one already showing it. */
-function openSubagentWindow(input: { parent: string; file: string; title: string; app: AppId }): void {
+function openSubagentWindow(input: SubagentWindowInput): void {
 	// Refuses a file that isn't one of this session's subagents.
 	host.subagentSession(input.parent, input.file);
 	if (!APP_IDS.includes(input.app)) throw new Error("Invalid app.");
@@ -240,7 +241,8 @@ function openSubagentWindow(input: { parent: string; file: string; title: string
 		if (subagentWindows.get(input.file) === child) subagentWindows.delete(input.file);
 	});
 	subagentWindows.set(input.file, child);
-	void child.loadURL(`${page}#${new URLSearchParams({ subagent: input.file, parent: input.parent, title: input.title, app: input.app })}`);
+	const crumb = typeof input.crumb === "string" ? input.crumb.slice(0, 300) : "";
+	void child.loadURL(`${page}#${new URLSearchParams({ subagent: input.file, parent: input.parent, title: input.title, app: input.app, crumb })}`);
 }
 
 function setAppIcon(id: AppId): void {
@@ -316,7 +318,7 @@ function registerIpc(): void {
 	handle("trivium:revertChanges", (path: string, files?: string[]) => host.revertChanges(path, files));
 	handle("trivium:getSettings", () => settings.get(), true);
 	handle("trivium:subagentSession", (parent: string, file: string) => host.subagentSession(parent, file), true);
-	handle("trivium:openSubagentWindow", (input: { parent: string; file: string; title: string; app: AppId }) => openSubagentWindow(input), true);
+	handle("trivium:openSubagentWindow", (input: SubagentWindowInput) => openSubagentWindow(input), true);
 	handle(
 		"trivium:showSession",
 		(path: string) => {

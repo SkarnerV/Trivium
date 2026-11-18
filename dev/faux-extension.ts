@@ -415,7 +415,7 @@ function orchestratorStory(scenario: string): Step[] {
 			fauxText("The scout found separate API and web files. I'll give each writer its own worktree and have a reviewer check the tests."),
 			fauxToolCall("subagent", { workflow: true, async: false, options: { scenario, globalConcurrencyLimit: 4, preflight: { version: 1, coverage: "complete", lanes: (scenario.includes("eight") ? Array.from({ length: 8 }, (_, index) => ({ key: `review-${index + 1}`, mode: "review" })) : [{ key: "api", mode: "mutation", claims: ["src/api/refresh.ts", "test/refresh.test.ts"] }, { key: "web", mode: "mutation", claims: ["src/web/banner.tsx", "test/banner.test.ts"] }, { key: "tests", mode: "review" }]) } } }),
 		], { stopReason: "toolUse" }),
-		/limit/i.test(scenario) ? LIMIT_REPLY : () => fauxAssistantMessage(fauxText("The fan-out finished. Open Agents to inspect each result, branch, file list and patch. One review failed, and the web worktree was kept for inspection. No patches were applied by this scripted demonstration.")),
+		/limit/i.test(scenario) ? LIMIT_REPLY : () => fauxAssistantMessage(fauxText("The fan-out finished. Open any agent to read its session. One review failed, and the web worktree was kept for inspection. No patches were applied by this scripted demonstration.")),
 	];
 }
 

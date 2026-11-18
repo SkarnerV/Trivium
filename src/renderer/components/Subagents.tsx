@@ -1,17 +1,15 @@
-import { createContext, type KeyboardEvent, useContext, useState } from "react";
+import { createContext, useContext, useState } from "react";
 import type { LimitNotice, Step, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, ExternalIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
 import { AgentSession } from "../agent-context.ts";
-import { useStore } from "../store.ts";
-import { claimsOf, phaseOf, stateWord, teamOf } from "../agents.ts";
+import { claimsOf } from "../agents.ts";
 import { Markdown } from "./Markdown.tsx";
 import { t } from "../i18n.tsx";
 
 /*
- * Two views of the same children. The thread shows each subagent as a row that opens its own session (AgentAvatar,
- * SubagentRow, SubagentGroup, SubagentNoticeLine). The Agents tab shows each fan-out's lanes (Fanout and its rows);
- * an agent opens as its own session from either.
+ * The thread shows each subagent as a row that opens its own session (AgentAvatar, SubagentRow, SubagentGroup,
+ * SubagentNoticeLine); the header's menu lists the same rows for the whole session.
  */
 
 /** A subagent whose own session can be opened: its session file, and enough to title it before it loads. */
@@ -20,8 +18,6 @@ export interface SubagentTarget {
 	agent: string;
 	label?: string;
 	task: string;
-	/** The subagent call and the child's place in it, which the Agents tab's patch view is opened by. */
-	at?: { step: string; index: number };
 }
 
 /** Opens a subagent's session beside the thread, or in a window of its own. */
@@ -92,7 +88,7 @@ export function statusWord(status: AgentStatus): string {
 
 /** What a child is doing, or how it ended, in one line. Tool calls read as code. */
 function rowActivity(child: SubagentChild, claims?: string[]): { text: string; code: boolean; warn?: boolean } {
-	// The states the Agents tab words the same way: waiting, timed out, stopped, unreported, a writer's patch.
+	// The states with words of their own: waiting, timed out, stopped, unreported, a writer's patch.
 	if (child.timedOut || child.waitingOn || child.unreported || child.status === "stopped" || (child.status === "done" && child.handoff && (child.handoff.error || !child.handoff.changed))) {
 		const { text, tone } = activity(child);
 		return { text, code: false, warn: tone === "warn" };
@@ -107,10 +103,18 @@ function rowActivity(child: SubagentChild, claims?: string[]): { text: string; c
 	return { text: t(child.tools ? "Thinking" : "Starting"), code: false };
 }
 
-/** The model, tool count and tokens, for a row's tooltip. */
-function usageLine(child: SubagentChild): string {
+/** A writer's handed-back changes, as `+113 −12 · 3 files`, once there are any. */
+export function patchLine(child: SubagentChild | undefined): string {
+	const handoff = child?.handoff;
+	if (!handoff?.changed) return "";
+	const files = handoff.filesChanged || handoff.files.length;
+	return [`+${handoff.insertions} −${handoff.deletions}`, files ? t(files === 1 ? "{n} file" : "{n} files", { n: files }) : ""].filter(Boolean).join(" · ");
+}
+
+/** What it is using now, how many tools it called and the tokens it spent, in one line. */
+function workLine(child: SubagentChild): string {
 	return [
-		child.model,
+		child.status === "running" && child.current ? `${child.current.tool} ${child.current.target}`.trim() : "",
 		child.tools ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : "",
 		child.tokens ? t("{n} tokens", { n: tokens(child.tokens) }) : "",
 	]
@@ -118,43 +122,80 @@ function usageLine(child: SubagentChild): string {
 		.join(" · ");
 }
 
-export function targetOf(child: SubagentChild, at?: SubagentTarget["at"]): SubagentTarget | undefined {
-	return child.sessionFile ? { file: child.sessionFile, agent: child.agent, label: child.label, task: child.task, at } : undefined;
+/** The card a thread row shows while hovered or focused: which agent, its model, how it is doing, its branch and its work. */
+function RowCard({ child, status, time, opens }: { child: SubagentChild; status: AgentStatus; time: string; opens: boolean }) {
+	const work = workLine(child);
+	const patch = patchLine(child);
+	return (
+		<span className="agent-card" role="tooltip">
+			<strong>{[child.agent, child.label].filter(Boolean).join(" · ")}</strong>
+			{child.model && (
+				<span className="agent-card-line">
+					<BotIcon size={12} />
+					<span className="ellipsis">{child.model}</span>
+				</span>
+			)}
+			<span className="agent-card-line spread">
+				<span className={`agent-status is-${status}`}>{statusWord(status)}</span>
+				{time && <span className="mono">{time}</span>}
+			</span>
+			{child.handoff?.branch && (
+				<span className="agent-card-line">
+					<BranchIcon size={12} />
+					<span className="mono ellipsis">{child.handoff.branch}</span>
+					{patch && <span className="mono agent-card-patch">{patch}</span>}
+				</span>
+			)}
+			{work && (
+				<span className="agent-card-line">
+					<CodeIcon size={12} />
+					<span className="mono">{work}</span>
+				</span>
+			)}
+			{opens && <span className="agent-card-hint">{t("Click to open its session · Shift-click for a new window")}</span>}
+		</span>
+	);
+}
+
+export function targetOf(child: SubagentChild): SubagentTarget | undefined {
+	return child.sessionFile ? { file: child.sessionFile, agent: child.agent, label: child.label, task: child.task } : undefined;
 }
 
 /**
- * One subagent: its mark, name and what it is doing now (or its answer's first line once done). Clicking
- * opens its own session; Shift-click opens it in a new window.
+ * One subagent: its mark, name and what it is doing now (or its answer's first line once done). Clicking opens its
+ * own session; Shift-click opens it in a new window. In the thread a finished row leaves out its status word and
+ * shows a card while hovered; in the header's menu every row says how it is doing, and the menu has its own button
+ * for a new window.
  */
 export function SubagentRow({
 	child: reported,
 	background = false,
 	claims,
-	at,
+	place = "thread",
 }: {
 	child: SubagentChild;
 	background?: boolean;
 	claims?: string[];
-	at?: SubagentTarget["at"];
+	place?: "thread" | "menu";
 }) {
 	const opener = useContext(SubagentOpenerContext);
-	// Roles and worktrees are Code's, shown where the session has an Agents tab.
-	const code = Boolean(useContext(AgentSession));
 	// A background child works on after its launch step ends, until its result says otherwise.
 	const later = background && reported.sessionFile ? opener?.background?.get(reported.sessionFile) : undefined;
 	const child: SubagentChild = background ? (later ?? { ...reported, status: "running" }) : reported;
-	const target = targetOf(child, at);
+	const target = targetOf(child);
 	const { text, code: asCode, warn } =
-		background && child.status === "running" ? { text: t("Running in the background. Its result arrives as its own message."), code: false, warn: false } : rowActivity(child, claims);
+		background && child.status === "running" ? { text: t("Its result arrives as its own message"), code: false, warn: false } : rowActivity(child, claims);
 	const status = agentStatus(child);
 	const finished = child.status === "done" || child.status === "error" || child.status === "stopped";
+	const time = finished || child.status === "running" ? duration(child.durationMs) : "";
+	const menu = place === "menu";
+	const opens = Boolean(target && opener);
 	const content = (
 		<>
 			<AgentAvatar agent={child.agent} status={status} />
 			<span className="agent-row-main">
 				<span className="agent-row-name">
 					<span className="agent-row-agent">{child.agent}</span>
-					{code && child.role === "mutation" && <ChildRole child={child} />}
 					{child.label ? <span className="agent-row-key">{child.label}</span> : <span className="agent-row-task ellipsis">{firstLine(child.task)}</span>}
 				</span>
 				<span className={`agent-row-activity ellipsis${asCode ? " code" : ""}${child.status === "error" && child.error ? " error" : warn ? " warn" : ""}`}>{text}</span>
@@ -162,31 +203,19 @@ export function SubagentRow({
 			{background && !finished ? (
 				<span className="agent-pill">{t("Runs on its own")}</span>
 			) : (
-				status !== "done" && <span className={`agent-status is-${status}`}>{statusWord(status)}</span>
+				(menu || status !== "done") && <span className={`agent-status is-${status}`}>{statusWord(status)}</span>
 			)}
-			{child.status === "done" && child.handoff?.changed && (
-				<span className="agent-row-patch">
-					<PatchCounts child={child} />
-				</span>
-			)}
-			<span className="agent-row-time">{finished || child.status === "running" ? duration(child.durationMs) : ""}</span>
-			{target && opener && <Chevron open={false} />}
+			<span className="agent-row-time">{time}</span>
+			{opens && !menu && <Chevron open={false} />}
+			{!menu && <RowCard child={child} status={status} time={time} opens={opens} />}
 		</>
 	);
-	const usage = usageLine(child);
-	if (!target || !opener) {
-		return (
-			<div className="agent-row" title={usage || undefined}>
-				{content}
-			</div>
-		);
-	}
+	if (!target || !opener) return <div className="agent-row">{content}</div>;
 	return (
 		<button
 			type="button"
 			className={`agent-row is-button${opener.current === target.file ? " current" : ""}`}
 			aria-label={t("Open {agent}'s session", { agent: [child.agent, child.label].filter(Boolean).join(" ") })}
-			title={[usage, t("Shift-click opens it in a new window")].filter(Boolean).join("\n")}
 			onClick={(event) => opener.open(target, event.shiftKey)}
 		>
 			{content}
@@ -232,12 +261,8 @@ export function AvatarStack({ agents, size = 24, max = 3, more = true }: { agent
 }
 
 /**
- * A subagent call in the thread. One child is a single row; several get a header that says how they are
- * doing, over a row each. The group stays open while they work and folds once they are done.
- */
-/**
  * What a subagent call's rows can't say: it never started because the folder had uncommitted changes, the budget ran
- * out, a usage limit ended the run during it, or worktrees were kept. The Agents tab has the details.
+ * out, a usage limit ended the run during it, or a worktree was kept, with where it is and why.
  */
 function GroupNotes({ step, limit }: { step: Step; limit?: LimitNotice }) {
 	const code = Boolean(useContext(AgentSession));
@@ -245,7 +270,6 @@ function GroupNotes({ step, limit }: { step: Step; limit?: LimitNotice }) {
 	const { children } = subagent;
 	const rejected = step.status === "error" && children.length > 0 && children.every((child) => child.status === "pending");
 	const dirty = code && rejected && /dirty|uncommitted|clean (?:git |working |work |source |folder |tree)/i.test(step.output ?? "");
-	const kept = subagent.keptWorktrees?.length ?? 0;
 	return (
 		<>
 			{dirty && (
@@ -257,15 +281,21 @@ function GroupNotes({ step, limit }: { step: Step; limit?: LimitNotice }) {
 			)}
 			{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Completed work is kept.")}</p>}
 			{limit && <FanoutLimit limit={limit} agents={children} />}
-			{code && kept > 0 && (
-				<p className="fanout-note warn">
-					{t(kept === 1 ? "1 worktree was kept. See the Agents tab for its path and reason." : "{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: kept })}
-				</p>
-			)}
+			{code &&
+				subagent.keptWorktrees?.map((kept) => (
+					<p key={kept.path} className="fanout-note warn">
+						<span>{t("A worktree was kept: {reason}", { reason: kept.reason })}</span>
+						<code className="agent-kept-path">{kept.path}</code>
+					</p>
+				))}
 		</>
 	);
 }
 
+/**
+ * A subagent call in the thread. One child is a single row; several get a header that says how they are
+ * doing, over a row each. The group stays open while they work and folds once they are done.
+ */
 export function SubagentGroup({ step, now, limit }: { step: Step; now: number; limit?: LimitNotice }) {
 	const [open, setOpen] = useState<boolean | undefined>(undefined);
 	const { children, background, preflight } = step.subagent!;
@@ -291,7 +321,7 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 		return (
 			<div className="agent-single">
 				{children.map((child, index) => (
-					<SubagentRow key={child.childId ?? index} child={child} background={background} claims={claims(child)} at={{ step: step.id, index }} />
+					<SubagentRow key={child.childId ?? index} child={child} background={background} claims={claims(child)} />
 				))}
 				<GroupNotes step={step} limit={limit} />
 			</div>
@@ -314,7 +344,7 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 			{shown && (
 				<div className="agent-rows">
 					{children.map((child, index) => (
-						<SubagentRow key={child.childId ?? index} child={child} claims={claims(child)} at={{ step: step.id, index }} />
+						<SubagentRow key={child.childId ?? index} child={child} claims={claims(child)} />
 					))}
 				</div>
 			)}
@@ -382,13 +412,6 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 	);
 }
 
-/* The Agents tab's fan-out. */
-
-/** The agent's name, tinted, so delegated work stands out when scanning the steps. */
-export function AgentTag({ agent, quiet = false }: { agent: string; quiet?: boolean }) {
-	return <span className={`agent-tag${quiet ? " quiet" : ""}`}>{agent}</span>;
-}
-
 /** What a running child is doing, in a few words: its tool now, or how it ended. */
 export function activity(child: SubagentChild): { text: string; tone: "" | "done" | "error" | "warn" } {
 	if (child.timedOut) return { text: t("Timed out after {time}", { time: duration(child.durationMs) }), tone: "error" };
@@ -411,151 +434,6 @@ export function activity(child: SubagentChild): { text: string; tone: "" | "done
 	return { text: t(child.tools ? "Thinking" : "Starting"), tone: "" };
 }
 
-/** A writer's change counts once it handed back a patch with changes, as `+120 −14`. */
-function PatchCounts({ child }: { child: SubagentChild }) {
-	if (!child.handoff?.changed) return null;
-	return (
-		<>
-			<span className="plus">+{child.handoff.insertions}</span> <span className="minus">−{child.handoff.deletions}</span>
-		</>
-	);
-}
-
-const finishedStatus = (child: SubagentChild) => child.status === "done" || child.status === "error" || child.status === "stopped";
-
-/** Where a child works, in words: what the role glyph says to a screen reader and in its title. */
-export function childRole(child: SubagentChild): string {
-	return child.role === "mutation" ? t(child.worktree ? "Writes in its own worktree" : "Writes in the project folder") : t("Reads only");
-}
-
-/** A branch for a writer in its own worktree, a pen for one in the project folder, nothing for a reader. */
-export function ChildRole({ child }: { child: SubagentChild }) {
-	return (
-		<span className="subagent-role" title={childRole(child)} aria-label={childRole(child)}>
-			{child.role === "mutation" && (child.worktree ? <BranchIcon size={11} /> : <PenIcon size={11} />)}
-		</span>
-	);
-}
-
-/**
- * Moves focus among a list's rows with ↑/↓, Home and End (roving tabindex: only the current row is in the tab order).
- * Only a key the user pressed moves focus; live updates re-render the rows without touching it.
- */
-function roveRows(event: KeyboardEvent<HTMLElement>, onMove: (index: number) => void): void {
-	const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(".subagent-row")];
-	const from = rows.indexOf(document.activeElement as HTMLButtonElement);
-	if (from < 0) return;
-	const to =
-		event.key === "ArrowDown" ? Math.min(rows.length - 1, from + 1)
-			: event.key === "ArrowUp" ? Math.max(0, from - 1)
-				: event.key === "Home" ? 0
-					: event.key === "End" ? rows.length - 1
-						: -1;
-	if (to < 0) return;
-	event.preventDefault();
-	onMove(to);
-	rows[to]!.focus();
-}
-
-/**
- * All lanes stay in order; shape and words carry state independently of the segment colors. In the Agents tab
- * (`list`), the rows are a list moved through with the arrow keys; in the thread they are ordinary buttons in the
- * tab order. Without a panel (`AgentSession` unset: a chat, Research or Write), nothing Code-only shows: no role
- * glyphs, worktrees or uncommitted-changes notes, and a row opens its detail in place.
- */
-export function Fanout({ step, now, onChild, list = false, limit }: { step: Step; now: number; onChild: (index: number) => void; list?: boolean; limit?: LimitNotice }) {
-	const path = useContext(AgentSession);
-	const code = Boolean(path);
-	const dirty = useStore((s) => Boolean(path && s.git[path]?.files.length));
-	const [active, setActive] = useState(0);
-	const subagent = step.subagent!;
-	const { children } = subagent;
-	const finished = children.filter(finishedStatus).length;
-	const failed = children.filter((child) => child.status === "error").length;
-	const waiting = children.filter((child) => child.waitingOn === "main").length;
-	const stopped = children.filter((child) => child.status === "stopped").length;
-	const plan = children.length > 0 && children.every((child) => child.status === "pending");
-	const writers = children.filter((child) => child.role === "mutation");
-	const rejected = step.status === "error" && plan;
-	const dirtyRejected = code && rejected && /dirty|uncommitted|clean (?:working|work|source|folder|tree)/i.test(step.output ?? "");
-	const phase = phaseOf(subagent);
-	const kept = subagent.keptWorktrees?.length ?? 0;
-	const summary = plan
-		? t("{phase} · {team}", { phase, team: code ? teamOf(children) : t(children.length === 1 ? "{n} agent" : "{n} agents", { n: children.length }) })
-		: t("{phase} · {finished} of {total} finished", { phase, finished, total: children.length });
-	return (
-		<div
-			className={`live-cmd subagent-live fanout${plan ? " is-plan" : ""}${rejected ? " not-started" : ""}`}
-			role="group"
-			aria-label={summary}
-		>
-			<div className="live-cmd-head">
-				<span className="live-dot" aria-hidden="true" />
-				{/* Announced when a count changes. The timer beside it stays out, or it would be read out every second. */}
-				<span className="live-cmd-prose" role="status" aria-live="polite">
-					{summary}
-					{failed > 0 && <span className="steps-failed"> · {t("{n} failed", { n: failed })}</span>}
-					{waiting > 0 && <span className="warn"> · {t("{n} waiting on the main agent", { n: waiting })}</span>}
-					{stopped > 0 && <span className="warn"> · {t("{n} stopped", { n: stopped })}</span>}
-				</span>
-				<span className="live-cmd-time">{duration(step.durationMs ?? (step.startedAt ? now - step.startedAt : undefined))}</span>
-			</div>
-			<div className="fanout-bar" aria-hidden="true">
-				{children.map((child, index) => (
-					<i key={index} className={child.waitingOn ? "waiting" : child.status} />
-				))}
-			</div>
-			<div
-				className="fanout-rows"
-				role={list ? "list" : undefined}
-				onKeyDown={list ? (event) => roveRows(event, setActive) : undefined}
-			>
-				{children.map((child, index) => {
-					const row = (
-						<FanoutRow
-							key={child.childId ?? index}
-							step={step}
-							index={index}
-							child={child}
-							plan={plan}
-							rejected={rejected}
-							code={code}
-							tabIndex={list ? (index === Math.min(active, children.length - 1) ? 0 : -1) : undefined}
-							onFocus={list ? () => setActive(index) : undefined}
-							onOpen={() => onChild(index)}
-						/>
-					);
-					// The item wrapper takes no box (display: contents), so the row stays on the block's shared grid.
-					return list ? (
-						<div role="listitem" className="fanout-item" key={child.childId ?? index}>
-							{row}
-						</div>
-					) : (
-						row
-					);
-				})}
-			</div>
-			{code && writers.length === 1 && !writers[0]!.worktree && dirty && !dirtyRejected && (
-				<p className="fanout-note">{t("One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.")}</p>
-			)}
-			{dirtyRejected && (
-				<p className="fanout-note warn">
-					{t(
-						"Not started: the project folder has uncommitted changes, and separate worktrees need a clean folder. The main agent will use one writer or ask you.",
-					)}
-				</p>
-			)}
-			{subagent.budgetExhausted && <p className="fanout-note warn">{t("The subagent budget ran out. Completed work is kept.")}</p>}
-			{limit && <FanoutLimit limit={limit} agents={children} />}
-			{code && kept > 0 && (
-				<p className="fanout-note warn">
-					{t(kept === 1 ? "1 worktree was kept. See the Agents tab for its path and reason." : "{n} worktrees were kept. See the Agents tab for their paths and reasons.", { n: kept })}
-				</p>
-			)}
-		</div>
-	);
-}
-
 /**
  * A provider's usage limit that ended the run during a fan-out (§8.8, run level): the limit notice's own words and
  * link, then what it meant for the agents. Which child hit it is not classified (v1.1).
@@ -575,81 +453,5 @@ export function FanoutLimit({ limit, agents }: { limit: LimitNotice; agents: Sub
 				</a>
 			)}
 		</div>
-	);
-}
-
-/**
- * One child in a fan-out: mark · agent · key · role · activity · meta, on the block's shared grid. Before any child
- * starts, the activity column shows the lane's claimed files, or its task, and the meta column says it is starting.
- */
-function FanoutRow({
-	step,
-	index,
-	child,
-	plan,
-	rejected,
-	code,
-	tabIndex,
-	onFocus,
-	onOpen,
-}: {
-	step: Step;
-	index: number;
-	child: SubagentChild;
-	plan: boolean;
-	rejected: boolean;
-	code: boolean;
-	tabIndex?: number;
-	onFocus?: () => void;
-	onOpen: () => void;
-}) {
-	const subagent = step.subagent!;
-	const lane = subagent.preflight?.lanes.find((lane) => lane.key === child.label);
-	const state = child.waitingOn ? "waiting" : child.status;
-	const { text, tone } = activity(child);
-	const display = rejected ? t("Not started") : plan ? (lane?.claims?.length ? claimsOf(lane.claims) : "") || firstLine(child.task) || text : text;
-	const done = finishedStatus(child);
-	const tools = !done && child.tools > 0 ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : "";
-	const time = duration(child.durationMs);
-	const meta = plan ? text : done && child.handoff?.changed ? `+${child.handoff.insertions} −${child.handoff.deletions}` : [tools, time].filter(Boolean).join(" · ");
-	const key = child.label ? (subagent.background ? t("{key} · in the background", { key: child.label }) : child.label) : subagent.background ? t("in the background") : "";
-	const label = { agent: child.agent, label: key || child.agent, role: childRole(child), state: stateWord(child), activity: display, meta };
-	return (
-		<button
-			type="button"
-			data-agent-step={step.id}
-			data-agent-child={index}
-			className={`subagent-row${done ? " finished" : ""}`}
-			title={t("View details")}
-			tabIndex={tabIndex}
-			onFocus={onFocus}
-			aria-label={t(meta ? "{agent} {label}, {role}, {state}, {activity}, {meta}" : "{agent} {label}, {role}, {state}, {activity}", label)}
-			onClick={onOpen}
-		>
-			<span className={`subagent-mark ${state}`} aria-hidden="true">
-				{child.waitingOn ? "Ⅱ" : child.status === "done" ? "✓" : child.status === "error" ? "×" : child.status === "stopped" ? "■" : ""}
-			</span>
-			<AgentTag agent={child.agent} quiet={done} />
-			<span className="subagent-label ellipsis" title={key}>
-				{key}
-			</span>
-			{code ? <ChildRole child={child} /> : <span className="subagent-role" />}
-			<span className={`subagent-activity ellipsis ${plan ? "" : tone}`} title={display}>
-				{display}
-			</span>
-			<span className="subagent-now-count">
-				{plan ? (
-					text
-				) : done && child.handoff?.changed ? (
-					<PatchCounts child={child} />
-				) : (
-					<>
-						{tools && <span className="fanout-tools">{tools} · </span>}
-						{time}
-					</>
-				)}
-				<span className="subagent-open">{t("Details")} ›</span>
-			</span>
-		</button>
 	);
 }

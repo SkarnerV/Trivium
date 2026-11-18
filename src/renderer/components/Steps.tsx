@@ -113,11 +113,18 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 	);
 }
 
+/** Steps by tool, in the order each tool was first used: "read 2 · edit 4 · bash 1". */
+export function tallyOf(steps: Step[]): string {
+	const counts = new Map<string, number>();
+	for (const step of steps) counts.set(step.tool, (counts.get(step.tool) ?? 0) + 1);
+	return [...counts].map(([tool, n]) => `${tool} ${n}`).join(" · ");
+}
+
 /**
  * A run as it happened, with tool calls grouped between progress notes. Once the answer is finished,
  * the whole history folds into the line that times it.
  */
-export function Steps({ run, live }: { run: Run; live: boolean }) {
+export function Steps({ run, live, tally = false }: { run: Run; live: boolean; tally?: boolean }) {
 	const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
 	const [expanded, setExpanded] = useState(false);
 	useEffect(() => setExpanded(false), [live]);
@@ -162,14 +169,27 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					setOpened(!finished && allOpen ? new Set() : new Set(foldable.map((group) => group.id)));
 				}}
 			>
-				<span>
-					<strong className={live ? "shimmer" : undefined}>{t(live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked")}</strong>
-					{total && ` ${t("for {time}", { time: total })}`}
-				</span>
-				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
-				{agents > 0 && <span>· {t(agents === 1 ? "{n} agent" : "{n} agents", { n: agents })}</span>}
-				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
-				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
+				{tally ? (
+					// A subagent's session: how many steps of each tool, and how long it took at the end.
+					<>
+						{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
+						<span className={live ? "shimmer" : undefined}>{t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>
+						{count > 0 && <span className="steps-tally">· {tallyOf(steps)}</span>}
+						{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
+						{total && <span className="steps-time">{total}</span>}
+					</>
+				) : (
+					<>
+						<span>
+							<strong className={live ? "shimmer" : undefined}>{t(live ? "Working" : run.status === "aborted" ? "Stopped" : "Worked")}</strong>
+							{total && ` ${t("for {time}", { time: total })}`}
+						</span>
+						{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
+						{agents > 0 && <span>· {t(agents === 1 ? "{n} agent" : "{n} agents", { n: agents })}</span>}
+						{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
+						{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
+					</>
+				)}
 			</button>
 			{blocks.map((block) => {
 				// Once the answer is in, the agents it started stay in view, so they can still be opened.

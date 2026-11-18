@@ -20,22 +20,12 @@ test("Code keeps the tabs the user opened", () => {
 	assert.deepEqual(panelViews(code, ["session", "services"]), ["session", "services"]);
 });
 
-test("a single child also exposes Agents and respects dismissal", () => {
-	const code = { app: "code", changes: [], runs: [{ steps: [{ id: "single", subagent: { children: [{}] } }] }] } as unknown as SessionView;
-	assert.deepEqual(panelViews(code, undefined), ["session", "agents"]);
-	assert.deepEqual(panelViews(code, undefined, "single"), ["session"]);
-});
-
-test("a fan-out adds Agents without selecting or opening it, and closing lasts until the next fan-out", () => {
+test("subagents add no tab of their own: they open beside the thread", () => {
 	const code = { app: "code", changes: [], runs: [{ steps: [{ id: "fanout", subagent: { children: [{}, {}] } }] }] } as unknown as SessionView;
 	const views = panelViews(code, ["session", "services"]);
-	assert.deepEqual(views, ["session", "services", "agents"]);
-	assert.equal(shownView(views, "services"), "services");
+	assert.deepEqual(views, ["session", "services"]);
 	assert.equal(shownView(views, undefined), "services");
 	assert.equal(panelOpen("code", code, undefined), false);
-	assert.deepEqual(panelViews(code, ["session"], "fanout"), ["session"]);
-	code.runs[0]!.steps[0]!.id = "next";
-	assert.deepEqual(panelViews(code, ["session"], "fanout"), ["session", "agents"]);
 });
 
 test("edits bring Review forward, unless the user picked Preview", () => {

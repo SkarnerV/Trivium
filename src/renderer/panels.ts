@@ -26,23 +26,20 @@ export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undef
 }
 
 /** What the tabbed panel can show: the changes (this session's edits and the repository's others), the repository's commits, files open to read, what commands left running, or a document's edits to accept or reject. */
-export type PanelView = "session" | "history" | "preview" | "services" | "review" | "agents";
+export type PanelView = "session" | "history" | "preview" | "services" | "review";
 
 /**
  * The views in a session's tabbed panel. Code's are the ones open as tabs, in the order they were opened, or the
  * changes before the user opens any. Write always has its documents, and Review for as long as there are edits.
  */
-export function panelViews(view: Pick<SessionView, "app" | "changes"> & Partial<Pick<SessionView, "runs" | "chat">>, open: PanelView[] | undefined, dismissed?: string): PanelView[] {
+export function panelViews(view: Pick<SessionView, "app" | "changes">, open: PanelView[] | undefined): PanelView[] {
 	if (view.app === "write") return liveChanges(view).length ? ["preview", "review"] : ["preview"];
-	const base: PanelView[] = open?.length ? open : ["session"];
-	const latest = view.runs?.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 0)?.id;
-	const hasAgents = view.app === "code" && !view.chat && latest !== undefined && latest !== dismissed;
-	return hasAgents && !base.includes("agents") ? [...base, "agents"] : base;
+	return open?.length ? open : ["session"];
 }
 
 /** The tab showing: the one the user picked while it is open, else the last one. */
 export function shownView(views: PanelView[], picked: PanelView | undefined): PanelView {
-	return picked && views.includes(picked) ? picked : views.findLast((name) => name !== "agents") ?? "agents";
+	return picked && views.includes(picked) ? picked : views.at(-1)!;
 }
 
 /**

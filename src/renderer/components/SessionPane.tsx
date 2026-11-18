@@ -17,7 +17,6 @@ import { type SubagentOpener, SubagentNoticeLine, SubagentOpenerContext } from "
 import { SubagentDrawer } from "./SubagentSession.tsx";
 import { backgroundSubagents, SubagentsMenu } from "./SubagentsMenu.tsx";
 import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
-import { AgentsButton } from "./AgentsPanel.tsx";
 import { AgentSession } from "../agent-context.ts";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
@@ -255,13 +254,14 @@ function QuotedMessage({ run, from }: { run: Run; from?: string }) {
  * edited or forked from, and `from` says who sent it.
  */
 export function RunBlock({ run, live, view, index, from }: { run: Run; live: boolean; view?: SessionView; index: number; from?: string }) {
+	// A subagent's own session (no view) counts its steps by tool, as its window and drawer do.
 	return (
 		<div className="run">
 			{Boolean(run.prompt.trim() || run.attachments?.length) &&
 				(view ? <UserMessage run={run} view={view} index={index} /> : <QuotedMessage run={run} from={from} />)}
 			<div className="agent">
 				{run.notice && <SubagentNoticeLine notice={run.notice} />}
-				<Steps run={run} live={live} />
+				<Steps run={run} live={live} tally={!view} />
 				{run.answer && (
 					<div className="reply">
 						<div className="answer">
@@ -401,7 +401,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	const preview = useMemo(() => (app !== "research" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	const subagent = useStore((s) => s.subagentShown[view.path]);
-	// The Agents tab, worktrees and the project folder are Code's, in a session with a project.
+	// Worktrees and the project folder are Code's, in a session with a project.
 	const agents = view.app === "code" && !view.chat;
 	const background = useMemo(() => backgroundSubagents(view.runs, view.running), [view.runs, view.running]);
 	const opener = useMemo<SubagentOpener>(
@@ -423,8 +423,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 							<h1 className="ellipsis">{view.title}</h1>
 						</div>
 					)}
-					<SubagentsMenu runs={view.runs} running={view.running} onPanel={agents ? () => showPanelView(view.path, "agents") : undefined} />
-					{agents && <AgentsButton view={view} needsYou={dialogs.length > 0} />}
+					<SubagentsMenu runs={view.runs} running={view.running} />
 					<ServicesButton view={view} />
 					{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 					{app === "code" ? (

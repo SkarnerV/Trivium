@@ -213,3 +213,57 @@ test("a subagent session says its thinking level and how full its context was at
 	assert.deepEqual(sessionUsage([{ type: "thinking_level_change", thinkingLevel: "high" }, reply(40_000), reply(82_000)], window), { thinking: "high", context: 41 });
 	assert.deepEqual(sessionUsage([{ type: "thinking_level_change", thinkingLevel: "off" }, reply(10)], () => undefined), { thinking: undefined, context: undefined });
 });
+
+test("one working subagent can be stopped on its own only inside a workflow or a background run", async () => {
+	const { stopTarget } = await import("../src/main/subagents.ts");
+	const child = (sessionFile: string, status: string, childId?: string) => ({ agent: "worker", task: "", tools: 0, steps: [], sessionFile, status, ...(childId ? { childId } : {}) });
+	const run = (subagent: object) => [{ id: "s", tool: "subagent", status: "running", subagent }] as never;
+	const workflow = run({ asyncId: "wf-1", background: false, children: [child("/s/a.jsonl", "done", "api"), child("/s/b.jsonl", "running", "web")] });
+	assert.deepEqual(stopTarget(workflow, "/s/b.jsonl"), { id: "wf-1", childId: "web", workflow: true });
+	assert.equal(stopTarget(workflow, "/s/a.jsonl"), undefined, "a finished child has nothing to stop");
+	const plain = run({ background: false, children: [child("/s/c.jsonl", "running"), child("/s/d.jsonl", "running")] });
+	assert.equal(stopTarget(plain, "/s/c.jsonl"), undefined, "a plain call's children stop with the turn");
+	const background = run({ asyncId: "bg-1", asyncDir: "/runs/bg-1", background: true, backgroundState: "running", children: [child("/s/e.jsonl", "running")] });
+	assert.deepEqual(stopTarget(background, "/s/e.jsonl"), { id: "bg-1", workflow: false, asyncDir: "/runs/bg-1" }, "a background run's only child is the whole run");
+	const ended = run({ asyncId: "bg-2", background: true, backgroundState: "done", children: [child("/s/f.jsonl", "running")] });
+	assert.equal(stopTarget(ended, "/s/f.jsonl"), undefined);
+});
+
+test("an RPC to pi-subagents resolves with its answer, and throws its refusal or its silence", async () => {
+	const { subagentRpc, SUBAGENT_RPC } = await import("../src/main/subagents.ts");
+	const handlers = new Map<string, (data: unknown) => void>();
+	const sent: { requestId: string; method: string; params: unknown }[] = [];
+	const bus = {
+		on: (channel: string, handler: (data: unknown) => void) => (handlers.set(channel, handler), () => handlers.delete(channel)),
+		emit: (channel: string, data: unknown) => {
+			assert.equal(channel, SUBAGENT_RPC.request);
+			sent.push(data as never);
+		},
+	};
+	const ok = subagentRpc(bus, "stop", { id: "wf-1", childId: "web" });
+	handlers.get(SUBAGENT_RPC.reply + sent[0]!.requestId)!({ success: true, data: { state: "stopping" } });
+	assert.deepEqual(await ok, { state: "stopping" });
+	assert.deepEqual(sent[0]!.params, { id: "wf-1", childId: "web" });
+	const refused = subagentRpc(bus, "stop", { id: "x" });
+	handlers.get(SUBAGENT_RPC.reply + sent[1]!.requestId)!({ success: false, error: { message: "Async run not found" } });
+	await assert.rejects(refused, /Async run not found/);
+	await assert.rejects(subagentRpc(bus, "stop", { id: "y" }, 10), /didn't answer/);
+	assert.equal(handlers.size, 0, "every reply listener is removed");
+});
+
+test("a background stop is a request file in the run's control folder, as pi-subagents' runner reads it", async () => {
+	const { requestBackgroundStop } = await import("../src/main/subagents.ts");
+	const { mkdtempSync, readFileSync, readdirSync, writeFileSync: write, rmSync } = await import("node:fs");
+	const { tmpdir } = await import("node:os");
+	const dir = mkdtempSync(join(tmpdir(), "trivium-stop-"));
+	try {
+		const file = requestBackgroundStop(dir, "step:1", 1_700_000_000_000);
+		assert.match(file, /control[\\/]stop-requests[\\/]1700000000000-[0-9a-f-]+\.json$/);
+		assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { type: "stop", ts: 1_700_000_000_000, source: "trivium", childId: "step:1" });
+		assert.deepEqual(readdirSync(join(dir, "control", "stop-requests")).filter((name) => name.endsWith(".tmp")), [], "no half-written file is left");
+		write(join(dir, "control", "stop-inbox-closed.json"), "{}");
+		assert.throws(() => requestBackgroundStop(dir), /already stopping/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

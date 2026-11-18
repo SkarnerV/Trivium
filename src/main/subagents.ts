@@ -1,5 +1,7 @@
 import type { Step, Subagent, SubagentChild, SubagentLane, SubagentNotice } from "../shared/protocol.ts";
-import { basename, dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { commandNotice } from "./long-commands.ts";
 
 /**
@@ -325,4 +327,86 @@ export function sessionUsage(
 		if (used && window) context = Math.min(100, Math.round((used / window) * 100));
 	}
 	return { thinking: thinking && thinking !== "off" ? thinking : undefined, context };
+}
+
+/** How pi-subagents 0.82.1 takes requests from other extensions: on pi's event bus, a reply per request id. */
+export const SUBAGENT_RPC = { request: "subagents:rpc:v1:request", reply: "subagents:rpc:v1:reply:", version: 1 } as const;
+
+interface EventBusLike {
+	emit(channel: string, data: unknown): void;
+	on(channel: string, handler: (data: unknown) => void): () => void;
+}
+
+/**
+ * Asks pi-subagents to do something through its RPC, and waits for its answer. A failure, or no answer in time
+ * (the extension isn't loaded, or is too old), is thrown with its message.
+ */
+export function subagentRpc(bus: EventBusLike, method: string, params: Record<string, unknown>, timeoutMs = 5000): Promise<unknown> {
+	const requestId = randomUUID();
+	return new Promise((done, fail) => {
+		let off = () => {};
+		const timer = setTimeout(() => {
+			off();
+			fail(new Error("pi-subagents didn't answer."));
+		}, timeoutMs);
+		off = bus.on(SUBAGENT_RPC.reply + requestId, (data) => {
+			clearTimeout(timer);
+			off();
+			const reply = data as { success?: unknown; data?: unknown; error?: { message?: unknown } };
+			if (reply?.success === true) done(reply.data);
+			else fail(new Error(typeof reply?.error?.message === "string" ? reply.error.message : "pi-subagents refused the request."));
+		});
+		bus.emit(SUBAGENT_RPC.request, { version: SUBAGENT_RPC.version, requestId, method, params, source: { extension: "trivium" } });
+	});
+}
+
+/** What stops one working subagent: its run, which child of it, and the run's folder for a background run. */
+export interface StopTarget {
+	id: string;
+	childId?: string;
+	/** A workflow's children are stopped in-process, through pi-subagents' RPC; a background run reads a request from its folder. */
+	workflow: boolean;
+	asyncDir?: string;
+}
+
+/**
+ * What stops one working subagent on its own: the run pi-subagents tracks it in, and which of that run's children
+ * it is. Only workflows and background runs have such a run; a plain call's children stop with the turn.
+ */
+export function stopTarget(steps: Step[], sessionFile: string): StopTarget | undefined {
+	const wanted = resolve(sessionFile);
+	for (const step of steps) {
+		const subagent = step.subagent;
+		if (!subagent?.asyncId) continue;
+		const index = subagent.children.findIndex((child) => child.sessionFile && resolve(child.sessionFile) === wanted);
+		const child = subagent.children[index];
+		if (!child) continue;
+		// A background launch step ends at once, so its run must still go too, as the host last read it.
+		const unfinished = child.status !== "done" && child.status !== "error" && child.status !== "stopped";
+		const working = unfinished && (!subagent.background || (subagent.backgroundState ?? "running") === "running");
+		if (!working) return undefined;
+		// A workflow names its children; a background run's only child is the whole run.
+		const workflow = child.childId !== undefined;
+		const childId = child.childId ?? (subagent.children.length > 1 ? `step:${index}` : undefined);
+		return { id: subagent.asyncId, ...(childId ? { childId } : {}), workflow, ...(subagent.asyncDir ? { asyncDir: subagent.asyncDir } : {}) };
+	}
+	return undefined;
+}
+
+/**
+ * Asks a background run's runner to stop, as pi-subagents 0.82.1's `requestAsyncStop` does
+ * (src/runs/background/control-channel.js): a request file in the run's `control/stop-requests` folder, written
+ * whole, which the runner watches for whether or not the parent is mid-turn. A runner shutting down closes its
+ * inbox first; then there is nothing to stop.
+ */
+export function requestBackgroundStop(asyncDir: string, childId?: string, now = Date.now()): string {
+	const control = join(asyncDir, "control");
+	if (existsSync(join(control, "stop-inbox-closed.json"))) throw new Error("The run is already stopping.");
+	const dir = join(control, "stop-requests");
+	mkdirSync(dir, { recursive: true });
+	const file = join(dir, `${String(now).padStart(13, "0")}-${randomUUID()}.json`);
+	const temp = `${file}.${process.pid}.tmp`;
+	writeFileSync(temp, JSON.stringify({ type: "stop", ts: now, source: "trivium", ...(childId ? { childId } : {}) }));
+	renameSync(temp, file);
+	return file;
 }

@@ -1355,4 +1355,6 @@ export default {
 	"{n} subagent": "{n} 个子代理",
 	"{n} subagents": "{n} 个子代理",
 	"{n}% context": "已用 {n}% 上下文",
+	"This agent can't be stopped on its own. Stop the whole run instead.": "无法单独停止这个代理。请停止整个运行。",
+	"Stopped before it finished": "在完成前已停止",
 } satisfies Record<string, string>;

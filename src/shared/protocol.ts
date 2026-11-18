@@ -208,6 +208,8 @@ export interface SubagentSession {
 	missing: boolean;
 	/** The child as the parent session last reported it, while that session is open. */
 	child?: SubagentChild;
+	/** It is working inside a workflow or a background run, so it can be stopped without stopping the turn. */
+	stoppable?: boolean;
 	/** Its thinking level, such as "high", when it thinks. */
 	thinking?: string;
 	/** How full its model's context was at its latest response, in percent. */
@@ -1116,6 +1118,8 @@ export interface TriviumApi {
 	subagentSession(parent: string, file: string): Promise<SubagentSession>;
 	/** Opens a subagent's session in a window of its own, or brings that window forward. */
 	openSubagentWindow(input: SubagentWindowInput): Promise<void>;
+	/** Stops one working subagent; the rest of its run goes on. */
+	stopSubagent(parent: string, file: string): Promise<void>;
 	/** Brings the main window forward on a session, from a subagent's window. */
 	showSession(path: string): Promise<void>;
 	providers(): Promise<ProviderInfo[]>;

@@ -77,6 +77,7 @@ const api: TriviumApi = {
 	copyText: call("copyText") as TriviumApi["copyText"],
 	subagentSession: call("subagentSession") as TriviumApi["subagentSession"],
 	openSubagentWindow: call("openSubagentWindow") as TriviumApi["openSubagentWindow"],
+	stopSubagent: call("stopSubagent") as TriviumApi["stopSubagent"],
 	showSession: call("showSession") as TriviumApi["showSession"],
 	setPermissionLevel: call("setPermissionLevel") as TriviumApi["setPermissionLevel"],
 	setSessionPermissions: call("setSessionPermissions") as TriviumApi["setSessionPermissions"],

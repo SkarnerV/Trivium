@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { type AppId, APP_IDS, type Run, type SubagentChild, type SubagentSession } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
-import { CloseIcon, ExternalIcon, ParentIcon } from "../icons.tsx";
+import { CloseIcon, ExternalIcon, ParentIcon, StopIcon } from "../icons.tsx";
 import { attempt, closeSubagent, errorText, openSubagent, showSettings, trivium, useStore } from "../store.ts";
 import { themeVars } from "../theme.ts";
 import { t } from "../i18n.tsx";
@@ -91,6 +91,13 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 	const spent = child?.tokens ?? ((child?.inputTokens ?? 0) + (child?.outputTokens ?? 0) || undefined);
 	const name = [target.agent, target.label].filter(Boolean).join(" ");
 	const back = () => (place === "drawer" ? closeSubagent(parent) : void trivium.showSession(parent));
+	// Asked to stop: the button waits for its next read to say it stopped.
+	const [stopping, setStopping] = useState(false);
+	const stop = async () => {
+		setStopping(true);
+		const asked = await attempt(() => trivium.stopSubagent(parent, target.file).then(() => true));
+		if (!asked) setStopping(false);
+	};
 	return (
 		<section
 			className={`subagent-session ${place}`}
@@ -187,7 +194,13 @@ export function SubagentThread({ parent, target, place, app, crumb }: { parent: 
 						</span>
 					)}
 				</span>
-				<span className="subagent-bar-note">{t(working ? "Runs on its own" : "Its answer went back to the main agent")}</span>
+				<span className="subagent-bar-note">{t(working ? "Runs on its own" : status === "stopped" ? "Stopped before it finished" : "Its answer went back to the main agent")}</span>
+				{working && session?.stoppable && (
+					<button type="button" className="btn ghost subagent-bar-back" disabled={stopping} onClick={() => void stop()}>
+						<StopIcon />
+						{t(stopping ? "Stopping…" : "Stop")}
+					</button>
+				)}
 				<button type="button" className="btn ghost subagent-bar-back" onClick={back}>
 					<ParentIcon size={13} />
 					{t(place === "drawer" ? "Main thread" : "Open main thread")}

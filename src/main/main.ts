@@ -319,6 +319,8 @@ function registerIpc(): void {
 	handle("trivium:getSettings", () => settings.get(), true);
 	handle("trivium:subagentSession", (parent: string, file: string) => host.subagentSession(parent, file), true);
 	handle("trivium:openSubagentWindow", (input: SubagentWindowInput) => openSubagentWindow(input), true);
+	// A subagent's window can stop it too; the host checks the file belongs to the session.
+	handle("trivium:stopSubagent", (parent: string, file: string) => host.stopSubagent(parent, file), true);
 	handle(
 		"trivium:showSession",
 		(path: string) => {

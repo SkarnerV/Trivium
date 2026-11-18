@@ -25,7 +25,7 @@ import {
 	fauxThinking,
 	fauxToolCall,
 } from "@earendil-works/pi-ai";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -657,7 +657,29 @@ export default function (pi: ExtensionAPI) {
 				const run = await fauxRun("faux-researcher");
 				// Its session sits under the run's id, where the launch step's details point.
 				const session = parentFile ? new FauxChildSession(parentFile, run.id, 0, RESEARCHER, ctx?.cwd ?? process.cwd()) : undefined;
-				setTimeout(async () => {
+				// As pi-subagents' runner does, it watches its folder for a stop request (control/stop-requests).
+				const requests = join(run.asyncDir, "control", "stop-requests");
+				const watch = setInterval(() => {
+					if (existsSync(requests) && readdirSync(requests).some((name) => name.endsWith(".json"))) void stop();
+				}, 250);
+				watch.unref?.();
+				const stop = async () => {
+					clearInterval(watch);
+					clearTimeout(timer);
+					await run.status("stopped");
+					pi.sendMessage(
+						{
+							customType: "subagent-notify",
+							content: `Background task stopped: **${RESEARCHER.agent}**\n\nStopped before it finished.\n\nSession file: ${session?.file ?? "/tmp/faux-researcher.jsonl"}`,
+							display: false,
+							details: { runs: [{ runId: run.id, asyncDir: run.asyncDir, agent: RESEARCHER.agent, status: "stopped", durationMs: Date.now() - started }] },
+						},
+						{ triggerTurn: false },
+					);
+				};
+				const started = Date.now();
+				const timer = setTimeout(async () => {
+					clearInterval(watch);
 					session?.advance(0, true);
 					await run.status("complete");
 					pi.sendMessage(

@@ -10,6 +10,8 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	createAgentSession,
+	createEventBus,
+	type EventBus,
 	createBashToolDefinition,
 	createCodemodeExtension,
 	createMcpExtension,
@@ -69,7 +71,8 @@ import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
 import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
-import { sessionUsage } from "./subagents.ts";
+import { agentSteps } from "../shared/agent-counts.ts";
+import { requestBackgroundStop, sessionUsage, stopTarget, subagentRpc } from "./subagents.ts";
 import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
@@ -83,6 +86,8 @@ import type { SettingsStore } from "./settings.ts";
 import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
+	/** pi's event bus for this session's extensions, which pi-subagents takes requests on. */
+	events: EventBus;
 	handoffs: HandoffCache;
 	background: BackgroundRuns;
 	agentWatch: AgentCountWatch;
@@ -734,28 +739,48 @@ export class SessionHost {
 	 * from the parent, while it is open, so a window knows whether the child is still working.
 	 */
 	subagentSession(parent: string, file: string): SubagentSession {
+		const target = this.subagentFile(parent, file);
+		const live = this.live.get(parent);
+		// As the thread shows it: with the patch a writer handed back, and how a background child ended.
+		const steps = live ? agentSteps(this.decorate(live, live.tracker.all())) : [];
+		const child = steps.flatMap((step) => step.subagent!.children).findLast((item) => item.sessionFile && resolve(item.sessionFile) === target);
+		// Only a child in a workflow or a background run can be stopped without stopping the turn.
+		const stoppable = stopTarget(steps, target) !== undefined;
+		if (!existsSync(target)) return { runs: [], missing: true, child, stoppable };
+		try {
+			const manager = SessionManager.open(target);
+			const branch = manager.getBranch();
+			return { runs: new RunTracker(branchMessages(branch), this.thumbnail, target).all(), missing: false, child, stoppable, ...sessionUsage(branch, (provider, model) => this.modelRuntime.getModel(provider, model)?.contextWindow) };
+		} catch {
+			// A file the child is still writing can end in half a line; the next read gets it whole.
+			return { runs: [], missing: true, child, stoppable };
+		}
+	}
+
+	/** Stops one working subagent and leaves the rest of its run going, through pi-subagents' own stop. */
+	async stopSubagent(parent: string, file: string): Promise<void> {
+		const target = this.subagentFile(parent, file);
+		const live = this.live.get(parent);
+		const stop = live && stopTarget(agentSteps(this.decorate(live, live.tracker.all())), target);
+		if (!live || !stop) throw new Error(t("This agent can't be stopped on its own. Stop the whole run instead."));
+		const { id, childId, workflow, asyncDir } = stop;
+		// A background run's runner watches its folder for a stop, whether or not the parent is mid-turn.
+		if (!workflow && asyncDir) requestBackgroundStop(asyncDir, childId);
+		else await subagentRpc(live.events, "stop", { id, ...(childId ? { childId } : {}) });
+	}
+
+	/**
+	 * A subagent's session file, checked: it must sit in the parent session's own subagent folder (or the temporary
+	 * folder pi-subagents uses for a session without a file), so a page can't name any file it likes.
+	 */
+	private subagentFile(parent: string, file: string): string {
 		const known = this.live.has(parent) || this.summaries.some((summary) => summary.path === parent);
 		const target = resolve(file);
 		const roots = [join(dirname(parent), basename(parent, ".jsonl"))];
 		const temporary = relative(tmpdir(), target).split(/[\\/]/)[0] ?? "";
 		const allowed = target.endsWith(".jsonl") && (roots.some((root) => isInside(root, target) && root !== target) || (temporary.startsWith("pi-subagent-session-") && isInside(tmpdir(), target)));
 		if (!known || !allowed) throw new Error(t("That isn't a subagent of this session."));
-		const live = this.live.get(parent);
-		// As the thread shows it: with the patch a writer handed back.
-		const child = live
-			? this.decorate(live, live.tracker.all())
-					.flatMap((run) => run.steps.flatMap((step) => step.subagent?.children ?? []))
-					.findLast((item) => item.sessionFile && resolve(item.sessionFile) === target)
-			: undefined;
-		if (!existsSync(target)) return { runs: [], missing: true, child };
-		try {
-			const manager = SessionManager.open(target);
-			const branch = manager.getBranch();
-			return { runs: new RunTracker(branchMessages(branch), this.thumbnail, target).all(), missing: false, child, ...sessionUsage(branch, (provider, model) => this.modelRuntime.getModel(provider, model)?.contextWindow) };
-		} catch {
-			// A file the child is still writing can end in half a line; the next read gets it whole.
-			return { runs: [], missing: true, child };
-		}
+		return target;
 	}
 
 	/** The conversation on a session's current branch, read from its file, for export. Compacted messages are kept. */
@@ -1102,7 +1127,7 @@ export class SessionHost {
 		app: AppId,
 		cwd: string,
 		settingsManager: SettingsManager,
-		options: { keepDisabled?: boolean; factories?: InlineExtension[]; sessionPath?: () => string } = {},
+		options: { keepDisabled?: boolean; factories?: InlineExtension[]; sessionPath?: () => string; events?: EventBus } = {},
 	): DefaultResourceLoader {
 		const sessionPath = options.sessionPath ?? (() => "");
 		const longCommands: InlineExtension = {
@@ -1131,6 +1156,7 @@ export class SessionHost {
 			cwd,
 			agentDir: this.agentDir,
 			settingsManager,
+			eventBus: options.events,
 			additionalExtensionPaths: extensions,
 			appendSystemPromptOverride: appendPrompt ? (base) => [...base, appendPrompt] : undefined,
 			extensionFactories: [...builtinExtensions(), ...(profileInfo(app).tools.includes("bash") ? [longCommands] : []), ...(options.factories ?? [])],
@@ -1196,7 +1222,9 @@ export class SessionHost {
 				this.noteAgents(live);
 			},
 		});
+		const events = createEventBus();
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
+			events,
 			sessionPath: () => sessionPath,
 			factories: [
 				(pi) => {
@@ -1258,6 +1286,7 @@ export class SessionHost {
 		const path = session.sessionFile ?? `memory:${randomUUID()}`;
 		sessionPath = path;
 		const live: Live = {
+			events,
 			handoffs,
 			background,
 			agentWatch: new AgentCountWatch(),

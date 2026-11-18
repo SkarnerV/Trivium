@@ -1355,4 +1355,6 @@ export default {
 	"{n} subagent": "{n} 個のサブエージェント",
 	"{n} subagents": "{n} 個のサブエージェント",
 	"{n}% context": "コンテキスト {n}%",
+	"This agent can't be stopped on its own. Stop the whole run instead.": "このエージェントだけを停止することはできません。実行全体を停止してください。",
+	"Stopped before it finished": "完了する前に停止しました",
 } satisfies Record<string, string>;

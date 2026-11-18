@@ -7,7 +7,12 @@ All notable changes to Trivium are listed here. Versions follow [Semantic Versio
 ### Added
 
 - **Orchestrator work mode.** Each project Code session can ask the agent to scout large tasks, split independent work and use one writer by default, with parallel writers in managed worktrees. The main agent applies their patches one at a time and runs checks in the project. Pick the mode in the message box or set how new sessions start in Settings → Code; forks inherit it. Default leaves the system prompt unchanged.
-- **An Agents panel for delegated work.** Workflow plans and live children show in the thread, with all rows kept in order. Agents opens each child's task, activity, result and usage, and a writer's branch, files and patch. Waiting children, failures, timeouts and kept worktrees stay visible. Its action buttons put a draft in the message box. The panel never selects itself.
+- **Stop one subagent.** A subagent's session has a Stop button while it works inside a workflow or in the background. The rest of the run carries on. A subagent started on its own in the foreground stops with the turn.
+- **More in a subagent's session.** Its bottom bar shows the model's thinking level, and a chip says how full its context was. Its own window is titled with the agent and the session it belongs to, and shows a writer's changes as `+113 −12 · 3 files`.
+
+### Changed
+
+- **Subagent views follow the new design.** Hover a subagent's row in the thread for its model, status, branch and work so far. A subagent's session opens beside the thread in place of the side panel, which comes back when you close it. The session counts steps by tool, such as `read 2 · edit 4`, and says Completed or Stopped. The header's agents menu groups subagents into this turn and earlier ones. A kept worktree shows its reason and path in the thread.
 
 ### Fixed
 

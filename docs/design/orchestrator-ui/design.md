@@ -1,5 +1,9 @@
 # Orchestrator mode: observing a split task
 
+> **Superseded in part (2026-11-18).** The Agents tab described below was replaced by the subagent views in the
+> Claude Design canvas "Trivium Subagent View": rows in the thread, the header's agents menu, and each child's session
+> in a drawer beside the thread or in its own window. The rest of this spec still describes the thread's fan-out.
+
 This spec goes with [mockups.html](mockups.html) (mockups numbered 1–16, plus 1b).
 
 ## Owner decisions (these override the text and the mockups below wherever they differ)

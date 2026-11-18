@@ -21,39 +21,36 @@ export function goToQuestion(path: string): void {
 }
 
 /**
- * The pane-header signal for delegated work. It shows while children run or wait, and after a failure or a kept
- * worktree until the user has opened the tab and seen that state; a question card outranks everything else.
+ * A persistent way to inspect the current task's children, including after they finish.
+ * A question card outranks the children; failures and kept worktrees get attention until seen. While agents simply
+ * work, the subagents menu beside it counts them and shows the live dot, so this one doesn't repeat them.
  */
 export function AgentsButton({ view, needsYou }: { view: SessionView; needsYou: boolean }) {
 	const seen = useStore((s) => s.agentsSeen[view.path]) === agentAttentionKey(view.runs);
 	const pressed = useStore((s) => s.panelTab[view.path] === "agents" && s.changesHidden[view.path] === false);
-	const counts = agentCounts(view.runs);
-	const steps = view.runs
-		.slice(view.runs.findLastIndex((run) => !run.notice))
-		.flatMap((run) => run.steps)
-		.filter((step) => step.subagent);
+	const taskRuns = taskRunsOf(view.runs);
+	const counts = agentCounts(taskRuns);
+	const steps = agentSteps(taskRuns);
 	const kept = steps.some((step) => step.subagent?.keptWorktrees?.length);
 	const failed = steps.flatMap((step) => step.subagent!.children).filter((child) => child.status === "error").length;
-	// While agents simply work, the subagents menu beside this button counts them; this one speaks up when something
-	// needs attention: a question for you, a child waiting on the main agent, a failure or a kept worktree.
-	if (!needsYou && !counts.waiting && (seen || (!kept && !failed))) return null;
+	if (!needsYou && !steps.some((step) => step.subagent!.children.length)) return null;
 	const label = needsYou
 		? t("Needs you")
 		: counts.waiting
 			? t("{n} waiting", { n: counts.waiting })
-			: counts.running
-				? t(counts.running === 1 ? "{n} agent" : "{n} agents", { n: counts.running })
-				: kept
-					? t("Worktree kept")
-					: t("{n} failed", { n: failed });
+			: !seen && kept
+				? t("Worktree kept")
+				: !seen && failed
+					? t("{n} failed", { n: failed })
+					: t("View agents");
 	const title = needsYou
 		? t("The main agent is asking you something.")
 		: counts.waiting
 			? t(counts.waiting === 1 ? "1 agent is waiting on the main agent." : "{n} agents are waiting on the main agent.", { n: counts.waiting })
 			: counts.running
 				? t(counts.running === 1 ? "1 agent working. Show it in the panel." : "{n} agents working. Show them in the panel.", { n: counts.running })
-				: label;
-	const attention = needsYou || counts.waiting || kept || failed;
+				: t("Show subagent details");
+	const attention = needsYou || counts.waiting || (!seen && (kept || failed));
 	return (
 		<button
 			type="button"
@@ -62,7 +59,7 @@ export function AgentsButton({ view, needsYou }: { view: SessionView; needsYou: 
 			title={title}
 			onClick={() => (needsYou ? goToQuestion(view.path) : showPanelView(view.path, "agents"))}
 		>
-			<span className={`live-dot${needsYou || counts.waiting ? " attn" : ""}`} aria-hidden="true" />
+			{(needsYou || counts.waiting > 0) && <span className="live-dot attn" aria-hidden="true" />}
 			<OrchestrateIcon size={14} />
 			<span>{label}</span>
 		</button>
@@ -85,7 +82,7 @@ export function AgentsBody({ view }: { view: SessionView }) {
 	const taskRuns = taskRunsOf(view.runs);
 	const run = taskRuns[0];
 	const phases = agentSteps(taskRuns);
-	const selectedStep = phases.find((step) => step.id === selected?.step);
+	const selectedStep = selected ? agentSteps(view.runs).find((step) => step.id === selected.step) : undefined;
 	const child = selectedStep?.subagent?.children[selected?.child ?? -1];
 	const children = phases.flatMap((step) => step.subagent!.children);
 	const used = children.reduce((sum, child) => sum + (child.tokens ?? 0), 0);

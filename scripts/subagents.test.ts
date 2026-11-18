@@ -9,6 +9,24 @@ type Event = Parameters<RunTracker["apply"]>[0];
 
 const scoutArgs = { agent: "scout", task: "Map the auth flow\nList risks" };
 
+test("completed workflow children retain their session file and trace duration", () => {
+	const details = {
+		results: [
+			{ index: 0, workflowKey: "slug", agent: "worker", exitCode: 0, sessionFile: "/sessions/slug.jsonl" },
+			{ index: 0, workflowKey: "csv", agent: "worker", exitCode: 0, sessionFile: "/sessions/csv.jsonl" },
+		],
+		workflowChildren: { children: [{ childId: "slug", state: "completed" }, { childId: "csv", state: "completed" }] },
+		workflow: { trace: [
+			{ operation: "run", key: "csv", state: "completed", durationMs: 118766 },
+			{ operation: "run", key: "slug", state: "completed", durationMs: 97355 },
+		] },
+	};
+	const children = subagentOf({ workflow: true }, details, "done").children;
+	assert.deepEqual(children.map((child) => [child.label, child.sessionFile, child.durationMs]), [
+		["slug", "/sessions/slug.jsonl", 97355], ["csv", "/sessions/csv.jsonl", 118766],
+	]);
+});
+
 test("workflow preflight precedes live children and preserves lane order", () => {
 	const plan = { version: 1, coverage: "complete", lanes: [{ key: "api", mode: "mutation", claims: ["src/api.ts"] }, { key: "review", mode: "review" }] };
 	const pending = subagentOf({ workflow: true, options: { preflight: plan } }, undefined, "running");

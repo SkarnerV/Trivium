@@ -20,6 +20,12 @@ test("Code keeps the tabs the user opened", () => {
 	assert.deepEqual(panelViews(code, ["session", "services"]), ["session", "services"]);
 });
 
+test("a single child also exposes Agents and respects dismissal", () => {
+	const code = { app: "code", changes: [], runs: [{ steps: [{ id: "single", subagent: { children: [{}] } }] }] } as unknown as SessionView;
+	assert.deepEqual(panelViews(code, undefined), ["session", "agents"]);
+	assert.deepEqual(panelViews(code, undefined, "single"), ["session"]);
+});
+
 test("a fan-out adds Agents without selecting or opening it, and closing lasts until the next fan-out", () => {
 	const code = { app: "code", changes: [], runs: [{ steps: [{ id: "fanout", subagent: { children: [{}, {}] } }] }] } as unknown as SessionView;
 	const views = panelViews(code, ["session", "services"]);

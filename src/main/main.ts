@@ -286,6 +286,7 @@ function registerIpc(): void {
 	});
 	handle("trivium:openSession", (path: string) => host.openSession(path));
 	handle("trivium:subagentPatch", (path: string, id: string) => host.subagentPatch(path, id));
+	handle("trivium:subagentActivity", (path: string, sessionFile: string) => host.subagentActivity(path, sessionFile));
 	handle("trivium:setWorkMode", (path: string, mode: import("../shared/work-modes.ts").WorkModeId) => host.setWorkMode(path, mode));
 	handle("trivium:setVisible", (paths: string[]) => host.setVisible(paths));
 	handle("trivium:newSession", (input: NewSessionInput) => host.newSession(input));

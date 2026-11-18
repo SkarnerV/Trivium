@@ -35,7 +35,7 @@ export type PanelView = "session" | "history" | "preview" | "services" | "review
 export function panelViews(view: Pick<SessionView, "app" | "changes"> & Partial<Pick<SessionView, "runs" | "chat">>, open: PanelView[] | undefined, dismissed?: string): PanelView[] {
 	if (view.app === "write") return liveChanges(view).length ? ["preview", "review"] : ["preview"];
 	const base: PanelView[] = open?.length ? open : ["session"];
-	const latest = view.runs?.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 1)?.id;
+	const latest = view.runs?.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 0)?.id;
 	const hasAgents = view.app === "code" && !view.chat && latest !== undefined && latest !== dismissed;
 	return hasAgents && !base.includes("agents") ? [...base, "agents"] : base;
 }

@@ -1712,6 +1712,40 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
+.subagent-call {
+	width: 100%;
+	min-width: 0;
+}
+
+.subagent-call > summary {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	cursor: pointer;
+}
+
+.subagent-call .step-detail pre {
+	max-height: 240px;
+	overflow: auto;
+}
+
+.subagent-call-state {
+	margin-left: auto;
+	color: var(--ink-3);
+}
+
+.subagent-current {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	margin-bottom: 8px;
+}
+
+.subagent-open {
+	flex: none;
+	margin-left: 8px;
+	color: var(--accent-text);
+}
+
 .subagent-result {
 	margin-bottom: 12px;
 	font-size: 13px;

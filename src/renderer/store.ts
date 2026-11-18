@@ -510,7 +510,7 @@ export function closePanelView(path: string, name: PanelView): void {
 		const open = openViews(s, path);
 		const index = open.indexOf(name);
 		const next = open.filter((other) => other !== name);
-		const fanout = name === "agents" ? s.views[path]?.runs.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 1)?.id : undefined;
+		const fanout = name === "agents" ? s.views[path]?.runs.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 0)?.id : undefined;
 		const dismissed = fanout ? { agentsDismissed: { ...s.agentsDismissed, [path]: fanout } } : {};
 		if (!next.length) {
 			const { [path]: _, ...rest } = s.panelTabs;

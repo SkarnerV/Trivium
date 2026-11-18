@@ -117,7 +117,7 @@ export interface SubagentChild {
 	/** The tool it is using now, such as { tool: "read", target: "src/auth.ts" }. */
 	current?: { tool: string; target: string };
 	/** Its latest tool calls, oldest first; `endMs` is when each one ended (epoch milliseconds), when reported. */
-	steps: { tool: string; target: string; endMs?: number }[];
+	steps: { tool: string; target: string; endMs?: number; input?: string; output?: string; status?: StepStatus }[];
 	tools: number;
 	tokens?: number;
 	durationMs?: number;
@@ -126,7 +126,10 @@ export interface SubagentChild {
 	/** Its answer, once it finishes. */
 	output?: string;
 	error?: string;
-	/** The pi session file it writes, which holds its whole conversation. It may not exist until it starts. */
+	/**
+	 * The pi session file it writes, which holds its whole conversation: opened beside the thread, and read for the
+	 * Agents tab's tool history. It may not exist until the child starts.
+	 */
 	sessionFile?: string;
 }
 
@@ -970,6 +973,7 @@ export interface UsageReport {
 export interface TriviumApi {
 	setWorkMode(path: string, mode: import("./work-modes.ts").WorkModeId): Promise<void>;
 	subagentPatch(path: string, id: string): Promise<ChildPatchFile[]>;
+	subagentActivity(path: string, sessionFile: string): Promise<SubagentChild["steps"]>;
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;
 	windowMinimize(): Promise<void>;

@@ -37,6 +37,7 @@ interface ResultLike {
 	agent?: unknown;
 	task?: unknown;
 	workflowKey?: unknown;
+	sessionFile?: unknown;
 	exitCode?: unknown;
 	error?: unknown;
 	finalOutput?: unknown;
@@ -46,13 +47,13 @@ interface ResultLike {
 	progress?: ProgressLike;
 	progressSummary?: ProgressLike;
 	toolCalls?: unknown;
-	sessionFile?: unknown;
 }
 
 interface DetailsLike {
 	workflowChildren?: unknown;
 	preflight?: unknown;
 	workflowGraph?: unknown;
+	workflow?: unknown;
 	parallelHandoff?: unknown;
 	usageBudget?: unknown;
 	terminalOutcome?: unknown;
@@ -219,7 +220,10 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 	}
 	// pi-subagents reports no per-child wait for a concurrency slot; it reports a whole workflow that waits as queued.
 	const queued = record(info.workflowChildren).workflowState === "queued";
+	const trace = list<Record<string, unknown>>(record(info.workflow).trace);
 	for (const item of children) {
+		const completed = trace.findLast((entry) => entry.operation === "run" && entry.key === item.label && num(entry.durationMs) !== undefined);
+		item.durationMs ??= num(completed?.durationMs);
 		if (queued && item.status === "pending") item.queued = true;
 		if (args.worktree === true) item.worktree = true;
 		if (toolStatus === "error" && item.status === "running" && !background) item.status = "stopped";

@@ -1,9 +1,9 @@
-import { createContext, type KeyboardEvent, useContext, useState } from "react";
+import { createContext, type KeyboardEvent, useContext, useEffect, useState } from "react";
 import type { LimitNotice, Step, Subagent, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, ExternalIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
 import { AgentSession } from "../agent-context.ts";
-import { showAgentChild, useStore } from "../store.ts";
+import { showAgentChild, trivium, useStore } from "../store.ts";
 import { claimsOf, middle, phaseOf, stateWord, teamOf } from "../agents.ts";
 import { Clamp } from "./Clamp.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -443,9 +443,27 @@ function ChildCallouts({ child }: { child: SubagentChild }) {
 }
 
 export function ChildDetail({ child, heading }: { child: SubagentChild; heading: boolean }) {
-	const shown = child.steps.slice(0, SHOWN_STEPS);
-	const more = Math.max(child.tools, child.steps.length) - shown.length;
-	const meta = usage(child);
+	const path = useContext(AgentSession);
+	const [history, setHistory] = useState<{ file: string; steps?: SubagentChild["steps"]; error?: boolean }>();
+	const [expanded, setExpanded] = useState(false);
+	const sessionFile = child.sessionFile;
+	useEffect(() => {
+		let active = true;
+		setExpanded(false);
+		if (path && sessionFile) {
+			setHistory({ file: sessionFile });
+			trivium.subagentActivity(path, sessionFile).then(
+				(steps) => active && setHistory({ file: sessionFile, steps }),
+				() => active && setHistory({ file: sessionFile, error: true }),
+			);
+		}
+		return () => { active = false; };
+	}, [path, sessionFile]);
+	const loaded = history?.file === sessionFile ? history : undefined;
+	const steps = loaded?.steps ?? child.steps;
+	const shown = expanded ? steps : steps.slice(0, SHOWN_STEPS);
+	const more = steps.length - shown.length;
+	const meta = usage({ ...child, tools: Math.max(child.tools, steps.length) });
 	const patch = child.handoff;
 	return (
 		<div className="subagent-child">
@@ -465,20 +483,37 @@ export function ChildDetail({ child, heading }: { child: SubagentChild; heading:
 				</>
 			)}
 			<ChildCallouts child={child} />
-			{shown.length > 0 && (
-				<>
-					<div className="step-detail-label">{t("Steps")}</div>
+			<div className="step-detail-label">{t("Activity")}</div>
+			{child.current && <p className="subagent-current">{activity(child).text}</p>}
+			{shown.length > 0 ? (
 					<ol className="subagent-steps">
 						{shown.map((step, index) => (
 							<li key={index}>
-								<span className="tool">{step.tool}</span>
-								<span className="ellipsis">{step.target}</span>
-								{step.endMs !== undefined && <span className="subagent-step-time">{endTime(step.endMs)}</span>}
+								{step.input !== undefined || step.output !== undefined ? (
+									<details className="subagent-call">
+										<summary>
+											<span className="tool">{step.tool}</span>
+											<span className="ellipsis" title={step.target}>{step.target}</span>
+											<span className={`subagent-call-state${step.status === "error" ? " error" : ""}`}>{t(step.status === "error" ? "Failed" : "Done")}</span>
+											{step.endMs !== undefined && <span className="subagent-step-time">{endTime(step.endMs)}</span>}
+											<span className="subagent-open">{t("Details")} ›</span>
+										</summary>
+										<div className="step-detail">
+											<div className="step-detail-label">{t("Input")}</div>
+											<pre>{step.input ?? step.target}</pre>
+											<div className="step-detail-label">{t("Output")}</div>
+											<pre>{step.output || t("No text output.")}</pre>
+										</div>
+									</details>
+								) : (
+									<><span className="tool">{step.tool}</span><span className="ellipsis">{step.target}</span>{step.endMs !== undefined && <span className="subagent-step-time">{endTime(step.endMs)}</span>}</>
+								)}
 							</li>
 						))}
-						{more > 0 && <li className="more">{t("+{n} more", { n: more })}</li>}
+						{more > 0 && <li className="more"><button type="button" className="btn ghost" onClick={() => setExpanded(true)}>{t("Show all {n} steps", { n: steps.length })}</button></li>}
 					</ol>
-				</>
+			) : (
+				<p className="subagent-usage">{t(path && sessionFile && !loaded?.error && !loaded?.steps ? "Loading tool history…" : child.status === "running" || child.status === "pending" ? "Tool history will appear when this agent finishes." : "Tool history is unavailable for this agent.")}</p>
 			)}
 			{(child.output || child.error) && (
 				<>
@@ -518,10 +553,10 @@ export function SubagentDetail({ subagent, stepId }: { subagent: Subagent; stepI
 			{subagent.children.map((child, index) => (
 				<div key={index}>
 					<ChildDetail child={child} heading={subagent.children.length > 1} />
-					{/* Only where there is a panel: a chat session has no Agents tab to show the patch in. */}
-					{path && stepId && child.handoff && (
+					{/* Code opens the same child detail from both live and finished steps. */}
+					{path && stepId && (
 						<button type="button" className="btn ghost" onClick={() => showAgentChild(path, stepId, index)}>
-							{t("Show changes in the panel")}
+							{t("View details")}
 						</button>
 					)}
 				</div>
@@ -818,7 +853,7 @@ function FanoutRow({
 			data-agent-step={step.id}
 			data-agent-child={index}
 			className={`subagent-row${done ? " finished" : ""}`}
-			title={t(code ? "Show in the panel" : "Show details")}
+			title={t("View details")}
 			tabIndex={tabIndex}
 			onFocus={onFocus}
 			aria-label={t(meta ? "{agent} {label}, {role}, {state}, {activity}, {meta}" : "{agent} {label}, {role}, {state}, {activity}", label)}
@@ -846,6 +881,7 @@ function FanoutRow({
 						{time}
 					</>
 				)}
+				<span className="subagent-open">{t("Details")} ›</span>
 			</span>
 		</button>
 	);

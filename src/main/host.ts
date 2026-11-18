@@ -56,7 +56,7 @@ import type {
 	SubagentSession,
 	TrustChoice,
 } from "../shared/protocol.ts";
-import { APP_IDS } from "../shared/protocol.ts";
+import { APP_IDS, type Run } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import { chatsDir, profileFor, profileInfo, skillDir, triviumDir } from "./apps.ts";
 import * as skillFiles from "./skills.ts";
@@ -65,6 +65,13 @@ import type { ServiceTracker } from "./services.ts";
 import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
+import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
+import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
+import { delegationHooks } from "./delegation-hooks.ts";
+import { HandoffCache } from "./handoffs.ts";
+import { handoffRoots } from "./extension-paths.ts";
+import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
+import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
 import { readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "./git.ts";
@@ -75,6 +82,10 @@ import type { SettingsStore } from "./settings.ts";
 import { attachmentsOf, branchMessages, type MessageFile, messageFiles, RunTracker, splitAttachments, type Thumbnail } from "./transcript.ts";
 
 interface Live {
+	handoffs: HandoffCache;
+	background: BackgroundRuns;
+	agentWatch: AgentCountWatch;
+	handoffSeen: Set<string>;
 	path: string;
 	app: AppId;
 	cwd: string;
@@ -92,6 +103,8 @@ interface Live {
 	/** The git status last sent to the renderer, as JSON, so an unchanged one is not sent again. */
 	git?: string;
 	gitTimer?: ReturnType<typeof setTimeout>;
+	/** Set while a recount of this session's agents is waiting to run. */
+	agentTimer?: ReturnType<typeof setTimeout>;
 	/** When the reply being written sent its first token. */
 	firstTokenAt?: number;
 }
@@ -108,6 +121,8 @@ type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: 
 const FLUSH_MS = 40;
 /** Several tool calls in a row read git once. */
 const GIT_MS = 300;
+/** A fan-out reports each child's progress many times a second; its agents are counted at most this often. */
+const AGENTS_MS = 1000;
 const devFaux = fileURLToPath(new URL("../dev/faux-extension.ts", import.meta.url));
 
 function isChat(cwd: string): boolean {
@@ -192,8 +207,9 @@ function titleOf(text: string | undefined): string {
 export class SessionHost {
 	private live = new Map<string, Live>();
 	private appIndex: Record<string, AppId> = {};
+	private workModes: WorkModeIndex;
 	/** Sessions unloaded before their first message was saved, so they can start again where they were. */
-	private unsaved = new Map<string, { app: AppId; cwd: string }>();
+	private unsaved = new Map<string, { app: AppId; cwd: string; workMode?: WorkModeId }>();
 	private summaries: SessionSummary[] = [];
 	private modelRuntime!: ModelRuntime;
 	private readonly agentDir = getAgentDir();
@@ -232,6 +248,7 @@ export class SessionHost {
 		this.emit = options.emit;
 		this.broker = options.broker;
 		this.indexFile = options.indexFile;
+		this.workModes = new WorkModeIndex(join(dirname(options.indexFile), "session-work-modes.json"));
 		this.settings = options.settings;
 		this.onDone = options.onDone;
 		this.thumbnail = options.thumbnail;
@@ -240,6 +257,17 @@ export class SessionHost {
 
 	get runtime(): ModelRuntime {
 		return this.modelRuntime;
+	}
+
+	subagentPatch(path: string, id: string) {
+		return this.require(path).handoffs.patch(id);
+	}
+
+	async setWorkMode(path: string, mode: WorkModeId): Promise<void> {
+		const live = this.require(path);
+		if (live.app !== "code" || isChat(live.cwd) || !isWorkMode(mode)) return;
+		await this.workModes.set(live.session.sessionId, mode);
+		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
 	}
 
 	async init(): Promise<void> {
@@ -265,6 +293,7 @@ export class SessionHost {
 		const summaries: SessionSummary[] = infos.map((info) => {
 			const live = this.live.get(info.path);
 			return {
+				...(live && live.app === "code" ? this.attentionOf(live) : {}),
 				path: info.path,
 				id: info.id,
 				cwd: info.cwd,
@@ -281,6 +310,7 @@ export class SessionHost {
 		for (const live of this.live.values()) {
 			if (onDisk.has(live.path)) continue;
 			summaries.push({
+				...(live.app === "code" ? this.attentionOf(live) : {}),
 				path: live.path,
 				id: live.session.sessionId,
 				cwd: live.cwd,
@@ -297,6 +327,32 @@ export class SessionHost {
 		summaries.sort((a, b) => b.modified - a.modified);
 		this.summaries = summaries;
 		return summaries;
+	}
+
+	refreshAttention(): void { this.scheduleList(); }
+
+	/** Counted as the renderer counts: a background child only while there is evidence it runs (background-runs.ts). */
+	private attentionOf(live: Live) {
+		return { needsYou: this.broker.hasPending(live.path), agents: agentsOf(live.tracker.all(), live.background) };
+	}
+
+	/**
+	 * A child may have started, finished or begun waiting: refresh the list, whose counts the sidebar shows when off
+	 * screen. Counting builds every run of the session again, so it waits for the events to settle rather than
+	 * running on each one: a fan-out sends progress for every child's every tool call.
+	 */
+	private noteAgents(live: Live): void {
+		if (live.app !== "code" || live.agentTimer) return;
+		live.agentTimer = setTimeout(() => {
+			live.agentTimer = undefined;
+			if (!this.live.has(live.path)) return;
+			if (live.agentWatch.changed(this.attentionOf(live).agents)) this.scheduleList();
+		}, AGENTS_MS);
+	}
+
+	/** What the views show beyond the transcript: captured handoffs, and whether background runs still go. */
+	private decorate(live: Live, runs: Run[]): Run[] {
+		return markBackground(live.handoffs.attach(runs), live.background);
 	}
 
 	recentProjects(): string[] {
@@ -332,6 +388,7 @@ export class SessionHost {
 			if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
 			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
 			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
+			await this.workModes.reopened(manager.getSessionId(), unsaved?.workMode);
 			live = await this.start(app, manager.getCwd(), manager);
 			if (unsaved) {
 				this.unsaved.delete(path);
@@ -349,7 +406,9 @@ export class SessionHost {
 	async newSession(input: NewSessionInput): Promise<SessionView> {
 		const cwd = input.cwd ?? chatsDir;
 		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
-		const live = await this.start(input.app, cwd, SessionManager.create(cwd), true);
+		const manager = SessionManager.create(cwd);
+		await this.workModes.created(manager.getSessionId(), input.app, Boolean(input.cwd), this.settings.app(input.app).workMode);
+		const live = await this.start(input.app, cwd, manager, true);
 		this.appIndex[live.session.sessionId] = input.app;
 		await this.saveIndex();
 		if (input.message?.trim()) await this.send(live.path, input.message, "prompt");
@@ -430,6 +489,7 @@ export class SessionHost {
 			manager = SessionManager.create(live.cwd, source.getSessionDir());
 			manager.newSession({ parentSession: path });
 		}
+		await this.workModes.forked(live.session.sessionId, manager.getSessionId());
 		const forked = await this.start(live.app, manager.getCwd(), manager);
 		this.appIndex[forked.session.sessionId] = live.app;
 		await this.saveIndex();
@@ -753,6 +813,7 @@ export class SessionHost {
 			if (id) {
 				ids.add(id);
 				delete this.appIndex[id];
+				await this.workModes.delete(id);
 				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
 				// And what it kept to tell what the session's commands changed.
 				for (const kept of ["git", "blobs"]) await rm(join(triviumDir, "changes", `${id}.${kept}`), { recursive: true, force: true, maxRetries: 3 });
@@ -769,10 +830,14 @@ export class SessionHost {
 	private unload(live: Live): void {
 		this.broker.cancelAll(live.path);
 		clearTimeout(live.gitTimer);
+		clearTimeout(live.agentTimer);
 		live.unsubscribe();
 		live.session.dispose();
+		// Reopening reads the manifests again from the session's history; a deleted session's patches go with it.
+		live.handoffs.clear();
+		live.background.dispose();
 		this.live.delete(live.path);
-		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd });
+		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: this.workModes.unsaved(live.session.sessionId, live.app) });
 	}
 
 	private unloadIdle(): void {
@@ -783,6 +848,7 @@ export class SessionHost {
 		for (const live of this.live.values()) {
 			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
 			if (this.services.hasBackground(live.path)) continue;
+			if (this.attentionOf(live).agents.running) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -793,7 +859,7 @@ export class SessionHost {
 	reloadApp(app: AppId): string[] {
 		const paths: string[] = [];
 		for (const live of [...this.live.values()]) {
-			if (live.app !== app || live.running || live.path.startsWith("memory:")) continue;
+			if (live.app !== app || live.running || live.path.startsWith("memory:") || this.attentionOf(live).agents.running) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -1097,6 +1163,12 @@ export class SessionHost {
 
 	private async start(app: AppId, cwd: string, sessionManager: SessionManager, isNew = false): Promise<Live> {
 		const profile = profileFor(app);
+		// What the extension may write for this session: its session folder, the temp root and the project's .pi folder.
+		const handoffs = new HandoffCache(handoffRoots({ agentDir: this.agentDir, cwd, sessionFile: sessionManager.getSessionFile() }));
+		const history = branchMessages(sessionManager.getBranch());
+		for (const message of history) {
+			if (message.role === "toolResult" || message.role === "custom") await handoffs.capture(message.details);
+		}
 		let sessionPath = "";
 		// Untrusted until the reload hook below decides: project settings must not apply before that.
 		const settingsManager = SettingsManager.create(cwd, this.agentDir, { projectTrusted: false });
@@ -1108,6 +1180,22 @@ export class SessionHost {
 			const command = (event.input as { command?: unknown }).command;
 			return (event.toolName === "bash" || event.toolName === "powershell") && typeof command === "string" && !onlyReads(command);
 		};
+		const emitChanges = async () => {
+			const live = this.live.get(sessionPath);
+			if (live) await this.emitChanges(live);
+		};
+		// Background launches: whether each still runs, and the window in which its edits count as this session's.
+		const background = new BackgroundRuns({
+			closeWindow: async () => {
+				if (await changes.afterSubagents()) await emitChanges().catch(() => {});
+			},
+			onChange: () => {
+				const live = this.live.get(sessionPath);
+				if (!live) return;
+				void live.changes.list().then((list) => this.emit({ type: "view", view: this.view(live, list) }), () => {});
+				this.noteAgents(live);
+			},
+		});
 		const resourceLoader = this.resourceLoader(app, cwd, settingsManager, {
 			sessionPath: () => sessionPath,
 			factories: [
@@ -1121,20 +1209,25 @@ export class SessionHost {
 					});
 				},
 				...(app === "code" ? [{ name: "permissions", factory: permissionGate(() => this.permissionMode()) }] : []),
+				...(app === "code" && !isChat(cwd) ? [{ name: "work-mode", factory: workModeExtension(() => this.workModes.get(sessionManager.getSessionId())) }] : []),
 				// After the gate, so the project is snapshotted only for a command that was allowed to run.
-				(pi) => {
-					const snapshotted = new Set<string>();
-					pi.on("tool_call", async (event) => {
-						if (!changing(event)) return;
-						snapshotted.add(event.toolCallId);
-						await changes.beforeCommand();
-					});
-					pi.on("tool_result", async (event) => {
-						if (!snapshotted.delete(event.toolCallId)) return;
+				delegationHooks({
+					app,
+					changes,
+					handoffs,
+					background,
+					changing,
+					afterSubagents: () => changes.afterSubagents(),
+					onChanges: emitChanges,
+					onNotice: async () => {
 						const live = this.live.get(sessionPath);
-						if ((await changes.afterCommand()) && live) await this.emitChanges(live).catch(() => {});
-					});
-				},
+						if (!live) return;
+						await this.emitChanges(live);
+						this.emit({ type: "view", view: this.view(live, await changes.list()) });
+						// The sidebar counts this session's agents too, also while it is not on screen.
+						this.noteAgents(live);
+					},
+				}),
 			],
 		});
 		// Global extensions load first; project resources only once the project is trusted.
@@ -1165,6 +1258,10 @@ export class SessionHost {
 		const path = session.sessionFile ?? `memory:${randomUUID()}`;
 		sessionPath = path;
 		const live: Live = {
+			handoffs,
+			background,
+			agentWatch: new AgentCountWatch(),
+			handoffSeen: new Set(),
 			path,
 			app,
 			cwd,
@@ -1181,12 +1278,30 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
-		await session.bindExtensions({
-			uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
-			mode: "rpc",
-			onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
+		const release = await bindWithChildGate({
+			app,
+			sessionId: session.sessionId,
+			gatePath: fileURLToPath(new URL(`./${CHILD_GATE_FILE}`, import.meta.url)),
+			bind: async () => {
+				// Launches in the history whose result never arrived: read their status, never reopen a Changes window.
+				await background.restore(live.tracker.all());
+				await session.bindExtensions({
+					uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
+					mode: "rpc",
+					onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
+				});
+			},
+			undo: () => {
+				background.dispose();
+				this.live.delete(path);
+				session.dispose();
+			},
 		});
-		live.unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+		live.unsubscribe = () => {
+			unsubscribe();
+			release();
+		};
 		return live;
 	}
 
@@ -1207,6 +1322,18 @@ export class SessionHost {
 		// Before the tracker, so the finished reply it shows carries its first token's time.
 		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
+		if ((event.type === "tool_execution_start" || event.type === "tool_execution_update" || event.type === "tool_execution_end") && event.toolName === "subagent") {
+			this.noteAgents(live);
+		}
+		if (event.type === "tool_execution_update" && event.toolName === "subagent") {
+			const details = (event.partialResult as { details?: { parallelHandoff?: { path?: unknown } } } | undefined)?.details;
+			const path = details?.parallelHandoff?.path;
+			if (typeof path === "string" && !live.handoffSeen.has(path)) {
+				live.handoffSeen.add(path);
+				// Pending manifests carry lane/worktree identities. Read once at launch, then again at completion.
+				void live.handoffs.capture(details).then(() => this.flush(live));
+			}
+		}
 		switch (event.type) {
 			case "agent_start":
 				live.running = true;
@@ -1282,9 +1409,10 @@ export class SessionHost {
 		live.flushTimer = undefined;
 		const current = live.tracker.current();
 		if (!current) return;
+		this.decorate(live, [current.run]);
 		// A run that started since the last flush means earlier runs may have changed too.
 		if (current.index > live.sentRuns) {
-			const all = live.tracker.all();
+			const all = this.decorate(live, live.tracker.all());
 			for (let index = live.sentRuns; index < all.length; index++) {
 				this.emit({ type: "run", path: live.path, index, run: all[index]! });
 			}
@@ -1326,7 +1454,7 @@ export class SessionHost {
 			chat: isChat(live.cwd),
 			app: live.app,
 			title: this.titleFor(live),
-			runs: live.tracker.all(),
+			runs: this.decorate(live, live.tracker.all()),
 			running: live.running,
 			compacting: live.compacting,
 			// pi uses an "unknown" placeholder when no model is configured; show that as no model.
@@ -1337,6 +1465,7 @@ export class SessionHost {
 			queue: this.queueOf(live),
 			changes,
 			permissions: this.permissionsOf(live.app),
+			...(live.app === "code" && !isChat(live.cwd) ? { workMode: this.workModes.get(session.sessionId) } : {}),
 		};
 	}
 

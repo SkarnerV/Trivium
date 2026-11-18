@@ -8,6 +8,8 @@ export type AppId = "code" | "research" | "write";
 export const APP_IDS: readonly AppId[] = ["code", "research", "write"];
 
 export interface SessionSummary {
+	agents?: { running: number; waiting: number };
+	needsYou?: boolean;
 	path: string;
 	id: string;
 	cwd: string;
@@ -90,16 +92,32 @@ export interface Step {
 
 /** One child agent started by the subagent tool. */
 export interface SubagentChild {
+	/** A background child that stopped running without its result reaching this session. */
+	unreported?: boolean;
+	/** Not started because its run waits for a slot: pi-subagents reports the whole workflow as queued. */
+	queued?: boolean;
+	/** The tool it was using when it failed, as pi-subagents reports it. */
+	failedTool?: string;
+	/** It timed out or stopped with only part of its output written. */
+	outputPartial?: boolean;
+	childId?: string;
+	role?: "mutation" | "review" | "scout" | "gate";
+	worktree?: boolean;
+	timedOut?: boolean;
+	waitingOn?: "main";
+	inputTokens?: number;
+	outputTokens?: number;
+	handoff?: ChildHandoff;
 	agent: string;
 	/** What it was asked to do. */
 	task: string;
 	/** The workflow's name for it, which tells apart children of the same agent, such as "tests". */
 	label?: string;
-	status: StepStatus | "pending";
+	status: StepStatus | "pending" | "stopped";
 	/** The tool it is using now, such as { tool: "read", target: "src/auth.ts" }. */
 	current?: { tool: string; target: string };
-	/** Its latest tool calls, oldest first. */
-	steps: { tool: string; target: string }[];
+	/** Its latest tool calls, oldest first; `endMs` is when each one ended (epoch milliseconds), when reported. */
+	steps: { tool: string; target: string; endMs?: number }[];
 	tools: number;
 	tokens?: number;
 	durationMs?: number;
@@ -112,14 +130,54 @@ export interface SubagentChild {
 	sessionFile?: string;
 }
 
+/** What a background run is doing, from its status file; `gone` means there is no evidence it is still running. */
+export type BackgroundState = "running" | "done" | "error" | "stopped" | "gone";
+
 export interface Subagent {
+	asyncId?: string;
+	/** The extension's folder for a background run, where its status file is. */
+	asyncDir?: string;
+	/** Set by the host for a background launch: whether its run is still going, and how it ended. */
+	backgroundState?: BackgroundState;
+	preflight?: { lanes: SubagentLane[] };
+	phases?: string[];
+	handoffPath?: string;
+	keptWorktrees?: { path: string; branch: string; reason: string }[];
+	budgetExhausted?: boolean;
 	children: SubagentChild[];
 	/** Started in the background: the step ends at launch, and the result arrives later as its own run. */
 	background: boolean;
 }
 
+export interface SubagentLane {
+	key: string;
+	mode?: "mutation" | "review" | "scout" | "gate";
+	claims?: string[];
+	decision?: string;
+	expectedOutput?: string;
+	independence?: string;
+}
+
+export interface ChildHandoff {
+	id: string;
+	path: string;
+	branch: string;
+	changed: boolean;
+	filesChanged: number;
+	insertions: number;
+	deletions: number;
+	error?: string;
+	files: string[];
+}
+
+export interface ChildPatchFile extends GitDiff {
+	file: string;
+}
+
 /** A background subagent's result or a background command's end, which starts a run of its own instead of a user message. */
 export interface SubagentNotice {
+	runId?: string;
+	runIds?: string[];
 	agent: string;
 	/** The command, when this is one rather than a subagent. */
 	command?: string;
@@ -350,6 +408,7 @@ export interface FileReview {
 }
 
 export interface SessionView {
+	workMode?: import("./work-modes.ts").WorkModeId;
 	path: string;
 	id: string;
 	cwd: string;
@@ -453,6 +512,8 @@ export interface ServiceInfo {
 export interface Draft {
 	text: string;
 	attachments: AttachmentInfo[];
+	/** Goes after what is already in the message box, which keeps its text and attachments, instead of replacing it. */
+	append?: boolean;
 }
 
 export interface NewSessionInput {
@@ -471,6 +532,7 @@ export interface AppProfileInfo {
 }
 
 export interface AppSettings {
+	workMode?: import("./work-modes.ts").WorkModeId;
 	/** Model for new sessions in this app, as provider/id. Unset uses pi's default. */
 	model?: string;
 	thinkingLevel?: string;
@@ -906,6 +968,8 @@ export interface UsageReport {
 }
 
 export interface TriviumApi {
+	setWorkMode(path: string, mode: import("./work-modes.ts").WorkModeId): Promise<void>;
+	subagentPatch(path: string, id: string): Promise<ChildPatchFile[]>;
 	setWindowIcon(app: AppId): Promise<void>;
 	setWindowChrome(color: string): Promise<void>;
 	windowMinimize(): Promise<void>;

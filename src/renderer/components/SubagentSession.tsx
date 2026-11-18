@@ -93,9 +93,9 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 					{place === "drawer" && <span className="subagent-session-crumb">{t("Main thread")} ›</span>}
 					<span className="subagent-session-name">
 						<strong>{target.agent}</strong>
-						{target.label && <span className="subagent-label">{target.label}</span>}
+						{target.label && <span className="agent-row-key">{target.label}</span>}
 						{status && (
-							<span className={`subagent-status is-${status}`}>
+							<span className={`agent-status is-${status}`}>
 								{statusWord(status)}
 								{child?.durationMs !== undefined && ` · ${duration(child.durationMs)}`}
 							</span>
@@ -153,7 +153,7 @@ export function SubagentThread({ parent, target, place, app }: { parent: string;
 			<div className="subagent-bar">
 				<span className="subagent-bar-main">
 					{child?.model && <strong>{child.model}</strong>}
-					{status && <span className={`subagent-status is-${status}`}>{statusWord(status)}</span>}
+					{status && <span className={`agent-status is-${status}`}>{statusWord(status)}</span>}
 					{child?.tools ? <span>{t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools })}</span> : null}
 				</span>
 				<span className="subagent-bar-note">{t(working ? "Runs on its own" : "Its answer went back to the main agent")}</span>

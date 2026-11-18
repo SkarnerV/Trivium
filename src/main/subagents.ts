@@ -1,4 +1,4 @@
-import type { Step, Subagent, SubagentChild, SubagentNotice } from "../shared/protocol.ts";
+import type { Step, Subagent, SubagentChild, SubagentLane, SubagentNotice } from "../shared/protocol.ts";
 import { basename, dirname, join } from "node:path";
 import { commandNotice } from "./long-commands.ts";
 
@@ -11,6 +11,7 @@ import { commandNotice } from "./long-commands.ts";
 interface ToolCallLike {
 	tool?: unknown;
 	args?: unknown;
+	endMs?: unknown;
 }
 
 interface ProgressLike {
@@ -26,9 +27,12 @@ interface ProgressLike {
 	durationMs?: unknown;
 	model?: unknown;
 	error?: unknown;
+	failedTool?: unknown;
 }
 
 interface ResultLike {
+	timedOut?: unknown;
+	outputPartial?: unknown;
 	index?: unknown;
 	agent?: unknown;
 	task?: unknown;
@@ -46,11 +50,34 @@ interface ResultLike {
 }
 
 interface DetailsLike {
+	workflowChildren?: unknown;
+	preflight?: unknown;
+	workflowGraph?: unknown;
+	parallelHandoff?: unknown;
+	usageBudget?: unknown;
+	terminalOutcome?: unknown;
 	results?: unknown;
 	progress?: unknown;
 	runId?: unknown;
 	asyncId?: unknown;
+	asyncDir?: unknown;
 	background?: unknown;
+}
+
+/** Details are extension-owned JSON, including nested objects that may be missing or malformed. */
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function lanesOf(value: unknown): SubagentLane[] {
+	return list<Record<string, unknown>>(record(value).lanes).filter((lane) => typeof lane.key === "string").map((lane) => ({
+		key: str(lane.key),
+		mode: ["mutation", "review", "scout", "gate"].includes(str(lane.mode)) ? lane.mode as SubagentLane["mode"] : undefined,
+		claims: Array.isArray(lane.claims) ? lane.claims.filter((item): item is string => typeof item === "string") : undefined,
+		decision: str(lane.decision) || undefined,
+		expectedOutput: str(lane.expectedOutput) || undefined,
+		independence: str(lane.independence) || undefined,
+	}));
 }
 
 function str(value: unknown): string {
@@ -100,13 +127,17 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const status = childStatus(progress, result, toolStatus);
 	const recent = list<ToolCallLike>(progress?.recentTools ?? summary?.recentTools);
 	const steps = recent.length
-		? recent.map((call) => ({ tool: str(call.tool), target: str(call.args) }))
+		? recent.map((call) => ({ tool: str(call.tool), target: str(call.args), ...(num(call.endMs) !== undefined ? { endMs: num(call.endMs) } : {}) }))
 		: list<{ text?: unknown }>(result?.toolCalls).map((call) => splitCall(str(call.text)));
 	const currentTool = str(progress?.currentTool);
 	const usage = result?.usage;
 	const usageTokens = (num(usage?.input) ?? 0) + (num(usage?.output) ?? 0);
 	const context = str(result?.context);
 	return {
+		timedOut: result?.timedOut === true || undefined,
+		outputPartial: result?.outputPartial === true || undefined,
+		failedTool: status === "error" ? str(progress?.failedTool) || str(summary?.failedTool) || undefined : undefined,
+		inputTokens: num(usage?.input), outputTokens: num(usage?.output),
 		agent: str(result?.agent) || str(progress?.agent) || "agent",
 		task: str(result?.task) || str(progress?.task),
 		label: str(result?.workflowKey) || undefined,
@@ -148,13 +179,63 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		children.push({
 			agent: args.agent,
 			task: str(args.task),
-			status: background || toolStatus === "done" ? "done" : toolStatus === "error" ? "error" : "running",
+			status: background ? "running" : toolStatus === "done" ? "done" : toolStatus === "error" ? "error" : "running",
 			steps: [],
 			tools: 0,
 			sessionFile: childSessionFile(parentSessionFile, runId, 0),
 		});
 	}
-	return { children, background };
+	const lanes = lanesOf(info.preflight ?? record(args.options).preflight);
+	const workflow = list<Record<string, unknown>>(record(info.workflowChildren).children).filter((item) => typeof item.childId === "string");
+	if (workflow.length || lanes.length) {
+		const ordered = [...lanes.map((lane) => lane.key), ...workflow.map((item) => str(item.childId)), ...children.map((item) => item.label).filter((key): key is string => Boolean(key))];
+		const merged: SubagentChild[] = [];
+		for (const key of new Set(ordered)) {
+			const live = workflow.find((item) => item.childId === key);
+			const lane = lanes.find((item) => item.key === key);
+			const position = lanes.length ? lanes.findIndex((lane) => lane.key === key) : workflow.findIndex((item) => item.childId === key);
+			const existing = children.find((item) => item.label === key) ?? (position >= 0 && !children[position]?.label ? children[position] : undefined);
+			const activity = record(live?.activity);
+			const state = str(live?.state);
+			const status = state === "completed" ? "done" : state === "failed" || state === "rejected" ? "error" : state === "stopped" ? "stopped" : state === "pending" ? "pending" : ["running", "paused", "detached"].includes(state) ? "running" : undefined;
+			merged.push({
+				...(existing ?? { agent: str(live?.agent) || "agent", task: "", status: "pending", steps: [], tools: 0 }),
+				childId: key, label: key, role: lane?.mode,
+				agent: str(live?.agent) || existing?.agent || "agent",
+				status: status ?? existing?.status ?? "pending",
+				waitingOn: state === "paused" || activity.currentTool === "contact_supervisor" ? "main" : undefined,
+				current: typeof activity.currentTool === "string" ? { tool: activity.currentTool, target: "" } : existing?.current,
+				tools: num(activity.toolCount) ?? existing?.tools ?? 0,
+				tokens: num(activity.tokens) ?? existing?.tokens,
+				inputTokens: num(activity.inputTokens) ?? existing?.inputTokens, outputTokens: num(activity.outputTokens) ?? existing?.outputTokens,
+				durationMs: num(activity.durationMs) ?? existing?.durationMs,
+				model: str(live?.model) || existing?.model,
+			});
+		}
+		for (const existing of children) {
+			if (!existing.label && !merged.some((item) => item.steps === existing.steps)) merged.push(existing);
+		}
+		children.splice(0, children.length, ...merged);
+	}
+	// pi-subagents reports no per-child wait for a concurrency slot; it reports a whole workflow that waits as queued.
+	const queued = record(info.workflowChildren).workflowState === "queued";
+	for (const item of children) {
+		if (queued && item.status === "pending") item.queued = true;
+		if (args.worktree === true) item.worktree = true;
+		if (toolStatus === "error" && item.status === "running" && !background) item.status = "stopped";
+		if (item.current?.tool === "contact_supervisor") item.waitingOn = "main";
+		item.role ??= /^(worker|delegate)$|writer$/.test(item.agent) ? "mutation" : item.agent === "reviewer" ? "review" : item.agent === "scout" ? "scout" : undefined;
+	}
+	const phases = list<Record<string, unknown>>(record(info.workflowGraph).phases).map((phase) => str(phase.title)).filter(Boolean);
+	return {
+		children, background,
+		...(typeof info.asyncId === "string" ? { asyncId: info.asyncId } : {}),
+		...(typeof info.asyncDir === "string" ? { asyncDir: info.asyncDir } : {}),
+		...(lanes.length ? { preflight: { lanes } } : {}),
+		...(phases.length ? { phases } : {}),
+		...(typeof record(info.parallelHandoff).path === "string" ? { handoffPath: str(record(info.parallelHandoff).path) } : {}),
+		...(record(info.usageBudget).exhausted === true || record(info.terminalOutcome).reason === "budget_exhausted" ? { budgetExhausted: true } : {}),
+	};
 }
 
 function firstLine(text: string, max = 140): string {
@@ -191,7 +272,7 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 	const content = typeof message.content === "string"
 		? message.content
 		: list<{ type?: unknown; text?: unknown }>(message.content).map((part) => str(part.text)).join("\n");
-	const runs = list<{ agent?: unknown; status?: unknown; durationMs?: unknown }>((message.details as { runs?: unknown } | undefined)?.runs);
+	const runs = list<{ agent?: unknown; status?: unknown; durationMs?: unknown; runId?: unknown }>((message.details as { runs?: unknown } | undefined)?.runs);
 	// The first line reads "Background task completed: **scout**", which also covers notices without details.
 	const header = /^(?:Background task|Detached foreground task) (completed|failed|paused|stopped): \*\*(.+?)\*\*/.exec(content);
 	const agents = [...new Set(runs.map((run) => str(run.agent)).filter(Boolean))];
@@ -204,6 +285,7 @@ export function noticeOf(message: { role?: unknown; customType?: unknown; conten
 	const sessionFile = /^Session(?: file)?: (.+\.jsonl)\s*$/m.exec(content)?.[1];
 	const durations = runs.map((run) => num(run.durationMs)).filter((value) => value !== undefined);
 	return {
+		...(runs.some((run) => typeof run.runId === "string") ? { runId: str(runs[0]?.runId) || undefined, runIds: runs.map((run) => str(run.runId)).filter(Boolean) } : {}),
 		agent: agents.join(", ") || header?.[2] || "subagent",
 		status: ["completed", "failed", "paused", "stopped"].includes(status) ? status : "completed",
 		durationMs: durations.length ? Math.max(...durations) : undefined,

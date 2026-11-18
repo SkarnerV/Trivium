@@ -5,6 +5,8 @@
 	--ink-4: #6b6e78;
 	--add: #146c3c;
 	--del: #b4232a;
+	--warn: #a65a08;
+	--warn-bg: #fff5df;
 	--sans: Geist, Inter, system-ui, sans-serif;
 	--mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -1616,6 +1618,186 @@ body.resizing * {
 	white-space: pre;
 }
 
+/* Subagents: the agent's name is the one tinted thing, so delegated work stands out among the steps. */
+.agent-tag {
+	flex: none;
+	padding: 0 6px;
+	border-radius: 4px;
+	background: var(--soft);
+	color: var(--accent-text);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	line-height: 18px;
+}
+
+.agent-tag.quiet {
+	background: var(--line);
+	color: var(--ink-3);
+}
+
+/* The task is prose, so the target here leaves the monospace to the agent's name. */
+.step .subagent-target {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-family: inherit;
+}
+
+.step .subagent-target > .prose {
+	margin-left: 2px;
+}
+
+.subagent-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.subagent-child + .subagent-child {
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.subagent-child-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.subagent-label {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.subagent-child-time {
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-task {
+	margin: 0 0 12px;
+	font-size: 12.5px;
+	white-space: pre-wrap;
+}
+
+.subagent-steps {
+	list-style: none;
+	margin: 0 0 12px;
+	padding: 0 0 0 10px;
+	border-left: 1.5px solid var(--border);
+	font-family: var(--mono);
+	font-size: 11.5px;
+	line-height: 1.75;
+	color: var(--ink-2);
+}
+
+.subagent-steps li {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+}
+
+.subagent-steps .tool {
+	flex: none;
+	width: 44px;
+	color: var(--ink-4);
+}
+
+.subagent-steps .more {
+	color: var(--ink-4);
+}
+
+.subagent-result {
+	margin-bottom: 12px;
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.subagent-result > :first-child {
+	margin-top: 0;
+}
+
+.subagent-result > :last-child,
+.subagent-child > :last-child {
+	margin-bottom: 0;
+}
+
+.subagent-detail .subagent-error {
+	color: var(--del);
+}
+
+.subagent-usage {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-note {
+	margin: 0;
+	font-size: 12px;
+	color: var(--ink-3);
+}
+
+/* The live line's second line: what the child is doing now. */
+.subagent-now {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+	padding-left: 14px;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+}
+
+.subagent-now-count {
+	flex: none;
+	margin-left: auto;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-4);
+}
+
+.subagent-bg {
+	color: var(--ink-4);
+}
+
+.subagent-row {
+	display: grid;
+	grid-template-columns: auto auto minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 8px;
+	min-height: 22px;
+	padding-left: 14px;
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+
+/* One width for every row's label, so what each child is doing lines up. */
+.subagent-row .subagent-label {
+	max-width: 120px;
+}
+
+.subagent-activity {
+	color: var(--ink-2);
+}
+
+.subagent-activity.done {
+	color: var(--add);
+}
+
+.subagent-activity.error {
+	color: var(--del);
+}
+
+.subagent-row.finished .subagent-activity {
+	opacity: 0.85;
+}
+
 /* Subagents: a row per agent with its mark, name and what it is doing, under a header when there are several.
    Each row opens the agent's own session. */
 .agent-avatar {
@@ -1666,6 +1848,11 @@ body.resizing * {
 	background: #9c9eae;
 }
 
+/* Waiting on the main agent: a question it asked, not something gone wrong. */
+.agent-avatar.is-waiting .agent-avatar-dot {
+	background: var(--warn);
+}
+
 .avatar-stack {
 	flex: none;
 	display: flex;
@@ -1692,7 +1879,7 @@ body.resizing * {
 	font-weight: 500;
 }
 
-.subagent-row {
+.agent-row {
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -1707,38 +1894,38 @@ body.resizing * {
 	text-align: left;
 }
 
-.subagent-row.is-button {
+.agent-row.is-button {
 	cursor: pointer;
 	transition: background 120ms ease;
 }
 
-.subagent-row.is-button:hover,
-.subagent-row.current {
+.agent-row.is-button:hover,
+.agent-row.current {
 	background: var(--soft);
 }
 
-.subagent-row.current {
+.agent-row.current {
 	box-shadow: inset 0 0 0 1px var(--border);
 }
 
-.subagent-row.is-button:disabled {
+.agent-row.is-button:disabled {
 	opacity: 1;
 	cursor: default;
 }
 
-.subagent-row > svg {
+.agent-row > svg {
 	flex: none;
 	color: var(--ink-4);
 }
 
-.subagent-row-main {
+.agent-row-main {
 	flex: 1;
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
 }
 
-.subagent-row-name {
+.agent-row-name {
 	display: flex;
 	align-items: baseline;
 	gap: 6px;
@@ -1747,65 +1934,83 @@ body.resizing * {
 	line-height: 1.45;
 }
 
-.subagent-agent {
+.agent-row-agent {
 	flex: none;
 	font-weight: 500;
 	color: var(--ink);
 }
 
-.subagent-label {
+.agent-row-key {
 	flex: none;
 	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--ink-4);
 }
 
-.subagent-task {
+.agent-row-task {
 	color: var(--ink-3);
 }
 
-.subagent-command {
+.agent-row-command {
 	font-family: var(--mono);
 	font-size: 12px;
 	font-weight: 500;
 	color: var(--ink);
 }
 
-.subagent-activity {
+.agent-row-activity {
 	font-size: 11.5px;
 	line-height: 1.6;
 	color: var(--ink-3);
 }
 
-.subagent-activity.code {
+.agent-row-activity.code {
 	font-family: var(--mono);
 	font-size: 11px;
 }
 
-.subagent-activity.error {
+.agent-row-activity.error {
 	color: var(--del);
 }
 
-.subagent-status {
+.agent-status {
 	flex: none;
 	font-size: 11.5px;
 	color: var(--ink-3);
 }
 
-.subagent-status.is-running,
-.subagent-status.is-pending {
+.agent-status.is-running,
+.agent-status.is-pending {
 	color: var(--accent-text);
 }
 
-.subagent-status.is-done {
+.agent-status.is-done {
 	color: var(--add);
 }
 
-.subagent-status.is-error {
+.agent-status.is-error {
 	color: var(--del);
 }
 
-.subagent-time {
+.agent-status.is-waiting,
+.agent-status.is-stopped,
+.agent-row-activity.warn {
+	color: var(--warn);
+}
+
+/* A writer's changes once it is done, in place of a word. */
+.agent-row-patch {
+	flex: none;
+	font-family: var(--mono);
+	font-size: 11px;
+}
+
+.agent-row-name .subagent-role {
+	flex: none;
+	align-self: center;
+}
+
+.agent-row-time {
 	flex: none;
 	min-width: 30px;
 	text-align: right;
@@ -1814,7 +2019,7 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
-.subagent-pill {
+.agent-pill {
 	flex: none;
 	padding: 0 8px;
 	border: 1px solid var(--line);
@@ -1825,17 +2030,17 @@ body.resizing * {
 }
 
 /* A single row lines its mark up with the thread's edge. */
-.subagent-single {
+.agent-single {
 	margin: 0 -8px;
 }
 
-.subagent-group {
+.agent-group {
 	display: flex;
 	flex-direction: column;
 }
 
 /* Once its agents are done the header rests, like the steps around it, until it is opened again. */
-.subagent-group-head {
+.agent-group-head {
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -1850,18 +2055,18 @@ body.resizing * {
 	transition: opacity 120ms ease;
 }
 
-.subagent-group.open .subagent-group-head,
-.subagent-group.live .subagent-group-head,
-.subagent-group-head:hover {
+.agent-group.open .agent-group-head,
+.agent-group.live .agent-group-head,
+.agent-group-head:hover {
 	opacity: 1;
 }
 
-.subagent-group-head > svg {
+.agent-group-head > svg {
 	flex: none;
 	color: var(--ink-4);
 }
 
-.subagent-group-title {
+.agent-group-title {
 	flex: 1;
 	min-width: 0;
 	display: flex;
@@ -1869,25 +2074,25 @@ body.resizing * {
 	line-height: 1.4;
 }
 
-.subagent-group-title strong {
+.agent-group-title strong {
 	font-size: 12.5px;
 	font-weight: 600;
 }
 
-.subagent-group-summary {
+.agent-group-summary {
 	font-size: 11.5px;
 	color: var(--ink-3);
 }
 
-.subagent-group-summary.active {
+.agent-group-summary.active {
 	color: var(--accent-text);
 }
 
-.subagent-group-summary.error {
+.agent-group-summary.error {
 	color: var(--del);
 }
 
-.subagent-rows {
+.agent-rows {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
@@ -1899,40 +2104,40 @@ body.resizing * {
 }
 
 /* A background result, opening the run it started in place of a user message. */
-.subagent-notice {
+.agent-notice {
 	margin: 0 -8px;
 	border-radius: 10px;
 }
 
-.subagent-notice.open {
+.agent-notice.open {
 	background: #fff;
 	box-shadow:
 		0 0 0 1px var(--line),
 		0 1px 2px rgba(22, 23, 27, 0.05);
 }
 
-.subagent-notice-head {
+.agent-notice-head {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 }
 
-.subagent-notice-open {
+.agent-notice-open {
 	flex: none;
 }
 
-.subagent-notice-body {
+.agent-notice-body {
 	padding: 2px 14px 12px 42px;
 	font-size: 13px;
 	line-height: 1.55;
 	overflow-wrap: anywhere;
 }
 
-.subagent-notice-body > :first-child {
+.agent-notice-body > :first-child {
 	margin-top: 0;
 }
 
-.subagent-notice-body > :last-child {
+.agent-notice-body > :last-child {
 	margin-bottom: 0;
 }
 
@@ -2052,7 +2257,7 @@ body.resizing * {
 	background: var(--soft);
 }
 
-.subagents-popover-row .subagent-row:hover {
+.subagents-popover-row .agent-row:hover {
 	background: transparent;
 }
 
@@ -2074,11 +2279,24 @@ body.resizing * {
 }
 
 .subagents-popover-foot {
-	padding: 9px 14px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 8px 9px 14px;
 	border-top: 1px solid var(--line);
 	background: var(--tray);
 	color: var(--ink-3);
 	font-size: 11.5px;
+}
+
+.subagents-popover-foot > span {
+	flex: 1;
+	min-width: 0;
+}
+
+.subagents-popover-foot .btn {
+	flex: none;
+	font-size: 12px;
 }
 
 /* A subagent's own session: in a drawer over the right of the pane, or filling a window of its own. */
@@ -7940,4 +8158,455 @@ body.resizing * {
 
 .git-sync.is-pull {
 	color: #8a4f06;
+}
+/* Delegated work keeps the existing step tray, panel and diff typography. */
+
+.dd-desc {
+	display: block;
+	margin-top: 2px;
+	font: 12px/1.45 var(--sans);
+	color: var(--ink-3);
+	white-space: normal;
+}
+
+.dd-option:has(.dd-desc) {
+	align-items: start;
+}
+
+.dd-option:has(.dd-desc) .dd-check {
+	padding-top: 3px;
+}
+
+.dd-foot {
+	border-top: 1px solid var(--line);
+	padding: 10px 12px;
+	font-size: 11.5px;
+	color: var(--ink-4);
+}
+
+.dd-ghost.is-accent .dd-trigger {
+	color: var(--accent-text);
+}
+
+.composer {
+	container: composer / inline-size;
+}
+
+@container composer (max-width: 480px) {
+	.composer-bar .dd-ghost .dd-value, .composer-bar .dd-ghost .dd-trigger > svg:last-child {
+		display: none;
+	}
+	.composer-bar .dd-ghost .dd-trigger {
+		padding-inline: 6px;
+	}
+}
+
+.agents-toggle {
+	color: var(--accent-text);
+}
+
+.attn, .warn, .subagent-activity.warn {
+	color: var(--warn);
+}
+
+.agents-toggle.attn, .agents-attn {
+	background: var(--warn-bg);
+}
+
+.live-dot.attn {
+	background: var(--warn);
+}
+
+.agents-tab-dot {
+	width: 5px;
+	height: 5px;
+	background: var(--accent);
+	border-radius: 50%;
+}
+
+.fanout {
+	container: fanout / inline-size;
+}
+
+.fanout .live-cmd-head {
+	align-items: start;
+}
+
+.fanout .live-cmd-prose {
+	min-width: 0;
+}
+
+.fanout-bar {
+	display: flex;
+	gap: 3px;
+	margin: 8px 0;
+}
+
+.fanout-bar i {
+	flex: 1;
+	height: 3px;
+	border-radius: 2px;
+	background: var(--line);
+}
+
+.fanout-bar .running {
+	background: var(--accent);
+}
+
+.fanout-bar .done {
+	background: var(--add);
+}
+
+.fanout-bar .error {
+	background: var(--del);
+}
+
+.fanout-bar .waiting {
+	background: var(--warn);
+}
+
+.fanout-bar .stopped {
+	background: var(--ink-4);
+}
+
+.fanout-rows {
+	display: grid;
+	grid-template-columns: 12px auto auto 14px minmax(0, 1fr) auto;
+	column-gap: 8px;
+}
+
+.fanout .subagent-row {
+	grid-column: 1 / -1;
+	grid-template-columns: subgrid;
+	padding: 3px 0;
+	border: 0;
+	background: transparent;
+	text-align: left;
+	min-width: 0;
+	border-radius: 3px;
+}
+
+.fanout .subagent-row:hover {
+	background: var(--soft);
+}
+
+.fanout .subagent-row:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.subagent-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 12px;
+	height: 12px;
+	font: 12px var(--sans);
+	color: var(--ink-4);
+}
+
+.subagent-mark.pending {
+	border: 1px solid var(--ink-4);
+	border-radius: 50%;
+	width: 8px;
+	height: 8px;
+	margin: 2px;
+}
+
+.subagent-mark.running {
+	border: 1px solid var(--accent);
+	border-radius: 50%;
+}
+
+.subagent-mark.running::after {
+	content: '';
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+.subagent-mark.done {
+	color: var(--add);
+}
+
+.subagent-mark.error {
+	color: var(--del);
+}
+
+.subagent-mark.waiting {
+	color: var(--warn);
+}
+
+.subagent-role {
+	color: var(--ink-4);
+	display: inline-flex;
+	align-items: center;
+}
+
+.fanout .subagent-activity {
+	font: 12px/1.5 var(--sans);
+}
+
+.fanout-note {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	font: 12px/1.5 var(--sans);
+	overflow-wrap: anywhere;
+	background: white;
+}
+
+.fanout-note p {
+	margin: 0 0 5px;
+}
+
+.not-started .fanout-rows {
+	opacity: .55;
+}
+
+@container fanout (max-width: 420px) {
+	.fanout-rows {
+		grid-template-columns: 12px minmax(0, auto) 14px minmax(0, 1fr) auto;
+		column-gap: 6px;
+	}
+	.fanout .subagent-row > .agent-tag {
+		display: none;
+	}
+	.fanout .subagent-label {
+		max-width: 72px;
+	}
+	.fanout-tools {
+		display: none;
+	}
+}
+
+.agents {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 12px;
+	overflow: auto;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	container: agents / inline-size;
+}
+
+.agents h3, .agents p {
+	margin: 0;
+}
+
+.agents-head h3 {
+	font-size: 14px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.agents-head p, .agents-foot, .agents .subagent-usage {
+	font: 11px/1.6 var(--mono);
+	color: var(--ink-4);
+}
+
+.agents-head p {
+	margin-top: 5px;
+}
+
+.agents-plan, .agents-phase, .agents-now, .agents-attn {
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 10px;
+	min-width: 0;
+}
+
+.agents-phase {
+	background: white;
+}
+
+.agents-phase > summary {
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.agents-phase .fanout {
+	margin: 10px 0 0;
+	padding: 0;
+	background: transparent;
+}
+
+.agents .fanout-rows {
+	display: flex;
+	flex-direction: column;
+}
+
+.agents .fanout .subagent-row {
+	display: grid;
+	grid-template-columns: 12px auto minmax(0, 1fr) 14px auto;
+	gap: 4px 6px;
+	padding: 6px 0;
+}
+
+.agents .fanout .subagent-row > .agent-tag {
+	display: inline-flex;
+}
+
+.agents .subagent-activity {
+	overflow-wrap: anywhere;
+}
+
+.agents .fanout .subagent-activity {
+	grid-column: 2 / -1;
+	grid-row: 2;
+	white-space: normal;
+}
+
+.agents .fanout .subagent-now-count {
+	grid-column: 5;
+	grid-row: 1;
+}
+
+.agents-now {
+	font-size: 12px;
+}
+
+.agents-now p + p {
+	color: var(--ink-3);
+	margin-top: 3px;
+}
+
+.agents-back {
+	align-self: flex-start;
+}
+
+.agents-changes {
+	min-width: 0;
+}
+
+.agents-files {
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 8px;
+}
+
+.agents-files button {
+	display: flex;
+	gap: 8px;
+	justify-content: space-between;
+	border: 0;
+	border-radius: 5px;
+	padding: 6px;
+	background: transparent;
+	font-size: 12px;
+	text-align: left;
+}
+
+.agents-files button[aria-pressed=true] {
+	background: var(--soft);
+}
+
+.agents-files button > span:last-child {
+	flex: none;
+}
+
+.agents .diff-scroll {
+	max-height: 420px;
+	overflow: auto;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.agents-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+}
+
+.agents .subagent-child {
+	padding: 0;
+}
+
+.agents .subagent-task {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.agents-foot {
+	margin-top: auto;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+
+.subagent-single-open {
+	width: 100%;
+	border: 0;
+	background: transparent;
+	text-align: left;
+}
+
+.agents-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+
+/* A list item that takes no box, so its row keeps the fan-out's grid; it is there for the list semantics. */
+.fanout-item {
+	display: contents;
+}
+
+/* Text cut to a few lines until "Show all": the plan (3) and a child's task (6). */
+.clamp-body.clamped {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--clamp-lines, 3);
+	overflow: hidden;
+}
+
+.clamp-toggle {
+	border: 0;
+	padding: 2px 0;
+	background: transparent;
+	color: var(--accent-text);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.subagent-steps .subagent-step-time {
+	flex: none;
+	margin-left: auto;
+	color: var(--ink-4);
+}
+
+.agents-after {
+	border-radius: 10px;
+	padding: 10px;
+	background: var(--soft);
+	min-width: 0;
+}
+
+.agents-patches {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 12px;
+}
+
+.agents-patches li {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	min-width: 0;
+	padding: 2px 0;
+}
+
+.agents-patch-key {
+	flex: none;
+	max-width: 120px;
+	font-weight: 500;
+}
+
+.agents-patches .warn {
+	color: var(--warn);
 }

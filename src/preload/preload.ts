@@ -7,6 +7,8 @@ const call =
 		ipcRenderer.invoke(`trivium:${channel}`, ...args);
 
 const api: TriviumApi = {
+	setWorkMode: call("setWorkMode") as TriviumApi["setWorkMode"],
+	subagentPatch: call("subagentPatch") as TriviumApi["subagentPatch"],
 	setWindowIcon: call("setWindowIcon") as TriviumApi["setWindowIcon"],
 	setWindowChrome: call("setWindowChrome") as TriviumApi["setWindowChrome"],
 	windowMinimize: call("windowMinimize") as TriviumApi["windowMinimize"],

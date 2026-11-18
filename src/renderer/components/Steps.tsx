@@ -9,18 +9,9 @@ import { Markdown } from "./Markdown.tsx";
 import { SubagentGroup } from "./Subagents.tsx";
 import { t } from "../i18n.tsx";
 import { blocksOf } from "../timeline.ts";
+import { currentStep } from "../agents.ts";
+import { liveVerb } from "../verbs.ts";
 
-/** What the agent is doing in a step, said as it happens: "Reading", "Running", "Thinking". */
-const VERBS: Record<string, string> = {
-	read: "Reading",
-	edit: "Editing",
-	write: "Writing",
-	bash: "Running",
-	grep: "Searching for",
-	find: "Finding",
-	ls: "Listing",
-	think: "Thinking",
-};
 
 /**
  * The step under way, or the last one while the agent decides what to do next. It stays until the next
@@ -36,7 +27,7 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 		<div className={`live-cmd${running ? "" : " idle"}`}>
 			<div className="live-cmd-head">
 				<span className="live-dot" />
-				<span className="live-cmd-label">{VERBS[step.tool] ? t(VERBS[step.tool]!) : t("Using {tool}", { tool: step.tool })}</span>
+				<span className="live-cmd-label">{liveVerb(step)}</span>
 				{prose ? (
 					<span className="live-cmd-prose ellipsis">{step.target}</span>
 				) : (
@@ -139,17 +130,20 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 	const end = live ? now : run.endedAt;
 	const total = run.startedAt && end ? duration(end - run.startedAt) : "";
 	const count = steps.length;
+	const agents = steps.reduce((sum, step) => sum + (step.subagent?.children.length ?? 0), 0);
 	// A failed command or tool would otherwise only show once the steps are open.
 	const failed = failedIn(steps);
 	// Size the tool column to the longest tool name so targets line up, in every group alike.
 	const toolWidth = Math.max(36, ...steps.map((step) => step.tool.length * 7.3 + 2));
 	// Once the answer is coming in, it shows what is happening on its own.
-	const current = live && !run.answer ? (steps.findLast((step) => step.status === "running") ?? steps.at(-1)) : undefined;
+	const current = live ? currentStep(run) : undefined;
 	// Among several groups, one step is shown as it is: "1 step" would hide it and take the same room.
 	const folds = (group: { steps: Step[] }) => groups.length === 1 || group.steps.length > 1;
 	const foldable = groups.filter(folds);
 	const allOpen = foldable.length > 0 && foldable.every((group) => opened.has(group.id));
 	const finished = !live && Boolean(run.answer);
+	// A usage limit that ended the run is told against the fan-out it cut short, its last one.
+	const limitedFanout = run.limit ? steps.findLast((step) => (step.subagent?.children.length ?? 0) > 1)?.id : undefined;
 	const toggle = (id: string) =>
 		setOpened((before) => {
 			const next = new Set(before);
@@ -173,12 +167,13 @@ export function Steps({ run, live }: { run: Run; live: boolean }) {
 					{total && ` ${t("for {time}", { time: total })}`}
 				</span>
 				{count > 0 && <span>· {t(count === 1 ? "{n} step" : "{n} steps", { n: count })}</span>}
+				{agents > 0 && <span>· {t(agents === 1 ? "{n} agent" : "{n} agents", { n: agents })}</span>}
 				{failed > 0 && <span className="steps-failed">· {t("{n} failed", { n: failed })}</span>}
 				{(finished || foldable.length > 0) && <Chevron open={finished ? expanded : allOpen} />}
 			</button>
 			{blocks.map((block) => {
 				// Once the answer is in, the agents it started stay in view, so they can still be opened.
-				if (block.kind === "subagents") return <SubagentGroup key={block.id} step={block.step} now={now} />;
+				if (block.kind === "subagents") return <SubagentGroup key={block.id} step={block.step} now={now} limit={block.id === limitedFanout ? run.limit : undefined} />;
 				if (finished && !expanded) return null;
 				if (block.kind === "note") {
 					return (

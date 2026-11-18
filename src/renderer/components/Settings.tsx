@@ -1,3 +1,4 @@
+import { isWorkMode, WORK_MODES } from "../../shared/work-modes.ts";
 import { type DragEvent, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { isPermissionMode, PERMISSION_MODES, type PermissionModeId } from "../../shared/permissions.ts";
 import type {
@@ -1448,6 +1449,14 @@ function AppPage({ app }: { app: AppId }) {
 					}}
 				/>
 			)}
+
+			{app === "code" && <Group title={t("Work mode")} description={t("How new Code sessions start. Each session can change it in the message box.")}>
+				<Item label={t("New sessions start in")} hint={t(WORK_MODES.find((entry) => entry.id === (appSettings.workMode ?? "default"))!.hint)}>
+					<Dropdown label={t("Work mode")} align="right" value={appSettings.workMode ?? "default"}
+						options={WORK_MODES.map((entry) => ({ value: entry.id, label: t(entry.label) }))}
+						onChange={(mode) => isWorkMode(mode) && void updateSettings({ apps: { ...settings.apps, code: { ...appSettings, workMode: mode } } })} />
+				</Item>
+			</Group>}
 
 			<Group
 				title={t("Extensions")}

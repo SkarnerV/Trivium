@@ -17,6 +17,8 @@ import { type SubagentOpener, SubagentNoticeLine, SubagentOpenerContext } from "
 import { SubagentDrawer } from "./SubagentSession.tsx";
 import { backgroundSubagents, SubagentsMenu } from "./SubagentsMenu.tsx";
 import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
+import { AgentsButton } from "./AgentsPanel.tsx";
+import { AgentSession } from "../agent-context.ts";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
 function fileKind(name: string, kind: "image" | "file"): string {
@@ -399,6 +401,8 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	const preview = useMemo(() => (app !== "research" ? (file: string) => void openPreview(view.path, file) : undefined), [app, view.path]);
 	const scroll = useStickToBottom(view.path, `${view.runs.length}:${lastRun?.answer.length}:${lastRun?.steps.length}:${lastRun?.compacted}:${dialogs.length}`);
 	const subagent = useStore((s) => s.subagentShown[view.path]);
+	// The Agents tab, worktrees and the project folder are Code's, in a session with a project.
+	const agents = view.app === "code" && !view.chat;
 	const background = useMemo(() => backgroundSubagents(view.runs, view.running), [view.runs, view.running]);
 	const opener = useMemo<SubagentOpener>(
 		() => ({ current: subagent?.file, background, open: (target, newWindow) => openSubagent(view.path, target, newWindow) }),
@@ -406,7 +410,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	);
 	return (
 		<SubagentOpenerContext.Provider value={opener}>
-			<main className={`pane${summary ? " has-summary" : ""}${subagent ? " has-subagent" : ""}`} aria-label={split ? view.title : undefined}>
+			<main className={`pane${summary ? " has-summary" : ""}${subagent ? " has-subagent" : ""}`} data-session-path={view.path} aria-label={split ? view.title : undefined}>
 				<header className="pane-head drag">
 					{split?.tabs ? (
 						<SplitTabs tabs={split.tabs} current={view.path} />
@@ -419,7 +423,8 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 							<h1 className="ellipsis">{view.title}</h1>
 						</div>
 					)}
-					<SubagentsMenu runs={view.runs} running={view.running} />
+					<SubagentsMenu runs={view.runs} running={view.running} onPanel={agents ? () => showPanelView(view.path, "agents") : undefined} />
+					{agents && <AgentsButton view={view} needsYou={dialogs.length > 0} />}
 					<ServicesButton view={view} />
 					{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 					{app === "code" ? (
@@ -453,13 +458,15 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 					<div className="scroller" ref={scroll.ref} onScroll={scroll.onScroll}>
 						<div className="scroll-row">
 							<div className="thread">
-								<PreviewOpener.Provider value={preview}>
-									<PreviewSession.Provider value={preview && view.path}>
-										{view.runs.map((run, index) => (
-											<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
-										))}
-									</PreviewSession.Provider>
-								</PreviewOpener.Provider>
+								<AgentSession.Provider value={agents ? view.path : undefined}>
+									<PreviewOpener.Provider value={preview}>
+										<PreviewSession.Provider value={preview && view.path}>
+											{view.runs.map((run, index) => (
+												<RunBlock key={run.id} run={run} view={view} index={index} live={view.running && index === view.runs.length - 1} />
+											))}
+										</PreviewSession.Provider>
+									</PreviewOpener.Provider>
+								</AgentSession.Provider>
 								{dialogs.map((request) => (
 									<AskCard key={request.id} request={request} />
 								))}

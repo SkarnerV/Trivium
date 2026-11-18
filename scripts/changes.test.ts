@@ -47,6 +47,22 @@ function setup({ repository = true } = {}) {
 	return { root, repo, git, file, commit, tracker, edit, listed, command, saved, cleanup: () => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
 }
 
+test("subagent project edits are adopted and revertable, including after intervening parent commands", async () => {
+	const { tracker, file, cleanup } = setup();
+	try {
+		await tracker.beforeSubagents();
+		writeFileSync(file("src/cart.ts"), "child edit\n");
+		await tracker.beforeCommand();
+		writeFileSync(file("src/child.ts"), "child file\n");
+		await tracker.afterCommand();
+		await tracker.afterSubagents();
+		assert.deepEqual((await tracker.list()).map((file) => file.rel.replaceAll("\\", "/")).sort(), ["src/cart.ts", "src/child.ts"]);
+		await tracker.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), "one\n");
+		assert.equal(existsSync(file("src/child.ts")), false);
+	} finally { cleanup(); }
+});
+
 test("a committed file leaves the session's list, and Revert no longer touches it", async () => {
 	const { file, commit, tracker, edit, listed, cleanup } = setup();
 	try {

@@ -4,7 +4,39 @@ import { join } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { commandPrefix, decide, isEnvFile, isRisky, namesEnvFile, noApprovals, onlyReads, permissionGate } from "../src/main/permission-gate.ts";
-import type { PermissionModeId } from "../src/shared/permissions.ts";
+import { DEFAULT_PERMISSION_MODE, type PermissionModeId } from "../src/shared/permissions.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import childPermissions, { permissionModeFromDisk } from "../src/main/child-permissions.ts";
+
+test("child permissions read disk each call, deny approvals without UI and use the child's worktree root", async () => {
+	const root = mkdtempSync(join(tmpdir(), "trivium-child-gate-"));
+	const previous = process.env.TRIVIUM_HOME;
+	try {
+		process.env.TRIVIUM_HOME = root;
+		const file = join(root, "settings.json");
+		let handler: Function = () => {};
+		childPermissions({ on: (_name: string, fn: Function) => { handler = fn; } } as unknown as ExtensionAPI);
+		const worktree = join(root, "worktrees", "child");
+		const call = (toolName: string, input: Record<string, unknown>) => handler({ toolName, input }, { cwd: worktree, hasUI: true });
+		// A profile that has saved no setting yet has no file: children follow the default mode, as the main agent does.
+		assert.equal(permissionModeFromDisk(file), DEFAULT_PERMISSION_MODE);
+		assert.equal(call("edit", { path: "src/a.ts" }), undefined);
+		assert.equal(call("bash", { command: "npm test" }), undefined);
+		writeFileSync(file, JSON.stringify({ permissionMode: "auto" }));
+		assert.equal(permissionModeFromDisk(file), "auto");
+		assert.equal(call("edit", { path: "src/a.ts" }), undefined);
+		assert.match(call("read", { path: ".env" }).reason, /off limits/);
+		assert.match(call("bash", { command: "sudo test" }).reason, /no one can answer here/);
+		assert.match(call("write", { path: join(root, "outside.ts") }).reason, /no one can answer here/);
+		writeFileSync(file, JSON.stringify({ permissionMode: "ask" }));
+		assert.match(call("edit", { path: "src/a.ts" }).reason, /no one can answer here/);
+		writeFileSync(file, "broken");
+		assert.equal(permissionModeFromDisk(file), "ask");
+	} finally {
+		if (previous === undefined) delete process.env.TRIVIUM_HOME; else process.env.TRIVIUM_HOME = previous;
+		rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
 
 const cwd = join(tmpdir(), "trivium-project");
 const outside = join(homedir(), "elsewhere", "notes.md");

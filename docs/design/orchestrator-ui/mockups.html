@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestrator mockups</title>
+<style>
+/* Everything is scoped: html and body keep the host page's background. */
+.tv { display: flex; flex-direction: column; gap: 28px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.tv * { box-sizing: border-box; }
+.mk { min-width: 0; }
+.cap { display: inline-block; max-width: 100%; margin: 0 0 8px; padding: 4px 10px; border-radius: 7px; background: #EEEFFA; color: #34374F; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.cap small { display: block; font-size: 11.5px; font-weight: 400; color: #5C6091; }
+.cap .tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; background: #5457E8; color: #fff; font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
+.cap .tag.later { background: #6b6e78; }
+
+/* Trivium's tokens: :root in styles.css + the Code theme in theme.ts. Amber = the existing warning values. */
+.frame {
+	--ink: #16171b; --ink-2: #43464f; --ink-3: #5e616b; --ink-4: #6b6e78; --add: #146c3c; --del: #b4232a;
+	--chrome: #EEEFFA; --tab: #E2E3F6; --border: #D9DBF0; --muted: #5C6091; --secondary: #34374F;
+	--accent: #5457E8; --accent-text: #3B3EC4; --accent-ring: #5457E82E; --soft: #EEEFFC; --edge: #DEDFF3;
+	--line: #E8E9F8; --tray: #F7F7FE; --ring-track: #E6E7F7; --dot: #8F92FF;
+	--warn: #8a4f06; --warn-ink: #6e3c05; --warn-bg: #fdf1e1; --warn-line: #f1dcc0; --warn-dot: #d08a2e;
+	--sans: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "Yu Gothic UI", sans-serif;
+	--mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	position: relative; min-width: 0; padding: 16px; border: 1px solid var(--edge); border-radius: 14px;
+	background: #fff; color: var(--ink); font-family: var(--sans); font-size: 13px; line-height: 1.5;
+	letter-spacing: -0.005em; overflow: hidden;
+}
+.frame.chrome { background: var(--chrome); }
+.frame code, .mono { font-family: var(--mono); }
+.ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ic { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ic.s11 { width: 11px; height: 11px; }
+.ic.s14 { width: 14px; height: 14px; }
+.ic.s15 { width: 15px; height: 15px; }
+.plus { color: var(--add); }
+.minus { color: var(--del); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Thread */
+.prompt { display: flex; justify-content: flex-end; }
+.bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: var(--soft); font-size: 14px; overflow-wrap: anywhere; }
+.answer { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.answer p { margin: 0 0 8px; }
+.answer p:last-child { margin: 0; }
+.answer code { padding: 1px 4px; border-radius: 4px; background: var(--soft); color: var(--accent-text); font-size: 12.5px; }
+.steps-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0; color: var(--ink-3); font-size: 12.5px; }
+.steps-toggle strong { color: var(--ink); font-weight: 500; }
+.steps-failed { color: var(--del); }
+.steps { list-style: none; margin: -6px 0 0; padding: 0; display: flex; flex-direction: column; font-size: 12.5px; color: var(--ink-2); }
+.step-summary { display: grid; grid-template-columns: 12px 58px minmax(0, 1fr) auto 44px 12px; align-items: center; column-gap: 10px; min-height: 26px; }
+.step .mark { justify-self: center; align-self: stretch; width: 1.5px; background: var(--border); }
+.step .tool { font-family: var(--mono); font-size: 12px; color: var(--ink-4); }
+.step .target { font-family: var(--mono); }
+.step .meta, .step .time { font-family: var(--mono); font-size: 11.5px; color: var(--ink-4); white-space: nowrap; }
+.step .time { text-align: right; }
+.step .chev { display: flex; color: var(--ink-4); }
+.subagent-target { display: flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--sans) !important; }
+.agent-tag { flex: none; padding: 0 6px; border-radius: 4px; background: var(--soft); color: var(--accent-text); font-family: var(--mono); font-size: 11.5px; line-height: 18px; white-space: nowrap; }
+.agent-tag.quiet { background: var(--line); color: var(--ink-3); }
+.step-detail { margin: 2px 0 8px 22px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--tray); }
+.receipt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: -10px; font-size: 12px; color: var(--ink-3); }
+.receipt .it { display: inline-flex; align-items: center; gap: 4px; }
+.receipt .link { margin-left: 2px; }
+
+/* The fan-out block: .live-cmd.subagent-live.fanout */
+.live-cmd { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--tray); font-size: 12px; }
+.live-cmd-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.live-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 3px #8F92FF2E; }
+.live-dot.rest { background: var(--border); box-shadow: none; }
+.live-dot.attn { background: var(--warn-dot); box-shadow: 0 0 0 3px #d08a2e2E; }
+.live-cmd-label { flex: none; color: var(--ink-3); }
+.live-cmd-prose { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-cmd-time { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-4); }
+.h-quiet { color: var(--ink-4); }
+.h-warn { color: var(--warn); }
+.h-err { color: var(--del); }
+.subagent-now { display: flex; gap: 8px; min-width: 0; padding-left: 14px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.subagent-now-count { flex: none; margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-4); text-align: right; white-space: nowrap; }
+.fanout-bar { display: flex; gap: 2px; margin: 3px 0 5px 14px; }
+.fanout-bar i { flex: 1; height: 3px; border-radius: 2px; background: var(--line); }
+.fanout-bar i.run { background: var(--accent); }
+.fanout-bar i.done { background: var(--add); }
+.fanout-bar i.wait { background: var(--warn-dot); }
+.fanout-bar i.err { background: var(--del); }
+.fanout-bar i.stop { background: var(--ink-4); }
+/* One grid for all rows (subgrid in the app), so activity lines up without a fixed label width. */
+.fanout-rows { display: grid; grid-template-columns: 12px auto auto 14px minmax(0, 1fr) auto; grid-auto-rows: minmax(22px, auto); align-items: center; column-gap: 8px; padding-left: 2px; }
+.fanout-rows > .r { display: contents; }
+.subagent-label { min-width: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; color: var(--ink-4); }
+.subagent-role { display: flex; color: var(--ink-4); }
+.subagent-activity { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 12px; }
+.subagent-activity .tl { font-family: var(--mono); font-size: 11.5px; }
+.subagent-activity.done { color: var(--add); }
+.subagent-activity.error { color: var(--del); }
+.subagent-activity.warn { color: var(--warn); }
+.subagent-activity.quiet { color: var(--ink-4); }
+.r.finished .subagent-activity { opacity: 0.85; }
+.r.notstarted > * { opacity: 0.55; }
+.m { width: 12px; height: 12px; display: grid; place-items: center; }
+.m-run::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.m-pend::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #c3c6e6; box-sizing: border-box; }
+.m-stop::before { content: ""; width: 7px; height: 7px; border-radius: 1.5px; background: var(--ink-4); }
+.m-done { color: var(--add); }
+.m-err { color: var(--del); }
+.m-wait { color: var(--warn); }
+.fanout-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink-3); font-size: 12px; line-height: 1.45; }
+.fanout-note .ic { margin-top: 2px; }
+.fanout-note.warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
+.fanout-note code { font-size: 11.5px; }
+.link { color: var(--accent-text); font-size: 12px; font-weight: 500; white-space: nowrap; }
+
+/* Composer */
+.composer { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 12px 8px 16px; border: 1px solid var(--edge); border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(22, 23, 27, 0.06), 0 1px 2px rgba(22, 23, 27, 0.04); }
+.ph { font-size: 14px; color: var(--ink-4); }
+.composer-bar { display: flex; align-items: center; gap: 6px; min-height: 32px; margin-top: 10px; min-width: 0; }
+.icon-btn { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--ink-3); }
+.dd-trig { display: flex; align-items: center; gap: 5px; min-width: 0; min-height: 28px; padding: 0 7px; border-radius: 8px; color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+.dd-trig.open { background: var(--soft); }
+.dd-trig.orch { color: var(--accent-text); }
+.dd-trig .ic { color: currentColor; }
+.ctx { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; }
+.model { display: flex; align-items: center; gap: 4px; padding: 0 7px; min-height: 28px; border-radius: 8px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.round-btn { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; }
+.dd-menu { width: 320px; max-width: 100%; padding: 4px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--edge), 0 12px 32px rgba(19, 20, 43, 0.16); }
+.dd-group { padding: 8px 10px 4px; font-size: 10.5px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.dd-option { display: flex; gap: 8px; padding: 7px 10px 8px 6px; border-radius: 8px; }
+.dd-option.active { background: var(--soft); }
+.dd-check { width: 14px; flex: none; padding-top: 3px; color: var(--accent); }
+.dd-label { font-size: 12.5px; font-weight: 500; }
+.dd-desc { margin-top: 1px; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.dd-foot { margin: 4px 2px 0; padding: 8px 8px 6px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.45; color: var(--ink-4); }
+
+/* Settings */
+.s-group { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.s-title { margin: 0; font-size: 13.5px; font-weight: 600; }
+.s-desc { margin: 2px 0 12px; font-size: 12.5px; color: var(--ink-3); }
+.s-item { display: flex; align-items: flex-start; gap: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.s-item > div { flex: 1; min-width: 0; }
+.s-label { font-size: 13px; font-weight: 500; }
+.s-hint { font-size: 12px; color: var(--ink-3); }
+.dd-soft { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px 0 10px; border-radius: 8px; background: var(--soft); font-size: 12.5px; white-space: nowrap; }
+
+/* Panel */
+.panel { width: 100%; max-width: 440px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+.panel-head { display: flex; align-items: center; gap: 6px; height: 46px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--line); }
+.panel-tabs { flex: 1; min-width: 0; align-self: stretch; display: flex; overflow: hidden; }
+.panel-tab { position: relative; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 9px; color: var(--ink-3); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.panel-tab.cur { color: var(--ink); }
+.panel-tab.cur::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.panel-tab .live-dot { width: 5px; height: 5px; }
+.agents { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.agents-head h3 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.agents-status { margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.lbl { margin-bottom: 4px; font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.agents-plan p { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.phase { border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.phase-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px; font-size: 12.5px; }
+.phase-n { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--accent-text); font-size: 10.5px; font-weight: 600; }
+.phase-n.ok { background: #e9f7ef; color: var(--add); }
+.phase-name { flex: none; font-weight: 500; }
+.phase-meta { min-width: 0; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-time { flex: none; margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-4); }
+.phase .chev { flex: none; display: flex; color: var(--ink-4); }
+.agent-list { padding: 3px; border-top: 1px solid var(--line); }
+.agent-row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 1px; padding: 5px 8px; border-radius: 8px; }
+.agent-row.sel { background: var(--soft); }
+.agent-row .top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.agent-row .act { grid-column: 2 / 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink-2); }
+.agent-row .act.done { color: var(--add); }
+.agent-row .act.warn { color: var(--warn); }
+.agent-row .act.error { color: var(--del); }
+.agents-next { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; color: var(--ink-3); }
+.agents-next .ic { margin-top: 2px; }
+.agents-foot { padding-top: 10px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 11px; line-height: 1.6; color: var(--ink-4); }
+.agents-attn { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 8px 8px 10px; border: 1px solid var(--warn-line); border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 12.5px; }
+.btn-s { flex: none; margin-left: auto; padding: 3px 10px; border: 1px solid #e4e4e9; border-radius: 8px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btns .btn-s { margin-left: 0; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.kv .k { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+.kv .v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; }
+.kv .s { font-size: 12px; white-space: nowrap; }
+.ok { color: var(--add); }
+.bad { color: var(--del); }
+.wtag { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-ink); font-family: var(--sans); font-size: 11px; line-height: 17px; white-space: nowrap; }
+.sec { display: flex; flex-direction: column; gap: 4px; }
+.after { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--tray); }
+
+/* Child detail */
+.back { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-3); font-size: 12.5px; }
+.role-line { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ink-3); }
+.task { margin: 0; font-size: 12.5px; white-space: pre-wrap; }
+.substeps { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 1.5px solid var(--border); font-family: var(--mono); font-size: 11.5px; line-height: 1.75; color: var(--ink-2); }
+.substeps li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; }
+.substeps .tool { color: var(--ink-4); }
+.substeps .t { color: var(--ink-4); }
+.substeps .more { display: block; color: var(--ink-4); }
+.result { font-size: 13px; line-height: 1.55; }
+.result p { margin: 0; }
+.files { display: flex; flex-direction: column; }
+.file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 8px; padding: 3px 8px; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+.file-row.sel { background: var(--soft); }
+.file-row .n { font-size: 11.5px; white-space: nowrap; }
+.callout { display: flex; gap: 7px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--warn-line); border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 12.5px; line-height: 1.45; }
+.callout .ic { margin-top: 2px; }
+.usage { font-family: var(--mono); font-size: 11px; color: var(--ink-4); }
+.diff { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-family: var(--mono); font-size: 12px; line-height: 1.7; }
+.diff-path { padding: 6px 12px; color: var(--ink-4); border-bottom: 1px solid var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-scroll { overflow-x: auto; }
+.diff-lines { width: max-content; min-width: 100%; }
+.diff-hunk { padding: 2px 12px; color: var(--ink-4); white-space: pre; }
+.diff-line { display: grid; grid-template-columns: 40px max-content; color: var(--ink-2); white-space: pre; }
+.diff-line .no { padding-right: 10px; text-align: right; color: var(--ink-4); }
+.diff-line .tx { padding-right: 12px; }
+.diff-line.is-add { background: #e9f7ef; color: #0f5530; }
+.diff-line.is-add .no { color: #3e7c59; }
+.diff-line.is-del { background: #fdeeee; color: #8e1d23; }
+.diff-line.is-del .no { color: #a4545a; }
+.diff-line.is-del .tx { text-decoration: line-through; text-decoration-color: rgba(142, 29, 35, 0.35); }
+
+/* Ask card */
+.ask { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(22, 23, 27, 0.06), 0 0 0 1px rgba(22, 23, 27, 0.05); }
+.ask-head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+.ask-head strong { color: var(--ink); font-weight: 500; }
+.ask-q { margin: 0; font-size: 15px; font-weight: 500; }
+.ask-cmd { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--tray); font-family: var(--mono); font-size: 12px; }
+.ask-opts { display: flex; flex-direction: column; gap: 6px; }
+.ask-opt { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.ask-opt.first { border-color: var(--accent); }
+.kbd { padding: 0 5px; border: 1px solid var(--edge); border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--ink-4); }
+
+/* Pane head, sidebar */
+.pane-head { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; }
+.crumb { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.crumb .pn { flex: none; color: var(--ink-4); }
+.crumb h1 { margin: 0; font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes-toggle { flex: none; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 8px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.changes-toggle.icon { width: 30px; padding: 0; justify-content: center; }
+.changes-toggle.press { background: var(--soft); color: var(--accent-text); }
+.changes-toggle.agents { color: var(--accent-text); }
+.changes-toggle.attn { background: var(--warn-bg); color: var(--warn); }
+.changes-toggle.svc { color: var(--add); }
+.service-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--add); box-shadow: 0 0 0 3px #146c3c29; }
+.side { width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 2px; }
+.switcher { display: flex; gap: 2px; width: max-content; margin-bottom: 12px; padding: 3px; border-radius: 10px; background: var(--tab); }
+.switcher span { position: relative; width: 34px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
+.switcher span.cur { background: #fff; color: var(--accent); box-shadow: 0 1px 2px rgba(19, 20, 43, 0.12); }
+.busy-dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--tab); box-sizing: content-box; }
+.project { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; font-weight: 500; color: var(--secondary); }
+.session-row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 33px; border-radius: 9px; color: var(--secondary); }
+.session-row.cur { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(19, 20, 43, 0.08); }
+.session-row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.running-meta { flex: none; display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.running-meta.attn { color: var(--warn); font-family: var(--sans); font-weight: 500; }
+.agents-count { display: inline-flex; align-items: center; gap: 2px; }
+.unread-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--ink); }
+.session-meta { flex: none; font-size: 11px; color: var(--muted); }
+
+/* Two columns when there is room. */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+
+/* Narrow pane: what the container query does at <= 420px. */
+.narrow { width: 360px; max-width: 100%; padding: 12px; border: 1px dashed var(--border); border-radius: 10px; }
+.narrow .fanout-rows { grid-template-columns: 12px auto 14px minmax(0, 1fr) auto; column-gap: 6px; }
+.narrow .r > .agent-tag { display: none; }
+.narrow .subagent-label { max-width: 72px; }
+.narrow .live-cmd { padding: 8px 10px; }
+.zh { font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<!-- Icons, drawn once. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<defs>
+		<symbol id="i-orch" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.6"/><circle cx="12.5" cy="3.5" r="1.6"/><circle cx="12.5" cy="8" r="1.6"/><circle cx="12.5" cy="12.5" r="1.6"/><path d="M5.1 8h5.8M5 7.2l6-3M5 8.8l6 3"/></symbol>
+		<symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.6"/><circle cx="4.5" cy="12.5" r="1.6"/><circle cx="11.5" cy="5" r="1.6"/><path d="M4.5 5.1v5.8M11.5 6.6c0 3-3.5 2.6-6.4 4.6"/></symbol>
+		<symbol id="i-pen" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></symbol>
+		<symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+		<symbol id="i-x" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+		<symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 4v8M10.5 4v8" stroke-width="2.4"/></symbol>
+		<symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1.8l5 2v4c0 3-2.2 5.2-5 6.4C5.2 13 3 10.8 3 7.8v-4z"/></symbol>
+		<symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2l6.5 11.5h-13z"/><path d="M8 6.5v3M8 11.6v.1"/></symbol>
+		<symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5M8 5.2v.1"/></symbol>
+		<symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></symbol>
+		<symbol id="i-chevd" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+		<symbol id="i-back" viewBox="0 0 16 16"><path d="M10 4L6 8l4 4"/></symbol>
+		<symbol id="i-clip" viewBox="0 0 16 16"><path d="M13 7.5l-5 5a3 3 0 01-4.3-4.3l5.6-5.6a2 2 0 012.8 2.8L6.6 11a1 1 0 01-1.4-1.4l4.6-4.6"/></symbol>
+		<symbol id="i-send" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></symbol>
+		<symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3 10.5V3.5A1 1 0 014 2.5h6.5"/></symbol>
+		<symbol id="i-file" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/></symbol>
+		<symbol id="i-server" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></symbol>
+		<symbol id="i-views" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M9.5 2.5v11"/></symbol>
+		<symbol id="i-close" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+		<symbol id="i-next" viewBox="0 0 16 16"><path d="M3 8h9M9 5l3 3-3 3"/></symbol>
+		<symbol id="i-code" viewBox="0 0 16 16"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/></symbol>
+		<symbol id="i-book" viewBox="0 0 16 16"><path d="M3 3h4a1 1 0 011 1v9a1 1 0 00-1-1H3zM13 3H9a1 1 0 00-1 1v9a1 1 0 011-1h4z"/></symbol>
+		<symbol id="i-feather" viewBox="0 0 16 16"><path d="M12.5 3.5c-4 0-7 3-7 7v2h2c4 0 7-3 7-7v-2zM3 13l6-6"/></symbol>
+	</defs>
+</svg>
+
+<div class="tv">
+
+<!-- 1 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">1 · Composer: work-mode picker open <span class="tag">v1</span><small>Beside the permission picker. Options get a description line (new <code>.dd-desc</code>) and the menu a scope footnote (<code>.dd-foot</code>).</small></p>
+	<div class="frame">
+		<div class="col" style="gap:8px">
+			<div class="dd-menu" style="margin-left:30px" role="listbox" aria-label="Work mode">
+				<div class="dd-group">Work mode</div>
+				<div class="dd-option">
+					<span class="dd-check"></span>
+					<div><div class="dd-label">Default</div><div class="dd-desc">Works on the task itself, and uses subagents when it decides to.</div></div>
+				</div>
+				<div class="dd-option active" aria-selected="true">
+					<span class="dd-check"><svg class="ic"><use href="#i-check"/></svg></span>
+					<div><div class="dd-label">Orchestrator</div><div class="dd-desc">Splits large tasks across subagents: scouts first, one writer unless parts touch separate files, then applies and tests here.</div></div>
+				</div>
+				<div class="dd-foot">For this session. New sessions start in Default. Change that in Settings → Code.</div>
+			</div>
+			<div class="composer">
+				<div class="ph">Describe the task. The agent splits it if it's large, or type / for commands</div>
+				<div class="composer-bar">
+					<span class="icon-btn"><svg class="ic s15"><use href="#i-clip"/></svg></span>
+					<span class="dd-trig orch open"><svg class="ic"><use href="#i-orch"/></svg>Orchestrator</span>
+					<span class="dd-trig"><svg class="ic"><use href="#i-shield"/></svg>Approve for me</span>
+					<span class="ctx"><svg width="15" height="15" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#E6E7F7" stroke-width="5"/><circle cx="18" cy="18" r="15" fill="none" stroke="#5457E8" stroke-width="5" stroke-dasharray="22 95" transform="rotate(-90 18 18)" stroke-linecap="round"/></svg></span>
+					<span class="model ellipsis">Opus 5.5 · High</span>
+					<span class="round-btn"><svg class="ic s14" style="stroke-width:2"><use href="#i-send"/></svg></span>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 1b ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">1b · Closed picker in Default, and Settings → Code <span class="tag">v1</span><small>Default reads like any other ghost control. The tinted "Orchestrator" above is the mode's only presence while idle.</small></p>
+	<div class="frame">
+		<div class="col" style="gap:14px">
+			<div class="composer">
+				<div class="ph">Ask for the next change, or type / for commands</div>
+				<div class="composer-bar">
+					<span class="icon-btn"><svg class="ic s15"><use href="#i-clip"/></svg></span>
+					<span class="dd-trig"><svg class="ic"><use href="#i-orch"/></svg>Default</span>
+					<span class="dd-trig"><svg class="ic"><use href="#i-shield"/></svg>Approve for me</span>
+					<span class="ctx"><svg width="15" height="15" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#E6E7F7" stroke-width="5"/></svg></span>
+					<span class="model ellipsis">Opus 5.5 · High</span>
+					<span class="round-btn" style="opacity:.5"><svg class="ic s14" style="stroke-width:2"><use href="#i-send"/></svg></span>
+				</div>
+			</div>
+			<div class="s-group">
+				<p class="s-title">Work mode</p>
+				<p class="s-desc">How new Code sessions start. Each session can change it in the message box.</p>
+				<div class="s-item">
+					<div><div class="s-label">New sessions start in</div><div class="s-hint">Splits large tasks across subagents: scouts first, one writer unless parts touch separate files, then applies and tests here.</div></div>
+					<span class="dd-soft">Orchestrator <svg class="ic s11"><use href="#i-chevd"/></svg></span>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 2 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">2 · The split moment <span class="tag">v1</span><small>The agent's sentence says why; the fan-out block starts in its plan state (from <code>options.preflight</code>), then turns into the live block in place.</small></p>
+	<div class="frame">
+		<div class="col">
+			<div class="prompt"><div class="bubble">Add session refresh to the API and show an expired-session banner in the web app. Keep the existing tests green.</div></div>
+			<div class="steps-toggle"><span><strong>Working</strong> for 1m 31s</span><span>· 3 steps</span></div>
+			<ol class="steps">
+				<li class="step"><div class="step-summary"><span class="mark"></span><span class="tool">read</span><span class="target ellipsis">src/api/session.ts</span><span class="meta">214 lines</span><span class="time">0.1s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></li>
+				<li class="step"><div class="step-summary"><span class="mark"></span><span class="tool">subagent</span><span class="target subagent-target"><span class="agent-tag">scout</span><span class="ellipsis">Map how sessions are created and refreshed. List entry points and risks.</span></span><span class="meta">9 tools</span><span class="time">1m 12s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></li>
+			</ol>
+			<div class="answer"><p>The API refresh and the web banner touch mostly separate files, so I'll split it: <strong>api</strong> adds the refresh endpoint under <code>src/api/</code> and <strong>web</strong> adds the banner under <code>src/web/</code>, each in its own worktree. <strong>tests</strong> checks both plans for missing coverage. Then I'll apply the two patches here, one at a time, and run the tests.</p></div>
+			<div class="live-cmd fanout" role="group" aria-label="Implementing, starting 3 agents">
+				<div class="live-cmd-head">
+					<span class="live-dot"></span>
+					<span class="live-cmd-prose">Implementing · 2 writers in their own worktrees, 1 reviewer</span>
+					<span class="live-cmd-time">0:02</span>
+				</div>
+				<div class="fanout-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+				<div class="fanout-rows">
+					<div class="r"><span class="m m-pend"></span><span class="agent-tag">worker</span><span class="subagent-label">api</span><span class="subagent-role" aria-label="Writes in its own worktree"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity quiet"><span class="tl">src/api/session.ts, src/routes.ts, +1 more</span></span><span class="subagent-now-count">Starting</span></div>
+					<div class="r"><span class="m m-pend"></span><span class="agent-tag">worker</span><span class="subagent-label">web</span><span class="subagent-role" aria-label="Writes in its own worktree"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity quiet"><span class="tl">src/web/SessionBanner.tsx, src/routes.ts</span></span><span class="subagent-now-count">Starting</span></div>
+					<div class="r"><span class="m m-pend"></span><span class="agent-tag">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role" aria-label="Reads only"></span><span class="subagent-activity quiet">Check both changes are covered by tests</span><span class="subagent-now-count">Starting</span></div>
+				</div>
+				<div class="fanout-note warn"><svg class="ic"><use href="#i-warn"/></svg><span>api and web both plan to change <code>src/routes.ts</code>. The main agent applies their patches one at a time.</span></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">3 · Live fan-out, 3 children mid-run <span class="tag">v1</span><small>Running, waiting on the main agent, done. Workflow children report tool names, not arguments, so "edit" stands alone.</small></p>
+	<div class="frame">
+		<div class="live-cmd fanout" role="group" aria-label="Implementing, 1 of 3 finished">
+			<div class="live-cmd-head">
+				<span class="live-dot"></span>
+				<span class="live-cmd-prose">Implementing · 1 of 3 finished <span class="h-warn">· 1 waiting on the main agent</span></span>
+				<span class="live-cmd-time">3:41</span>
+			</div>
+			<div class="fanout-bar" aria-hidden="true"><i class="run"></i><i class="wait"></i><i class="done"></i></div>
+			<div class="fanout-rows">
+				<div class="r"><span class="m m-run"></span><span class="agent-tag">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity"><span class="tl">edit</span></span><span class="subagent-now-count">14 tools · 3:41</span></div>
+				<div class="r"><span class="m m-wait"><svg class="ic s11"><use href="#i-pause"/></svg></span><span class="agent-tag">worker</span><span class="subagent-label">web</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity warn">Waiting on the main agent · Should the banner also show on the sign-in page?</span><span class="subagent-now-count">2:58</span></div>
+				<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role"></span><span class="subagent-activity done">Done · Both plans need a test for an expired refresh token</span><span class="subagent-now-count">1:50</span></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 4 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">4 · Live fan-out, 8 children <span class="tag">v1</span><small>All 8 rows stay, in launch order. With 4 at a time (a setting, see spec §11.7), one waits for a slot. One failed.</small></p>
+	<div class="frame">
+		<div class="live-cmd fanout" role="group" aria-label="Reviewing, 3 of 8 finished, 1 failed">
+			<div class="live-cmd-head">
+				<span class="live-dot"></span>
+				<span class="live-cmd-prose">Reviewing · 3 of 8 finished <span class="h-err">· 1 failed</span></span>
+				<span class="live-cmd-time">2:26</span>
+			</div>
+			<div class="fanout-bar" aria-hidden="true"><i class="done"></i><i class="run"></i><i class="done"></i><i class="err"></i><i class="run"></i><i class="run"></i><i class="run"></i><i></i></div>
+			<div class="fanout-rows">
+				<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">correctness</span><span class="subagent-role"></span><span class="subagent-activity done">Done · No blocking issues; one nit in refresh.ts</span><span class="subagent-now-count">1:40</span></div>
+				<div class="r"><span class="m m-run"></span><span class="agent-tag">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role"></span><span class="subagent-activity"><span class="tl">bash</span></span><span class="subagent-now-count">11 tools · 2:26</span></div>
+				<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">security</span><span class="subagent-role"></span><span class="subagent-activity done">Done · Token is rotated on refresh; looks fine</span><span class="subagent-now-count">2:01</span></div>
+				<div class="r finished"><span class="m m-err"><svg class="ic s11"><use href="#i-x"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">performance</span><span class="subagent-role"></span><span class="subagent-activity error">Failed · The model returned an empty response</span><span class="subagent-now-count">0:48</span></div>
+				<div class="r"><span class="m m-run"></span><span class="agent-tag">reviewer</span><span class="subagent-label">api-docs</span><span class="subagent-role"></span><span class="subagent-activity"><span class="tl">read</span></span><span class="subagent-now-count">6 tools · 2:26</span></div>
+				<div class="r"><span class="m m-run"></span><span class="agent-tag">reviewer</span><span class="subagent-label">types</span><span class="subagent-role"></span><span class="subagent-activity"><span class="tl">grep</span></span><span class="subagent-now-count">9 tools · 1:38</span></div>
+				<div class="r"><span class="m m-run"></span><span class="agent-tag">oracle</span><span class="subagent-label">design</span><span class="subagent-role"></span><span class="subagent-activity">Thinking</span><span class="subagent-now-count">2 tools · 0:47</span></div>
+				<div class="r"><span class="m m-pend"></span><span class="agent-tag">reviewer</span><span class="subagent-label">accessibility-and-i18n</span><span class="subagent-role"></span><span class="subagent-activity quiet">Queued · starts when a slot frees</span><span class="subagent-now-count"></span></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">5 · Finished and folded <span class="tag">v1</span><small>The run folds as today, plus "· 7 agents". The receipt line under it is v1.1.</small></p>
+	<div class="frame">
+		<div class="col">
+			<div class="prompt"><div class="bubble">Add session refresh to the API and show an expired-session banner in the web app. Keep the existing tests green.</div></div>
+			<div class="steps-toggle"><span><strong>Worked</strong> for 14m 20s</span><span>· 22 steps</span><span>· 7 agents</span><svg class="ic s11"><use href="#i-chev"/></svg></div>
+			<div class="receipt" aria-label="Agents in this run">
+				<span class="it"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span>scout</span>
+				<span class="it"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span>api <span class="mono plus">+120</span> <span class="mono minus">−14</span></span>
+				<span class="it"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span>web <span class="mono plus">+62</span> <span class="mono minus">−26</span></span>
+				<span class="it"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span>4 reviewers</span>
+				<span class="link">Show agents</span>
+			</div>
+			<div class="answer"><p>Sessions now refresh through <code>POST /api/session/refresh</code>, and the web app shows a banner when a refresh fails. I applied both patches here and ran <code>npm test</code>: 214 passed. The tests reviewer asked for a test of an expired refresh token; I added it to <code>test/api/session.test.ts</code>.</p></div>
+		</div>
+	</div>
+</section>
+
+<!-- 6 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">6 · Overlap warning, in the thread <span class="tag">v1</span><small>Steps opened after the fan-out. Writers changed the same file; neither patch is applied yet. Same sentence appears in the Agents tab and as a per-file tag in the detail.</small></p>
+	<div class="frame">
+		<div class="col" style="gap:10px">
+			<ol class="steps" style="margin:0">
+				<li class="step"><div class="step-summary"><span class="mark"></span><span class="tool">subagent</span><span class="target subagent-target"><span class="agent-tag">scout</span><span class="ellipsis">Map how sessions are created and refreshed.</span></span><span class="meta">9 tools</span><span class="time">1m 12s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></li>
+				<li class="step"><div class="step-summary"><span class="mark"></span><span class="tool">subagent</span><span class="target subagent-target"><span class="agent-tag">worker</span><span class="agent-tag">reviewer</span><span class="ellipsis">Implementing · 2 writers, 1 reviewer</span></span><span class="meta"><span class="plus">+182</span> <span class="minus">−40</span> · 7 files</span><span class="time">6m 10s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></li>
+			</ol>
+			<div class="fanout-note warn" style="margin:0 0 0 22px"><svg class="ic"><use href="#i-warn"/></svg><span>api and web both changed <code>src/routes.ts</code>. Applied one at a time, the second may not apply cleanly. <span class="link">Show both</span></span></div>
+		</div>
+	</div>
+</section>
+
+<!-- 7 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">7 · Agents tab, running <span class="tag">v1</span><small>Code's side panel. Plan from the agent's own words, one card per phase, the current one open. "Next" comes from the mode's fixed steps, not a guess.</small></p>
+	<div class="frame">
+		<div class="panel">
+			<div class="panel-head">
+				<div class="panel-tabs" role="tablist">
+					<span class="panel-tab"><svg class="ic"><use href="#i-file"/></svg>Changes</span>
+					<span class="panel-tab cur"><svg class="ic"><use href="#i-orch"/></svg>Agents<span class="live-dot"></span></span>
+					<span class="panel-tab"><svg class="ic"><use href="#i-server"/></svg>Services</span>
+				</div>
+				<span class="icon-btn"><svg class="ic"><use href="#i-close"/></svg></span>
+			</div>
+			<div class="agents">
+				<div class="agents-head" role="status">
+					<h3>Add session refresh to the API and show an expired-session banner in the web app</h3>
+					<div class="agents-status">Working · 6m 10s · 2 of 4 agents finished · 184k tokens</div>
+				</div>
+				<div class="agents-plan">
+					<div class="lbl">Plan</div>
+					<p class="clamp3">The API refresh and the web banner touch mostly separate files, so I'll split it: api adds the refresh endpoint under src/api/ and web adds the banner under src/web/, each in its own worktree. tests checks both plans for missing coverage. Then I'll apply the two patches here, one at a time, and run the tests.</p>
+					<span class="link">Show all</span>
+				</div>
+				<div class="phase">
+					<div class="phase-head"><span class="phase-n ok">1</span><span class="phase-name">Scouting</span><span class="phase-meta">scout · done</span><span class="phase-time">1m 12s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div>
+				</div>
+				<div class="phase">
+					<div class="phase-head"><span class="phase-n">2</span><span class="phase-name">Implementing</span><span class="phase-meta">2 writers, 1 reviewer</span><span class="phase-time">4:58</span><span class="chev"><svg class="ic s11"><use href="#i-chevd"/></svg></span></div>
+					<div class="agent-list" role="list">
+						<div class="agent-row sel" role="listitem">
+							<span class="m m-run"></span>
+							<span class="top"><span class="agent-tag">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span></span>
+							<span class="subagent-now-count">14 tools · 3:41</span>
+							<span class="act"><span class="mono" style="font-size:11.5px">edit</span></span>
+						</div>
+						<div class="agent-row" role="listitem">
+							<span class="m m-wait"><svg class="ic s11"><use href="#i-pause"/></svg></span>
+							<span class="top"><span class="agent-tag">worker</span><span class="subagent-label">web</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span></span>
+							<span class="subagent-now-count">2:58</span>
+							<span class="act warn">Waiting on the main agent · Should the banner also show on the sign-in page?</span>
+						</div>
+						<div class="agent-row" role="listitem">
+							<span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span>
+							<span class="top"><span class="agent-tag quiet">reviewer</span><span class="subagent-label">tests</span></span>
+							<span class="subagent-now-count">1:50</span>
+							<span class="act done">Done · Both plans need a test for an expired refresh token</span>
+						</div>
+					</div>
+				</div>
+				<div class="agents-next"><svg class="ic"><use href="#i-next"/></svg><span>Next: the main agent applies each patch here, one at a time, then runs the checks.</span></div>
+				<div class="agents-foot">4 agents · 184k tokens · $0.74 · 6m 10s · agent time 9m 40s</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 8 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">8 · Agents tab, finished <span class="tag">v1</span><small>Phases fold to one line each. "After the agents": patches with applied state (from the main agent's <code>git apply</code> steps), the overlap, and the checks it ran.</small></p>
+	<div class="frame">
+		<div class="panel">
+			<div class="panel-head">
+				<div class="panel-tabs" role="tablist">
+					<span class="panel-tab"><svg class="ic"><use href="#i-file"/></svg>Changes</span>
+					<span class="panel-tab cur"><svg class="ic"><use href="#i-orch"/></svg>Agents</span>
+				</div>
+				<span class="icon-btn"><svg class="ic"><use href="#i-close"/></svg></span>
+			</div>
+			<div class="agents">
+				<div class="agents-head" role="status">
+					<h3>Add session refresh to the API and show an expired-session banner in the web app</h3>
+					<div class="agents-status">Done · 14m 20s · 7 agents</div>
+				</div>
+				<div class="phase"><div class="phase-head"><span class="phase-n ok">1</span><span class="phase-name">Scouting</span><span class="phase-meta">scout · done</span><span class="phase-time">1m 12s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></div>
+				<div class="phase"><div class="phase-head"><span class="phase-n ok">2</span><span class="phase-name">Implementing</span><span class="phase-meta">3 agents · <span class="plus mono">+182</span> <span class="minus mono">−40</span></span><span class="phase-time">6m 10s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></div>
+				<div class="phase"><div class="phase-head"><span class="phase-n ok">3</span><span class="phase-name">Reviewing</span><span class="phase-meta">3 reviewers · done</span><span class="phase-time">2m 40s</span><span class="chev"><svg class="ic s11"><use href="#i-chev"/></svg></span></div></div>
+				<div class="after">
+					<div class="sec">
+						<div class="lbl">Patches</div>
+						<div class="kv"><span class="k">api</span><span class="v"><span class="plus">+120</span> <span class="minus">−14</span> · 4 files</span><span class="s ok">Applied</span></div>
+						<div class="kv"><span class="k">web</span><span class="v"><span class="plus">+62</span> <span class="minus">−26</span> · 3 files</span><span class="s ok">Applied</span></div>
+					</div>
+					<div class="fanout-note" style="margin:0"><svg class="ic"><use href="#i-info"/></svg><span>api and web both changed <code>src/routes.ts</code>. Both applied.</span></div>
+					<div class="sec">
+						<div class="lbl">Checked after applying</div>
+						<div class="kv"><span class="k">npm test</span><span class="v"></span><span class="s ok">Passed in 42s</span></div>
+						<div class="kv"><span class="k">npm run typecheck</span><span class="v"></span><span class="s ok">Passed in 18s</span></div>
+					</div>
+				</div>
+				<div class="agents-foot">7 agents · 412k tokens · $1.84 · 14m 20s · agent time 31m</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 9 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">9 · A writer's detail, with its patch <span class="tag">v1</span><small>Drilled in from a row. Files from the patch with their own +/−; the shared file is tagged; picking a file shows its hunks in DiffView.</small></p>
+	<div class="frame">
+		<div class="panel">
+			<div class="panel-head">
+				<div class="panel-tabs" role="tablist">
+					<span class="panel-tab"><svg class="ic"><use href="#i-file"/></svg>Changes</span>
+					<span class="panel-tab cur"><svg class="ic"><use href="#i-orch"/></svg>Agents</span>
+				</div>
+				<span class="icon-btn"><svg class="ic"><use href="#i-close"/></svg></span>
+			</div>
+			<div class="agents">
+				<span class="back"><svg class="ic"><use href="#i-back"/></svg>All agents</span>
+				<div class="sec" style="gap:3px">
+					<div class="row"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag">worker</span><span class="subagent-label" style="font-size:12.5px;color:var(--ink)">api</span><span class="ok" style="font-size:12.5px">Done</span><span class="subagent-now-count">4m 12s</span></div>
+					<div class="role-line"><svg class="ic s11"><use href="#i-branch"/></svg><span>Writes in its own worktree ·</span><span class="mono ellipsis">pi-sub/7f3a-api</span><svg class="ic s11" style="flex:none"><use href="#i-copy"/></svg></div>
+				</div>
+				<div class="sec">
+					<div class="lbl">Task</div>
+					<p class="task clamp3">Add POST /api/session/refresh that rotates the refresh token, returns a new access token, and answers 401 with code "session_expired" when the refresh token is expired. Register the route in src/routes.ts. Add tests in test/api/session.test.ts.</p>
+				</div>
+				<div class="sec">
+					<div class="lbl">Activity</div>
+					<ol class="substeps">
+						<li><span class="tool">read</span><span class="ellipsis">src/api/session.ts</span><span class="t">0:04</span></li>
+						<li><span class="tool">write</span><span class="ellipsis">src/api/refresh.ts</span><span class="t">1:10</span></li>
+						<li><span class="tool">edit</span><span class="ellipsis">src/routes.ts</span><span class="t">1:52</span></li>
+						<li><span class="tool">edit</span><span class="ellipsis">test/api/session.test.ts</span><span class="t">2:40</span></li>
+						<li><span class="tool">bash</span><span class="ellipsis">npx vitest run test/api/session.test.ts</span><span class="t">3:58</span></li>
+						<li class="more">+ 17 more</li>
+					</ol>
+				</div>
+				<div class="sec">
+					<div class="lbl">Result</div>
+					<div class="result"><p>Added the refresh endpoint and token rotation. Expired tokens answer 401 with <code class="mono" style="font-size:12px">session_expired</code>. 6 new tests pass in the worktree; the full suite needs dependencies, so run it in the project folder.</p></div>
+				</div>
+				<div class="sec">
+					<div class="lbl">Changes · <span class="plus mono">+120</span> <span class="minus mono">−14</span> · 4 files</div>
+					<div class="files">
+						<div class="file-row"><span class="ellipsis">src/api/refresh.ts</span><span></span><span class="n"><span class="plus">+71</span></span></div>
+						<div class="file-row"><span class="ellipsis">src/api/session.ts</span><span></span><span class="n"><span class="plus">+18</span> <span class="minus">−10</span></span></div>
+						<div class="file-row sel"><span class="ellipsis">src/routes.ts</span><span class="wtag">Also changed by web</span><span class="n"><span class="plus">+3</span> <span class="minus">−1</span></span></div>
+						<div class="file-row"><span class="ellipsis">test/api/session.test.ts</span><span></span><span class="n"><span class="plus">+28</span> <span class="minus">−3</span></span></div>
+					</div>
+					<div class="diff">
+						<div class="diff-path">src/routes.ts</div>
+						<div class="diff-scroll"><div class="diff-lines">
+							<div class="diff-hunk">@@ -12,7 +12,9 @@ export const routes = [</div>
+							<div class="diff-line"><span class="no">12</span><span class="tx">  { method: "POST", path: "/api/session", handler: createSession },</span></div>
+							<div class="diff-line is-del"><span class="no">13</span><span class="tx">  { method: "DELETE", path: "/api/session", handler: endSession }</span></div>
+							<div class="diff-line is-add"><span class="no">13</span><span class="tx">  { method: "DELETE", path: "/api/session", handler: endSession },</span></div>
+							<div class="diff-line is-add"><span class="no">14</span><span class="tx">  { method: "POST", path: "/api/session/refresh", handler: refreshSession },</span></div>
+							<div class="diff-line is-add"><span class="no">15</span><span class="tx">  // Answers 401 session_expired when the refresh token is too old.</span></div>
+							<div class="diff-line"><span class="no">16</span><span class="tx">];</span></div>
+						</div></div>
+					</div>
+					<div class="role-line" style="margin-top:4px"><span class="ok">Applied by the main agent</span><span>· 13:58</span></div>
+					<div class="btns" style="margin-top:4px"><span class="btn-s">Ask about this</span><span class="btn-s">Copy patch path</span></div>
+				</div>
+				<div class="usage">claude-sonnet-5-5 · fresh context · 48k in · 6k out · 22&nbsp;tools · 4m&nbsp;12s · $0.31</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 10 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">10 · Problem: a child was denied a risky action, and the main agent asks you <span class="tag">v1</span><small>The child can't ask, so the gate denies it; the main agent takes the step and the usual question card appears. The header button says "Needs you".</small></p>
+	<div class="frame">
+		<div class="col" style="gap:14px">
+			<div class="pane-head">
+				<div class="crumb"><span class="pn">trivium</span><span class="pn">/</span><h1>Session refresh and banner</h1></div>
+				<span class="changes-toggle attn"><span class="live-dot attn"></span>Needs you</span>
+				<span class="changes-toggle icon"><svg class="ic s15"><use href="#i-views"/></svg></span>
+			</div>
+			<div class="live-cmd fanout">
+				<div class="live-cmd-head">
+					<span class="live-dot"></span>
+					<span class="live-cmd-prose">Implementing · 1 of 2 finished</span>
+					<span class="live-cmd-time">5:02</span>
+				</div>
+				<div class="fanout-bar" aria-hidden="true"><i class="run"></i><i class="done"></i></div>
+				<div class="fanout-rows">
+					<div class="r"><span class="m m-run"></span><span class="agent-tag">worker</span><span class="subagent-label">web</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity warn"><svg class="ic s11" style="vertical-align:-1px"><use href="#i-shield"/></svg> Denied <span class="tl">rm -r dist</span> · left for the main agent</span><span class="subagent-now-count">19 tools · 5:02</span></div>
+					<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity done">Done · Refresh endpoint and tests added</span><span class="subagent-now-count"><span class="plus">+120</span> <span class="minus">−14</span></span></div>
+				</div>
+			</div>
+			<div class="ask" role="dialog" aria-label="Question from the main agent">
+				<div class="ask-head"><strong>Waiting for your answer</strong><span>· Approve for me asks before rm -r</span></div>
+				<p class="ask-q">Run this command?</p>
+				<pre class="ask-cmd">rm -r dist</pre>
+				<div class="ask-opts">
+					<div class="ask-opt first"><span class="kbd">1</span>Allow</div>
+					<div class="ask-opt"><span class="kbd">2</span>Allow rm -r for this session</div>
+					<div class="ask-opt"><span class="kbd">3</span>Don't allow</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 11 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">11 · Problem: uncommitted changes, so one writer <span class="tag">v1</span><small>The agent chose one writer in the project folder. The note appears when the host's git status shows changes and the only writer isn't in a worktree. No commit or stash button.</small></p>
+	<div class="frame">
+		<div class="col" style="gap:14px">
+			<div class="answer"><p>There are uncommitted changes in <code>src/web/</code>, so I'll keep this to one writer in the project folder and do the API part first.</p></div>
+			<div class="live-cmd fanout">
+				<div class="live-cmd-head">
+					<span class="live-dot"></span>
+					<span class="live-cmd-label">Delegating to</span>
+					<span class="agent-tag">worker</span>
+					<span class="subagent-role" aria-label="Writes in the project folder" style="color:var(--ink-4)"><svg class="ic s11"><use href="#i-pen"/></svg></span>
+					<span class="live-cmd-prose">Add the refresh endpoint, then the expired-session banner</span>
+					<span class="live-cmd-time">0:40</span>
+				</div>
+				<div class="subagent-now"><span class="ellipsis">↳ edit src/api/refresh.ts</span><span class="subagent-now-count">6 tools · 18k tok</span></div>
+				<div class="fanout-note"><svg class="ic"><use href="#i-info"/></svg><span>One writer, in the project folder: there are uncommitted changes, and separate worktrees need a clean folder.</span></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 12 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">12 · Problem: usage limit ran out mid fan-out <span class="tag">v1</span><small>Children that hit the provider's limit stop; the one that finished keeps its work. Wording and link reuse <code>LimitNotice</code>.</small></p>
+	<div class="frame">
+		<div class="live-cmd fanout">
+			<div class="live-cmd-head">
+				<span class="live-dot rest"></span>
+				<span class="live-cmd-prose">Implementing · 1 of 3 finished <span class="h-warn">· 2 stopped</span></span>
+				<span class="live-cmd-time">7:15</span>
+			</div>
+			<div class="fanout-bar" aria-hidden="true"><i class="done"></i><i class="stop"></i><i class="stop"></i></div>
+			<div class="fanout-rows">
+				<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity done">Done · Refresh endpoint and tests added</span><span class="subagent-now-count"><span class="plus">+120</span> <span class="minus">−14</span></span></div>
+				<div class="r finished"><span class="m m-stop"></span><span class="agent-tag quiet">worker</span><span class="subagent-label">web</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity warn">Stopped · usage limit</span><span class="subagent-now-count">5:31</span></div>
+				<div class="r finished"><span class="m m-stop"></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role"></span><span class="subagent-activity warn">Stopped · usage limit</span><span class="subagent-now-count">5:31</span></div>
+			</div>
+			<div class="fanout-note warn"><svg class="ic"><use href="#i-warn"/></svg><span>Your Anthropic usage limit ran out at 14:02. 2 agents stopped; the one that finished kept its work. It resets at 17:00. <span class="link">Check usage</span></span></div>
+		</div>
+	</div>
+</section>
+
+<!-- 13 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">13 · Problem: patch not captured, worktree kept <span class="tag">v1</span><small>Agents tab, finished. The host never deletes the worktree; it offers the path and a draft for the agent.</small></p>
+	<div class="frame">
+		<div class="panel">
+			<div class="agents">
+				<div class="agents-head" role="status">
+					<h3>Add session refresh to the API and show an expired-session banner in the web app</h3>
+					<div class="agents-status">Done · 12m 02s · 4 agents</div>
+				</div>
+				<div class="after">
+					<div class="sec">
+						<div class="lbl">Patches</div>
+						<div class="kv"><span class="k">api</span><span class="v"><span class="plus">+120</span> <span class="minus">−14</span> · 4 files</span><span class="s ok">Applied</span></div>
+						<div class="kv"><span class="k">web</span><span class="v" style="font-family:var(--sans);font-size:12px;color:var(--warn)">Patch couldn't be captured: git diff failed (index.lock exists)</span><span class="s"></span></div>
+					</div>
+					<div class="callout"><svg class="ic"><use href="#i-warn"/></svg>
+						<div style="min-width:0;flex:1">
+							<div>1 worktree was kept: its changes weren't captured.</div>
+							<div class="mono ellipsis" style="font-size:11.5px;margin:3px 0 6px">~/.pi/subagents/worktrees/trivium/pi-sub-9c1e-web</div>
+							<div class="btns"><span class="btn-s">Copy path</span><span class="btn-s">Ask the agent to clean it up</span></div>
+						</div>
+					</div>
+					<div class="sec">
+						<div class="lbl">Checked after applying</div>
+						<div class="kv"><span class="k">npm test</span><span class="v"></span><span class="s ok">Passed in 40s</span></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 14 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">14 · Sidebar and mode switcher <span class="tag">v1</span><small>A running session shows how many agents work now. A session with an open question shows "Needs you" in amber; the switcher's busy dot turns amber for the mode that needs you.</small></p>
+	<div class="frame chrome">
+		<div class="side">
+			<div class="switcher" aria-label="Modes">
+				<span class="cur" aria-label="Code"><svg class="ic s14"><use href="#i-code"/></svg></span>
+				<span aria-label="Research, needs you"><svg class="ic s14"><use href="#i-book"/></svg><i class="busy-dot" style="background:var(--warn-dot)"></i></span>
+				<span aria-label="Write"><svg class="ic s14"><use href="#i-feather"/></svg></span>
+			</div>
+			<div class="project"><svg class="ic s14"><use href="#i-file"/></svg>trivium</div>
+			<div class="session-row cur"><span class="title">Session refresh and banner</span><span class="running-meta"><span class="live-dot"></span><span class="agents-count" aria-label="3 agents working"><svg class="ic s11"><use href="#i-orch"/></svg>3</span>· 4:12</span></div>
+			<div class="session-row"><span class="title">Fix the flaky upload test</span><span class="running-meta attn"><span class="live-dot attn"></span>Needs you</span></div>
+			<div class="session-row"><span class="title">Docs pass for the API proxy</span><span class="unread-dot" aria-label="Unread"></span><span class="session-meta">2h</span></div>
+			<div class="session-row"><span class="title">Split the settings page into sections that each load their own data</span><span class="session-meta">1d</span></div>
+		</div>
+	</div>
+</section>
+
+<!-- 15 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">15 · Pane header with the panel closed <span class="tag">v1</span><small>The Agents button sits beside Services, like it. Running, then waiting on the main agent.</small></p>
+	<div class="frame">
+		<div class="col" style="gap:6px">
+			<div class="pane-head">
+				<div class="crumb"><span class="pn">trivium</span><span class="pn">/</span><h1>Session refresh and banner</h1></div>
+				<span class="changes-toggle agents"><span class="live-dot"></span><svg class="ic s14"><use href="#i-orch"/></svg>3 agents</span>
+				<span class="changes-toggle svc"><span class="service-dot"></span><svg class="ic s14"><use href="#i-server"/></svg>1 service</span>
+				<span class="changes-toggle icon"><svg class="ic s15"><use href="#i-views"/></svg></span>
+			</div>
+			<div class="pane-head" style="border-top:1px solid var(--line)">
+				<div class="crumb"><span class="pn">trivium</span><span class="pn">/</span><h1>Session refresh and banner</h1></div>
+				<span class="changes-toggle attn"><span class="live-dot attn"></span><svg class="ic s14"><use href="#i-orch"/></svg>1 waiting</span>
+				<span class="changes-toggle icon"><svg class="ic s15"><use href="#i-views"/></svg></span>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- 16 ─────────────────────────────────────────────── -->
+<section class="mk">
+	<p class="cap">16 · 360px pane, English and zh-CN <span class="tag">v1</span><small>Container query at ≤ 420px: the agent-tag column drops (the key names the child; the agent is in the row's label), keys cap at 72px, meta shows time only. The activity uses the UI font so CJK isn't set in a fallback mono.</small></p>
+	<div class="frame">
+		<div class="col" style="gap:14px">
+			<div class="narrow">
+				<div class="live-cmd fanout">
+					<div class="live-cmd-head">
+						<span class="live-dot"></span>
+						<span class="live-cmd-prose">Implementing · 1 of 3 finished <span class="h-warn">· 1 waiting</span></span>
+						<span class="live-cmd-time">3:41</span>
+					</div>
+					<div class="fanout-bar" aria-hidden="true"><i class="run"></i><i class="wait"></i><i class="done"></i></div>
+					<div class="fanout-rows">
+						<div class="r"><span class="m m-run"></span><span class="agent-tag">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity"><span class="tl">edit</span></span><span class="subagent-now-count">3:41</span></div>
+						<div class="r"><span class="m m-wait"><svg class="ic s11"><use href="#i-pause"/></svg></span><span class="agent-tag">worker</span><span class="subagent-label">web-banner</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity warn">Waiting on the main agent · Should the banner also show on the sign-in page?</span><span class="subagent-now-count">2:58</span></div>
+						<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role"></span><span class="subagent-activity done">Done · Both plans need a test for an expired refresh token</span><span class="subagent-now-count">1:50</span></div>
+					</div>
+				</div>
+			</div>
+			<div class="narrow zh" lang="zh-CN">
+				<div class="live-cmd fanout">
+					<div class="live-cmd-head">
+						<span class="live-dot"></span>
+						<span class="live-cmd-prose">实现 · 已完成 1/3 <span class="h-warn">· 1 个在等主代理</span></span>
+						<span class="live-cmd-time">3:41</span>
+					</div>
+					<div class="fanout-bar" aria-hidden="true"><i class="run"></i><i class="wait"></i><i class="done"></i></div>
+					<div class="fanout-rows">
+						<div class="r"><span class="m m-run"></span><span class="agent-tag">worker</span><span class="subagent-label">api</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity"><span class="tl">edit</span></span><span class="subagent-now-count">3:41</span></div>
+						<div class="r"><span class="m m-wait"><svg class="ic s11"><use href="#i-pause"/></svg></span><span class="agent-tag">worker</span><span class="subagent-label">web-banner</span><span class="subagent-role"><svg class="ic s11"><use href="#i-branch"/></svg></span><span class="subagent-activity warn">正在等主代理答复 · 登录页也要显示提示条吗？</span><span class="subagent-now-count">2:58</span></div>
+						<div class="r finished"><span class="m m-done"><svg class="ic s11"><use href="#i-check"/></svg></span><span class="agent-tag quiet">reviewer</span><span class="subagent-label">tests</span><span class="subagent-role"></span><span class="subagent-activity done">完成 · 两个方案都缺少刷新令牌过期的测试</span><span class="subagent-now-count">1:50</span></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+</div>
+</body>
+</html>

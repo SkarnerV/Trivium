@@ -9,6 +9,35 @@ type Event = Parameters<RunTracker["apply"]>[0];
 
 const scoutArgs = { agent: "scout", task: "Map the auth flow\nList risks" };
 
+test("workflow preflight precedes live children and preserves lane order", () => {
+	const plan = { version: 1, coverage: "complete", lanes: [{ key: "api", mode: "mutation", claims: ["src/api.ts"] }, { key: "review", mode: "review" }] };
+	const pending = subagentOf({ workflow: true, options: { preflight: plan } }, undefined, "running");
+	assert.deepEqual(pending.children.map((child) => [child.label, child.status]), [["api", "pending"], ["review", "pending"]]);
+	const live = subagentOf({ workflow: true }, {
+		preflight: plan,
+		workflowChildren: { children: [{ childId: "review", agent: "reviewer", state: "completed" }, { childId: "api", agent: "worker", state: "paused", activity: { currentTool: "contact_supervisor", toolCount: 4, tokens: 80 } }] },
+		workflowGraph: { phases: [{ title: "Implementation" }] },
+	}, "running");
+	assert.deepEqual(live.children.map((child) => child.label), ["api", "review"]);
+	assert.equal(live.children[0]!.waitingOn, "main");
+	assert.equal(live.children[0]!.tools, 4);
+	assert.equal(live.children[0]!.role, "mutation");
+	assert.equal(live.children[1]!.status, "done");
+	assert.deepEqual(live.phases, ["Implementation"]);
+});
+
+test("unknown workflow shapes keep the legacy rendering and malformed fields are ignored", () => {
+	for (const value of [null, false, [], "bad", 42, { lanes: [null, false, {}, { key: 3 }] }]) {
+		const result = subagentOf(scoutArgs, { preflight: value, workflowChildren: value, workflowGraph: value }, "running");
+		assert.equal(result.children.length, 1);
+		assert.equal(result.children[0]!.agent, "scout");
+	}
+	const result = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "unknown", claims: ["file", 9, null] }] }, results: [{ workflowKey: "a", agent: "worker", timedOut: true, exitCode: 1 }] }, "done");
+	assert.deepEqual(result.preflight?.lanes[0]!.claims, ["file"]);
+	assert.equal(result.preflight?.lanes[0]!.mode, undefined);
+	assert.equal(result.children[0]!.timedOut, true);
+});
+
 test("a subagent shows its agent and task before any progress arrives", () => {
 	const subagent = subagentOf(scoutArgs, undefined, "running");
 	assert.deepEqual(subagent.children.map((child) => [child.agent, child.status]), [["scout", "running"]]);
@@ -26,7 +55,7 @@ test("live progress gives the child's current tool, steps and counts", () => {
 	};
 	const [child] = subagentOf(scoutArgs, details, "running").children;
 	assert.deepEqual(child!.current, { tool: "read", target: "src/auth.ts" });
-	assert.deepEqual(child!.steps, [{ tool: "grep", target: '"login" src' }]);
+	assert.deepEqual(child!.steps, [{ tool: "grep", target: '"login" src', endMs: 1 }], "each call keeps when it ended");
 	assert.equal(child!.tools, 1);
 	assert.equal(child!.tokens, 5200);
 	assert.equal(child!.output, undefined);
@@ -129,4 +158,15 @@ test("a running subagent step carries its children from live updates", () => {
 	assert.equal(step.subagent?.children[0]?.tools, 3);
 	assert.equal(step.meta, "3 tools");
 	assert.equal(step.target, "scout: Map the auth flow");
+});
+
+test("a queued workflow's children, a failed child's tool and step end times are read from the details", () => {
+	const queued = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "review" }] }, workflowChildren: { workflowState: "queued", children: [{ childId: "a", state: "pending" }] } }, "running");
+	assert.equal(queued.children[0]!.queued, true);
+	const running = subagentOf({ workflow: true }, { preflight: { lanes: [{ key: "a", mode: "review" }] }, workflowChildren: { workflowState: "running", children: [{ childId: "a", state: "pending" }] } }, "running");
+	assert.equal(running.children[0]!.queued, undefined, "a pending child of a running workflow is only starting");
+	const failed = subagentOf(scoutArgs, { results: [{ index: 0, agent: "scout", exitCode: 1, error: "boom", outputPartial: true, progressSummary: { failedTool: "bash", recentTools: [{ tool: "bash", args: "npm test", endMs: 1700000000000 }] } }] }, "error");
+	assert.equal(failed.children[0]!.failedTool, "bash");
+	assert.equal(failed.children[0]!.outputPartial, true);
+	assert.equal(failed.children[0]!.steps[0]!.endMs, 1700000000000);
 });

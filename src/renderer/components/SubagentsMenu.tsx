@@ -3,7 +3,8 @@ import type { Run, SubagentChild } from "../../shared/protocol.ts";
 import { duration } from "../format.ts";
 import { Chevron, ExternalIcon } from "../icons.tsx";
 import { t } from "../i18n.tsx";
-import { type AgentStatus, AvatarStack, firstLine, type SubagentOpener, SubagentOpenerContext, SubagentRow, statusSummary, targetOf } from "./Subagents.tsx";
+import { agentSteps } from "../agents.ts";
+import { type AgentStatus, agentStatus, AvatarStack, firstLine, type SubagentOpener, SubagentOpenerContext, SubagentRow, statusSummary, targetOf } from "./Subagents.tsx";
 
 interface Entry {
 	child: SubagentChild;
@@ -17,37 +18,23 @@ interface Group {
 	entries: Entry[];
 }
 
-const NOTICE_STATUS: Record<string, AgentStatus> = { completed: "done", failed: "error", paused: "stopped", stopped: "stopped" };
-
 /**
  * Every subagent the session started, newest run first, with those in the background on top. A background
- * child's step ends at launch, so how it is doing comes from the result it later sends, matched by agent.
+ * child's step ends at launch; how it ended comes from its result, or from the host's read of its run.
  */
 export function sessionSubagents(runs: Run[], running: boolean): { groups: Group[]; all: { status: AgentStatus; agent: string }[] } {
+	const resolved = new Map(agentSteps(runs).map((step) => [step.id, step]));
 	const background: Entry[] = [];
 	const groups: Group[] = [];
-	const notices = runs.flatMap((run, index) => (run.notice && run.notice.command === undefined ? [{ index, notice: run.notice }] : []));
 	runs.forEach((run, index) => {
 		const entries: Entry[] = [];
 		for (const step of run.steps) {
 			if (!step.subagent) continue;
-			for (const child of step.subagent.children) {
-				if (!step.subagent.background) {
-					entries.push({ child, background: false });
-					continue;
-				}
-				const notice = notices.find((item) => item.index > index && item.notice.agent.split(", ").includes(child.agent));
-				const status = notice ? NOTICE_STATUS[notice.notice.status] : step.status === "error" ? "error" : "running";
-				background.push({
-					child: {
-						...child,
-						status: status === "stopped" ? "error" : (status ?? "done"),
-						durationMs: notice?.notice.durationMs,
-						sessionFile: child.sessionFile ?? notice?.notice.sessionFile,
-						output: notice?.notice.text,
-					},
-					background: true,
-				});
+			const shown = resolved.get(step.id) ?? step;
+			for (const child of shown.subagent!.children) {
+				if (!step.subagent.background) entries.push({ child, background: false });
+				// Nothing has said it ended, so it is still working on its own.
+				else background.push({ child: shown === step ? { ...child, status: "running" } : child, background: true });
 			}
 		}
 		if (!entries.length) return;
@@ -62,7 +49,7 @@ export function sessionSubagents(runs: Run[], running: boolean): { groups: Group
 	});
 	groups.reverse();
 	if (background.length) groups.unshift({ id: "background", title: t("Background"), time: "", entries: background });
-	const all = groups.flatMap((group) => group.entries.map((entry) => ({ status: entry.child.status as AgentStatus, agent: entry.child.agent })));
+	const all = groups.flatMap((group) => group.entries.map((entry) => ({ status: agentStatus(entry.child), agent: entry.child.agent })));
 	return { groups, all };
 }
 
@@ -73,7 +60,7 @@ export function backgroundSubagents(runs: Run[], running: boolean): ReadonlyMap<
 }
 
 /** The header button that lists every subagent in the session, and opens any of them. */
-export function SubagentsMenu({ runs, running }: { runs: Run[]; running: boolean }) {
+export function SubagentsMenu({ runs, running, onPanel }: { runs: Run[]; running: boolean; onPanel?: () => void }) {
 	const [open, setOpen] = useState(false);
 	const [filter, setFilter] = useState<"all" | "working">("all");
 	const ref = useRef<HTMLDivElement>(null);
@@ -181,7 +168,22 @@ export function SubagentsMenu({ runs, running }: { runs: Run[]; running: boolean
 							{!shown.length && <p className="subagents-popover-empty">{t("No subagent is working now.")}</p>}
 						</SubagentOpenerContext.Provider>
 					</div>
-					<div className="subagents-popover-foot">{t("Click opens its session beside the thread. Shift-click opens a new window.")}</div>
+					<div className="subagents-popover-foot">
+						<span>{t("Click opens its session beside the thread. Shift-click opens a new window.")}</span>
+						{/* In Code, the Agents tab has each fan-out's plan, patches and kept worktrees. */}
+						{onPanel && (
+							<button
+								type="button"
+								className="btn ghost"
+								onClick={() => {
+									setOpen(false);
+									onPanel();
+								}}
+							>
+								{t("Show in the Agents panel")}
+							</button>
+						)}
+					</div>
 				</div>
 			)}
 		</div>

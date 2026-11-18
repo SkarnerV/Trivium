@@ -47,7 +47,7 @@ async function readOrNull(path: string): Promise<string | null> {
 }
 
 /** A path to compare by: git, the tools and Windows may write the same one with other slashes or case. */
-function pathKey(path: string): string {
+export function pathKey(path: string): string {
 	const slashed = path.replaceAll("\\", "/");
 	return process.platform === "win32" ? slashed.toLowerCase() : slashed;
 }
@@ -98,6 +98,23 @@ export class ChangeTracker {
 	private before: { dirty: Dirty | null; at: number } = { dirty: null, at: 0 };
 	private readonly onOff?: () => void;
 	private told = false;
+	private delegations = 0;
+
+	/**
+	 * Keep the oldest command baseline while subagents can still edit the project. Each call is matched by one
+	 * afterSubagents(): when a foreground launch ends, or when a background launch's window closes, which
+	 * background-runs.ts bounds in time and which never outlives the process.
+	 */
+	async beforeSubagents(): Promise<void> {
+		await this.beforeCommand();
+		this.delegations++;
+	}
+
+	async afterSubagents(): Promise<boolean> {
+		const changed = await this.afterCommand();
+		this.delegations = Math.max(0, this.delegations - 1);
+		return changed;
+	}
 
 	/** `onOff` is called once if the project turns out too large to snapshot, which the user should hear. */
 	constructor(file: string, cwd: string, onOff?: () => void) {
@@ -175,6 +192,7 @@ export class ChangeTracker {
 	beforeCommand(): Promise<void> {
 		const step = this.commands.then(async () => {
 			await this.loaded;
+			if (this.delegations) return;
 			const [, dirty] = await Promise.all([this.shadow.sync(), readDirty(this.cwd)]);
 			this.before = { dirty, at: Date.now() };
 			if (this.shadow.off === "size" && !this.told) {

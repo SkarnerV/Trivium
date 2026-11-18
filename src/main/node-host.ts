@@ -3,6 +3,7 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { triviumDir } from "./apps.ts";
 
 /**
  * pi extensions are written for the pi CLI, where process.execPath is Node. Here it is Trivium's Electron
@@ -90,4 +91,5 @@ export function installNodeHost(): void {
 	Object.assign(cp.execFile, { [promisify.custom]: promisified(cp.execFile) });
 	syncBuiltinESMExports();
 	process.env.PI_SUBAGENTS_PI_CODING_AGENT_PACKAGE_ROOT ??= piPackageRoot();
+	process.env.PI_SUBAGENTS_WORKTREE_DIR ??= join(triviumDir, "worktrees");
 }

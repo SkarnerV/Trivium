@@ -45,6 +45,9 @@ export interface State {
 	sessions: SessionSummary[];
 	views: Record<string, SessionView>;
 	dialogs: DialogRequest[];
+	agentDetail: Record<string, { step: string; child: number } | undefined>;
+	agentsSeen: Record<string, string>;
+	agentsDismissed: Record<string, string>;
 	notices: Notice[];
 	models: ModelOption[];
 	folded: boolean;
@@ -148,6 +151,9 @@ let state: State = {
 	sessions: [],
 	views: {},
 	dialogs: [],
+	agentDetail: {},
+	agentsSeen: {},
+	agentsDismissed: {},
 	notices: [],
 	models: [],
 	peek: false,
@@ -478,7 +484,7 @@ export function followDocument(path: string, file: string): void {
 
 function openViews(s: State, path: string): PanelView[] {
 	const view = s.views[path];
-	return view ? panelViews(view, s.panelTabs[path]) : (s.panelTabs[path] ?? []);
+	return view ? panelViews(view, s.panelTabs[path], s.agentsDismissed[path]) : (s.panelTabs[path] ?? []);
 }
 
 /** Opens a view as a tab in a session's panel, or goes to its tab when it is open already, and shows the panel. */
@@ -493,18 +499,26 @@ export function showPanelView(path: string, name: PanelView): void {
 	});
 }
 
+export function showAgentChild(path: string, step: string, child: number): void {
+	setState((s) => ({ agentDetail: { ...s.agentDetail, [path]: { step, child } } }));
+	showPanelView(path, "agents");
+}
+
 /** Closes a view's tab; the one beside it shows next. Closing the last tab hides the panel. */
 export function closePanelView(path: string, name: PanelView): void {
 	setState((s) => {
 		const open = openViews(s, path);
 		const index = open.indexOf(name);
 		const next = open.filter((other) => other !== name);
+		const fanout = name === "agents" ? s.views[path]?.runs.flatMap((run) => run.steps).findLast((step) => (step.subagent?.children.length ?? 0) > 1)?.id : undefined;
+		const dismissed = fanout ? { agentsDismissed: { ...s.agentsDismissed, [path]: fanout } } : {};
 		if (!next.length) {
 			const { [path]: _, ...rest } = s.panelTabs;
-			return { panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
+			return { ...dismissed, panelTabs: rest, changesHidden: { ...s.changesHidden, [path]: true } };
 		}
 		const showing = shownView(open, s.panelTab[path]);
 		return {
+			...dismissed,
 			panelTabs: { ...s.panelTabs, [path]: next },
 			panelTab: { ...s.panelTab, [path]: showing === name ? next[Math.min(index, next.length - 1)]! : showing },
 		};

@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-19T09:00:00Z" },
+  "title": "Trivium Source Control",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Source Control: list and diff in one tab (try it)", "expand": "fill", "is_interactive": true },
+    "Commit.dc.html": { "x": 0, "y": 1300, "w": 480, "h": 920, "title": "Committing: message drafted by pi" },
+    "Graph.dc.html": { "x": 560, "y": 1300, "w": 480, "h": 920, "title": "History: a commit's file opens below it" },
+    "States.dc.html": { "x": 1120, "y": 1300, "w": 480, "h": 920, "title": "Running, conflict, clean, no repo" },
+    "Files.dc.html": { "x": 1680, "y": 1300, "w": 480, "h": 920, "title": "Files: tree and file in one tab (try it)", "is_interactive": true }
+  },
+  "order": ["Main.dc.html", "Commit.dc.html", "Graph.dc.html", "States.dc.html", "Files.dc.html"],
+  "notes": {
+    "t1": { "x": 0, "y": -300, "text": "One Source Control panel, like VS Code", "kind": "title1", "maxW": 1440 },
+    "t2": { "x": 0, "y": 1000, "text": "Panel close-ups", "kind": "title1", "maxW": 2160 }
+  },
+  "designSystems": []
+}

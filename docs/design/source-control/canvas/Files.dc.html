@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Files and the open file in one tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ib{display:grid;place-items:center;width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:#5C6091;padding:0}
+.ib:hover{background:#E2E3F6;color:#16171b}
+.tr:hover{background:#F1F1FD}
+.tr .acts{display:none}
+.tr:hover .acts,.tr:focus-within .acts{display:flex}
+.tr:hover .st,.tr:focus-within .st{display:none}
+.tg:hover{background:#E2E3F6}
+.tg[aria-pressed="true"]{background:#EEEFFC;color:#3B3EC4}
+.flt:focus-within{background:#fff !important;border-color:#C9CBF5 !important}
+.grip:hover span{background:#5457E8 !important}
+input:focus{outline:none}
+</style>
+</helmet>
+<div style="width: 480px; height: 920px; box-sizing: border-box; display: flex; flex-direction: column; background: #fff; border: 1px solid #DEDFF3; border-radius: 14px; overflow: hidden; font-family: Geist, Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.5; letter-spacing: -0.005em; color: #16171b">
+
+  <!-- Panel tabs -->
+  <div role="tablist" aria-label="Panel views" style="flex: none; display: flex; align-items: center; height: 52px; padding: 0 10px 0 6px; border-bottom: 1px solid #E8E9F8; box-sizing: border-box">
+    <button type="button" role="tab" aria-selected="false" style="align-self: stretch; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: none; color: #5e616b; font-size: 12.5px; font-weight: 500">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-5 4-10.5 6"></path></svg>
+      Source Control
+      <span style="font-size: 11px; color: #5e616b; background: #F2F2F8; border-radius: 8px; padding: 0 6px; line-height: 16px">5</span>
+    </button>
+    <div style="position: relative; align-self: stretch; display: flex">
+      <button type="button" role="tab" aria-selected="true" style="display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: none; color: #16171b; font-size: 12.5px; font-weight: 500">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+        Files
+      </button>
+      <span style="position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: #5457E8"></span>
+    </div>
+    <button type="button" role="tab" aria-selected="false" style="align-self: stretch; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: none; color: #5e616b; font-size: 12.5px; font-weight: 500">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"></rect><rect x="3" y="13" width="18" height="7" rx="2"></rect></svg>
+      Services
+    </button>
+  </div>
+
+  <!-- Root and tools -->
+  <div style="flex: none; display: flex; align-items: center; gap: 4px; padding: 10px 10px 6px 16px">
+    <span style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; color: #43464f">
+      <span style="font-weight: 600; color: #16171b">jsonl-reader</span>
+      <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6b6e78">{{summary}}</span>
+    </span>
+    <button type="button" class="tg" aria-pressed="{{ignoredPressed}}" onClick="{{toggleIgnored}}" title="Show files git ignores, such as node_modules" style="height: 24px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: #5C6091; font-size: 11.5px; font-weight: 500">Ignored</button>
+    <button type="button" class="ib" onClick="{{collapseAll}}" aria-label="Collapse all folders" title="Collapse all"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l5 5 5-5M7 20l5-5 5 5"></path></svg></button>
+    <button type="button" class="ib" aria-label="Reveal in File Explorer" title="Reveal in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></button>
+  </div>
+
+  <!-- Filter -->
+  <div class="flt" style="flex: none; margin: 0 12px 6px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 9px; background: #F7F7FE">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6e78" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <label for="q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Filter files</label>
+    <input id="q" value="{{query}}" onChange="{{onQuery}}" placeholder="Filter files by name" style="flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 12.5px; color: #16171b; padding: 0">
+    <span style="font-size: 11px; color: #6b6e78">Ctrl P</span>
+  </div>
+
+  <!-- Tree: shares the tab with the open file below -->
+  <div role="tree" aria-label="Files in jsonl-reader" style="{{treeStyle}}">
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="14">
+      <div role="treeitem" aria-expanded="{{r.expanded}}" aria-selected="{{r.selected}}" class="tr" style="display: flex; align-items: center; min-height: 24px; background: {{r.bg}}">
+        <button type="button" onClick="{{r.click}}" title="{{r.path}}" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 0 0 {{r.indent}}; border: 0; background: transparent; text-align: left; color: {{r.color}}; opacity: {{r.opacity}}">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b6e78" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="flex: none; visibility: {{r.chevronVis}}; transform: {{r.chevron}}"><path d="M9 6l6 6-6 6"></path></svg>
+          <sc-if value="{{r.isDir}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C6091" stroke-width="2" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></sc-if>
+          <sc-if value="{{r.isFile}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8e99" stroke-width="2" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg></sc-if>
+          <span style="white-space: nowrap; font-size: 12.5px">{{r.name}}</span>
+          <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #6b6e78">{{r.dir}}</span>
+        </button>
+        <span class="st" style="display: flex; align-items: center; justify-content: center; width: 28px; padding-right: 8px">
+          <sc-if value="{{r.hasLetter}}" hint-placeholder-val="{{ false }}"><span title="{{r.statusTitle}}" style="font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 500; color: {{r.statusColor}}">{{r.letter}}</span></sc-if>
+          <sc-if value="{{r.hasDot}}" hint-placeholder-val="{{ false }}"><span title="Has changes inside" style="width: 6px; height: 6px; border-radius: 50%; background: {{r.statusColor}}"></span></sc-if>
+        </span>
+        <span class="acts" style="align-items: center; gap: 1px; padding-right: 8px">
+          <button type="button" class="ib" aria-label="Open {{r.name}} in VS Code" title="Open in VS Code" style="width: 22px; height: 22px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></button>
+          <button type="button" class="ib" aria-label="Mention {{r.name}} in the message" title="Mention in the message (@)" style="width: 22px; height: 22px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
+        </span>
+      </div>
+    </sc-for>
+    <sc-if value="{{noMatch}}" hint-placeholder-val="{{ false }}">
+      <p style="margin: 8px 16px; font-size: 12px; color: #6b6e78">No file names match “{{query}}”.</p>
+    </sc-if>
+  </div>
+
+  <!-- The open file, in the same tab -->
+  <sc-if value="{{viewerOpen}}" hint-placeholder-val="{{ true }}">
+    <div class="grip" role="separator" aria-orientation="horizontal" aria-label="Resize the file list" title="Drag to resize" style="flex: none; height: 11px; display: flex; align-items: center; justify-content: center; border-top: 1px solid #E8E9F8; cursor: row-resize">
+      <span style="width: 28px; height: 3px; border-radius: 2px; background: #D9DBF0"></span>
+    </div>
+    <section aria-label="{{v.path}}" style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+      <div style="flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px 6px 16px">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #16171b; white-space: nowrap">{{v.name}}</span>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #6b6e78">{{v.dir}} <span style="color: {{v.statusColor}}">{{v.statusText}}</span></span>
+        <sc-if value="{{v.hasDiff}}" hint-placeholder-val="{{ true }}">
+          <span role="group" aria-label="Show" style="display: flex; gap: 2px">
+            <button type="button" class="tg" aria-pressed="{{v.fileOn}}" onClick="{{showFile}}" style="height: 24px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: #5C6091; font-size: 11.5px; font-weight: 500">File</button>
+            <button type="button" class="tg" aria-pressed="{{v.changesOn}}" onClick="{{showChanges}}" style="height: 24px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: #5C6091; font-size: 11.5px; font-weight: 500">Changes</button>
+          </span>
+        </sc-if>
+        <button type="button" class="ib" aria-label="Mention {{v.name}} in the message" title="Mention in the message (@)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
+        <button type="button" class="ib" aria-label="Open {{v.name}} in VS Code" title="Open in VS Code"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></button>
+        <button type="button" class="ib" onClick="{{closeViewer}}" aria-label="Close {{v.name}}" title="Close (Esc)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.7; white-space: pre">
+        <sc-for list="{{v.lines}}" as="l" hint-placeholder-count="12">
+          <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: {{l.top}}; background: {{l.bg}}; color: {{l.color}}"><span style="background: {{l.gutter}}"></span><span style="padding-right: 12px; text-align: right; color: {{l.noColor}}">{{l.no}}</span><span style="padding-right: 16px; text-decoration: {{l.deco}}; text-decoration-color: rgba(142,29,35,.35)">{{l.text}}</span></div>
+        </sc-for>
+        <sc-if value="{{v.empty}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 6px 16px; font-family: Geist, Inter, system-ui, sans-serif; font-size: 12px; color: #6b6e78; white-space: normal">This mock has no text for {{v.name}}.</p>
+        </sc-if>
+      </div>
+    </section>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":920}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: { src: true, test: true }, selected: 'src/reader.ts', mode: 'file', query: '', ignored: false };
+  }
+  tree() {
+    const f = (name, status) => ({ name, status });
+    const d = (name, children, ignored) => ({ name, children, ignored });
+    return [
+      d('.github', [d('workflows', [f('ci.yml')])]),
+      d('bench', [f('big-input.ts')]),
+      d('dist', [f('index.js'), f('index.d.ts')], true),
+      d('node_modules', [f('.package-lock.json')], true),
+      d('src', [
+        d('rpc', [f('client.ts'), f('events.ts')]),
+        f('chunks.ts'), f('index.ts'), f('paths.ts', 'M'), f('reader.ts', 'M')
+      ]),
+      d('test', [
+        d('fixtures', [f('pdf-paste.txt'), f('records.jsonl')]),
+        f('chunks.test.ts'), f('reader.test.ts', 'U')
+      ]),
+      f('.gitignore'), f('LICENSE'), f('package-lock.json'), f('package.json', 'M'), f('README.md', 'M'), f('tsconfig.json')
+    ];
+  }
+  renderVals() {
+    // Mock contents. file: [gutter, text] where gutter is '' | 'a' (added) | 'c' (changed). diff: [kind, number, text], kind 'h' | '+' | '-' | ' '.
+    const SRC = {
+      'src/reader.ts': {
+        lang: 'TypeScript',
+        file: [['c', 'import { RpcClient } from "@earendil-works/pi-coding-agent";'], ['', 'import { piCliPath } from "./paths";'], ['', ''], ['a', '// RpcClient splits records on \\n only; readline also split on U+2028.'], ['c', 'const client = new RpcClient({ cliPath: piCliPath });'], ['c', 'client.onEvent((event) => onRecord(event));'], ['c', 'await client.start();'], ['', ''], ['', 'export function onRecord(record: unknown) {'], ['', '  console.log(record);'], ['', '}'], ['', ''], ['', 'export async function stop() {'], ['', '  await client.stop();'], ['', '}']],
+        diff: [['h', '', '@@ -1,8 +1,8 @@'], ['-', 1, 'import { createInterface } from "node:readline";'], ['-', 2, 'import { spawn } from "node:child_process";'], ['+', 1, 'import { RpcClient } from "@earendil-works/pi-coding-agent";'], [' ', 2, 'import { piCliPath } from "./paths";'], [' ', 3, ''], ['-', 5, 'const child = spawn("node", [piCliPath, "--mode", "rpc"]);'], ['-', 6, 'const lines = createInterface({ input: child.stdout });'], ['-', 7, 'lines.on("line", (line) => onRecord(JSON.parse(line)));'], ['+', 4, '// RpcClient splits records on \\n only; readline also split on U+2028.'], ['+', 5, 'const client = new RpcClient({ cliPath: piCliPath });'], ['+', 6, 'client.onEvent((event) => onRecord(event));'], ['+', 7, 'await client.start();'], [' ', 8, '']]
+      },
+      'src/paths.ts': {
+        lang: 'TypeScript',
+        file: [['', 'import { join } from "node:path";'], ['a', 'import { fileURLToPath } from "node:url";'], ['', ''], ['a', 'const here = fileURLToPath(new URL(".", import.meta.url));'], ['c', 'export const piCliPath = join(here, "../node_modules/.bin/pi");'], ['', ''], ['', 'export const dataDir = join(here, "../data");'], ['a', 'export const cacheDir = join(dataDir, ".cache");']],
+        diff: [['h', '', '@@ -1,6 +1,8 @@'], [' ', 1, 'import { join } from "node:path";'], ['+', 2, 'import { fileURLToPath } from "node:url";'], [' ', 3, ''], ['-', 3, 'export const piCliPath = join(__dirname, "../node_modules/.bin/pi");'], ['+', 4, 'const here = fileURLToPath(new URL(".", import.meta.url));'], ['+', 5, 'export const piCliPath = join(here, "../node_modules/.bin/pi");'], [' ', 6, ''], [' ', 7, 'export const dataDir = join(here, "../data");'], ['+', 8, 'export const cacheDir = join(dataDir, ".cache");']]
+      },
+      'test/reader.test.ts': {
+        lang: 'TypeScript',
+        file: [['a', 'import { test } from "node:test";'], ['a', 'import assert from "node:assert/strict";'], ['a', 'import { readRecords } from "../src/reader";'], ['a', ''], ['a', 'test("keeps a record with U+2028 in one piece", async () => {'], ['a', '  const records = await readRecords(\'{"note":"a\\u2028b"}\\n\');'], ['a', '  assert.equal(records.length, 1);'], ['a', '});']],
+        diff: [['h', '', '@@ -0,0 +1,8 @@'], ['+', 1, 'import { test } from "node:test";'], ['+', 2, 'import assert from "node:assert/strict";'], ['+', 3, 'import { readRecords } from "../src/reader";'], ['+', 4, ''], ['+', 5, 'test("keeps a record with U+2028 in one piece", async () => {'], ['+', 6, '  const records = await readRecords(\'{"note":"a\\u2028b"}\\n\');'], ['+', 7, '  assert.equal(records.length, 1);'], ['+', 8, '});']]
+      },
+      'README.md': {
+        lang: 'Markdown',
+        file: [['', '# jsonl-reader'], ['', ''], ['', 'Reads JSON Lines from pi’s RPC mode.'], ['', ''], ['a', '## Pasting from PDFs'], ['a', 'Records may hold U+2028; they stay in one piece.']],
+        diff: [['h', '', '@@ -3,2 +3,4 @@'], [' ', 3, 'Reads JSON Lines from pi’s RPC mode.'], [' ', 4, ''], ['+', 5, '## Pasting from PDFs'], ['+', 6, 'Records may hold U+2028; they stay in one piece.']]
+      },
+      'package.json': {
+        lang: 'JSON',
+        file: [['', '{'], ['', '  "name": "jsonl-reader",'], ['c', '  "version": "0.4.2",'], ['', '  "type": "module",'], ['', '  "dependencies": {'], ['', '    "@earendil-works/pi-coding-agent": "1.4.0"'], ['', '  }'], ['', '}']],
+        diff: [['h', '', '@@ -1,4 +1,4 @@'], [' ', 1, '{'], [' ', 2, '  "name": "jsonl-reader",'], ['-', 3, '  "version": "0.4.1",'], ['+', 3, '  "version": "0.4.2",'], [' ', 4, '  "type": "module",']]
+      },
+      'src/legacy-reader.ts': {
+        lang: 'TypeScript',
+        file: [],
+        diff: [['h', '', '@@ -1,18 +0,0 @@'], ['-', 1, 'import { createInterface } from "node:readline";'], ['-', 2, 'import { spawn } from "node:child_process";'], ['-', 3, ''], ['-', 4, 'export function readLegacy(cli: string) {'], ['-', 5, '  const child = spawn("node", [cli, "--mode", "rpc"]);'], ['-', 6, '  return createInterface({ input: child.stdout });'], ['-', 7, '}']]
+      },
+      'src/chunks.ts': {
+        lang: 'TypeScript',
+        file: [['', 'import { open } from "node:fs/promises";'], ['', ''], ['', 'export async function* chunks(path: string, size = 64 * 1024) {'], ['', '  const handle = await open(path);'], ['', '  const buffer = Buffer.alloc(size);'], ['', '  try {'], ['', '    let read;'], ['', '    while ((read = await handle.read(buffer, 0, size)).bytesRead) {'], ['', '      yield buffer.subarray(0, read.bytesRead);'], ['', '    }'], ['', '  } finally {'], ['', '    await handle.close();'], ['', '  }'], ['', '}']]
+      },
+      'src/index.ts': {
+        lang: 'TypeScript',
+        file: [['', 'export { onRecord, stop } from "./reader";'], ['', 'export { chunks } from "./chunks";'], ['', 'export { piCliPath, dataDir } from "./paths";']]
+      },
+      'tsconfig.json': {
+        lang: 'JSON',
+        file: [['', '{'], ['', '  "compilerOptions": {'], ['', '    "target": "ES2023",'], ['', '    "module": "NodeNext",'], ['', '    "strict": true'], ['', '  }'], ['', '}']]
+      },
+      '.gitignore': { lang: 'Ignore', file: [['', 'node_modules/'], ['', 'dist/'], ['', '*.log']] }
+    };
+    const viewLines = (path, mode) => {
+      const src = SRC[path];
+      if (!src) return [];
+      const gut = { a: '#3fa66b', c: '#d9a43a', '': 'transparent' };
+      if (mode === 'changes' && src.diff) {
+        return src.diff.map(([k, no, text]) => ({
+          no: String(no), text: k === 'h' ? text : text || ' ',
+          gutter: 'transparent',
+          bg: k === '+' ? '#e9f7ef' : k === '-' ? '#fdeeee' : 'transparent',
+          color: k === '+' ? '#0f5530' : k === '-' ? '#8e1d23' : k === 'h' ? '#6b6e78' : '#43464f',
+          noColor: k === '+' ? '#3e7c59' : k === '-' ? '#a4545a' : '#6b6e78',
+          deco: k === '-' ? 'line-through' : 'none',
+          top: k === 'h' ? '4px' : '0'
+        }));
+      }
+      return src.file.map(([g, text], i) => ({
+        no: String(i + 1), text: text || ' ', gutter: gut[g], bg: 'transparent',
+        color: text.trim().startsWith('//') ? '#6b6e78' : (src.lang === 'Markdown' && text.startsWith('#')) ? '#16171b' : '#43464f',
+        noColor: '#6b6e78', deco: 'none', top: '0'
+      }));
+    };
+    const s = this.state;
+    const colors = { M: '#9a6700', U: '#146c3c', A: '#146c3c' };
+    const titles = { M: 'Modified', U: 'Untracked', A: 'Added' };
+    const changedIn = (node) => node.children ? node.children.map(changedIn).find(Boolean) : node.status;
+    const statusOf = {};
+    const rows = [];
+    let files = 0;
+    let changed = 0;
+    const count = (nodes, prefix, ignored) => nodes.forEach((n) => {
+      if (n.children) count(n.children, prefix + n.name + '/', ignored || n.ignored);
+      else { statusOf[prefix + n.name] = n.status; if (!ignored) { files += 1; if (n.status) changed += 1; } }
+    });
+    count(this.tree(), '', false);
+    const row = (n, path, depth, ignored, dir) => {
+      const isDir = Boolean(n.children);
+      const status = isDir ? (ignored ? undefined : changedIn(n)) : n.status;
+      const expanded = isDir && Boolean(s.open[path]);
+      const selected = s.selected === path;
+      return {
+        name: n.name, path, dir: dir || '',
+        isDir, isFile: !isDir,
+        indent: (8 + depth * 14) + 'px',
+        chevronVis: isDir ? 'visible' : 'hidden',
+        chevron: expanded ? 'rotate(90deg)' : 'none',
+        expanded: isDir ? String(expanded) : undefined,
+        selected: String(selected),
+        bg: selected ? '#EEEFFC' : 'transparent',
+        color: selected ? '#3B3EC4' : (!isDir && status ? colors[status] : '#34374F'),
+        opacity: ignored ? '0.55' : '1',
+        hasLetter: !isDir && Boolean(status), hasDot: isDir && Boolean(status),
+        letter: status || '', statusColor: colors[status] || '#9a6700', statusTitle: titles[status] || '',
+        click: () => isDir
+          ? this.setState({ open: { ...s.open, [path]: !s.open[path] } })
+          : this.setState({ selected: path, mode: 'file' })
+      };
+    };
+    const walk = (nodes, prefix, depth, ignored) => nodes.forEach((n) => {
+      if (n.ignored && !s.ignored) return;
+      const path = prefix + n.name;
+      rows.push(row(n, path, depth, ignored || n.ignored));
+      if (n.children && s.open[path]) walk(n.children, path + '/', depth + 1, ignored || n.ignored);
+    });
+    const q = s.query.trim().toLowerCase();
+    if (q) {
+      const find = (nodes, prefix, ignored) => nodes.forEach((n) => {
+        if (n.ignored && !s.ignored) return;
+        const path = prefix + n.name;
+        if (n.children) find(n.children, path + '/', ignored || n.ignored);
+        else if (n.name.toLowerCase().includes(q)) rows.push(row(n, path, 0, ignored, prefix.replace(/\/$/, '')));
+      });
+      find(this.tree(), '', false);
+    } else {
+      walk(this.tree(), '', 0, false);
+    }
+
+    const open = Boolean(s.selected);
+    const path = s.selected || '';
+    const src = SRC[path];
+    const hasDiff = Boolean(src && src.diff && statusOf[path]);
+    const mode = hasDiff ? s.mode : 'file';
+    const lines = viewLines(path, mode);
+    const status = statusOf[path];
+    const slash = path.lastIndexOf('/');
+    return {
+      rows,
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      noMatch: Boolean(q) && rows.length === 0,
+      ignoredPressed: String(s.ignored),
+      toggleIgnored: () => this.setState({ ignored: !s.ignored }),
+      collapseAll: () => this.setState({ open: {} }),
+      summary: q ? rows.length + (rows.length === 1 ? ' match' : ' matches') : files + ' files · ' + changed + ' changed',
+      treeStyle: open
+        ? 'flex: 0 1 330px; min-height: 120px; overflow: auto; padding-bottom: 4px'
+        : 'flex: 1; min-height: 0; overflow: auto; padding-bottom: 6px',
+      viewerOpen: open,
+      v: {
+        path, name: path.slice(slash + 1), dir: slash > 0 ? path.slice(0, slash) : '',
+        statusText: status ? '· ' + titles[status] : '', statusColor: colors[status] || '#6b6e78',
+        hasDiff, fileOn: String(mode === 'file'), changesOn: String(mode === 'changes'),
+        lines, empty: open && lines.length === 0
+      },
+      showFile: () => this.setState({ mode: 'file' }),
+      showChanges: () => this.setState({ mode: 'changes' }),
+      closeViewer: () => this.setState({ selected: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

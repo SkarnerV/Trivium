@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>History with commit authorship</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3B3EC4;text-decoration:none}a:hover{color:#2B2E9E;text-decoration:underline}
+</style>
+</helmet>
+<div style="width: 480px; height: 920px; box-sizing: border-box; display: flex; flex-direction: column; background: #fff; border: 1px solid #DEDFF3; border-radius: 14px; overflow: hidden; font-family: Geist, Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.5; letter-spacing: -0.005em; color: #16171b">
+
+  <div style="display: flex; align-items: center; height: 52px; padding: 0 10px 0 6px; margin-bottom: 12px; border-bottom: 1px solid #E8E9F8; box-sizing: border-box">
+    <div style="position: relative; align-self: stretch; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12.5px; font-weight: 500">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-5 4-10.5 6"></path></svg>
+      Source Control
+      <span style="font-size: 11px; color: #3B3EC4; background: #EEEFFC; border-radius: 8px; padding: 0 6px; line-height: 16px">6</span>
+      <span style="position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: #5457E8"></span>
+    </div>
+  </div>
+
+  <!-- Files box folded -->
+  <div style="padding: 0 0 8px">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 6px 16px 4px; color: #6b6e78; font-size: 11.5px; font-weight: 500">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      Staged <span style="font-weight: 400">1</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 4px 16px 4px; color: #6b6e78; font-size: 11.5px; font-weight: 500">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      Changes <span style="font-weight: 400">5</span>
+    </div>
+  </div>
+
+  <!-- History box -->
+  <div style="flex: 0 0 470px; min-height: 0; padding: 8px 0 0; border-top: 1px solid #E8E9F8; display: flex; flex-direction: column; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 4px 12px 6px 16px; color: #6b6e78; font-size: 11.5px; font-weight: 500">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="transform: rotate(90deg)"><path d="M9 6l6 6-6 6"></path></svg>
+      <span style="flex: 1">History</span>
+    </div>
+
+    <div role="list" aria-label="Commits" style="flex: 1; min-height: 0; overflow: hidden">
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #6b6e78; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 18V28" fill="none" stroke="#2f6fde" stroke-width="1.5" stroke-dasharray="2 3"></path><circle cx="12" cy="14" r="3.5" fill="#fff" stroke="#2f6fde" stroke-width="1.5"></circle></svg>
+        <span style="flex: 1; font-style: italic">Uncommitted changes · 6 files</span>
+      </div>
+
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #43464f; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><circle cx="12" cy="14" r="6.5" fill="none" stroke="#2f6fde" stroke-width="1.25"></circle><circle cx="12" cy="14" r="3.5" fill="#2f6fde"></circle></svg>
+        <span style="flex: none; padding: 0 5px; border: 1px solid #5457E8; border-radius: 5px; background: #EEEFFC; color: #3B3EC4; font-family: 'Geist Mono', monospace; font-size: 10.5px; line-height: 16px">main</span>
+        <span style="flex: none; padding: 0 5px; border: 1px solid #DEDFF3; border-radius: 5px; color: #6b6e78; font-family: 'Geist Mono', monospace; font-size: 10.5px; line-height: 16px">origin/main</span>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Use RpcClient so pasted text keeps U+2028…</span>
+        <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">2h</span>
+      </div>
+
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #43464f; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><path d="M12 14C12 21 26 21 26 28" fill="none" stroke="#1a8f5a" stroke-width="1.5"></path><circle cx="12" cy="14" r="3" fill="#fff" stroke="#2f6fde" stroke-width="1.5"></circle></svg>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Merge branch feat/stream</span>
+        <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">1d</span>
+      </div>
+
+      <!-- Open commit -->
+      <div role="listitem">
+        <button type="button" aria-expanded="true" style="display: flex; width: 100%; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; border: 0; background: #EEEFFC; color: #3B3EC4; font-size: 12.5px; text-align: left">
+          <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><path d="M26 0V28" fill="none" stroke="#1a8f5a" stroke-width="1.5"></path><circle cx="26" cy="14" r="3.5" fill="#1a8f5a" stroke="#1a8f5a" stroke-width="1.5"></circle></svg>
+          <span style="flex: none; padding: 0 5px; border: 1px solid #DEDFF3; border-radius: 5px; background: #fff; color: #5e616b; font-family: 'Geist Mono', monospace; font-size: 10.5px; line-height: 16px">feat/stream</span>
+          <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Stream records instead of buffering the file</span>
+          <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">1d</span>
+        </button>
+        <div style="display: flex">
+          <div aria-hidden="true" style="flex: none; width: 42px; margin-left: 4px; position: relative"><span style="position: absolute; left: 11.25px; top: 0; bottom: 0; width: 1.5px; background: #2f6fde"></span><span style="position: absolute; left: 25.25px; top: 0; bottom: 0; width: 1.5px; background: #1a8f5a"></span></div>
+          <div style="flex: 1; min-width: 0; padding: 8px 16px 12px 4px; display: flex; flex-direction: column; gap: 10px">
+            <p style="margin: 0; font-size: 11.5px; color: #6b6e78"><span style="font-family: 'Geist Mono', monospace">a41c9e2</span> · Committed Nov 18, 16:20</p>
+            <p style="margin: 0; font-size: 12px; color: #43464f">Read the file in 64 KB chunks and emit each record as soon as its newline arrives, so a 1 GB input no longer sits in memory.</p>
+
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #43464f">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b6e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path></svg>
+                <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Session: Stream records instead of buffering · 3 runs</span>
+                <a href="#">Open session</a>
+              </div>
+
+            <div style="display: flex; flex-direction: column">
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 26px; color: #43464f">
+                <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9a6700">M</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 12px">reader.ts</span><span style="flex: 1; font-size: 11.5px; color: #6b6e78">src</span>
+                
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px"><span style="color: #146c3c">+24</span> <span style="color: #b4232a">−9</span></span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 26px; color: #43464f">
+                <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #146c3c">A</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 12px">chunks.ts</span><span style="flex: 1; font-size: 11.5px; color: #6b6e78">src</span>
+                
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #146c3c">+14</span>
+              </div>
+              <div aria-current="true" style="display: flex; align-items: center; gap: 8px; min-height: 26px; margin: 0 -8px; padding: 0 8px; border-radius: 6px; background: #EEEFFC; color: #3B3EC4">
+                <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9a6700">M</span>
+                <span style="flex: 1; font-family: 'Geist Mono', monospace; font-size: 12px">README.md</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px"><span style="color: #146c3c">+4</span> <span style="color: #b4232a">−1</span></span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 14px; font-size: 12px"><a href="#">Copy id</a><a href="#">Compare with working tree</a><a href="#">Revert</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #43464f; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><path d="M26 0V14C26 21 12 21 12 28" fill="none" stroke="#1a8f5a" stroke-width="1.5"></path><circle cx="26" cy="14" r="3.5" fill="#1a8f5a" stroke="#1a8f5a" stroke-width="1.5"></circle></svg>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Add a benchmark for 1 GB inputs</span>
+        <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">1d</span>
+      </div>
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #43464f; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><circle cx="12" cy="14" r="3.5" fill="#2f6fde"></circle></svg>
+        <span style="flex: none; padding: 0 5px; border: 1px dashed #DEDFF3; border-radius: 5px; color: #5e616b; font-family: 'Geist Mono', monospace; font-size: 10.5px; line-height: 16px">v0.4.1</span>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Bump version to 0.4.1</span>
+        <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">2d</span>
+      </div>
+      <div role="listitem" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 16px 0 4px; color: #43464f; font-size: 12.5px">
+        <svg width="42" height="28" viewBox="0 0 42 28" aria-hidden="true" style="flex: none"><path d="M12 0V28" fill="none" stroke="#2f6fde" stroke-width="1.5"></path><circle cx="12" cy="14" r="3.5" fill="#2f6fde"></circle></svg>
+        <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Explain the record format in the readme</span>
+        <span style="width: 26px; text-align: right; font-size: 11.5px; color: #6b6e78">3d</span>
+      </div>
+    </div>
+  </div>
+  <!-- The picked file of the open commit, in the same tab -->
+  <div role="separator" aria-orientation="horizontal" aria-label="Resize the history" title="Drag to resize" style="flex: none; height: 11px; display: flex; align-items: center; justify-content: center; border-top: 1px solid #E8E9F8; cursor: row-resize">
+    <span style="width: 28px; height: 3px; border-radius: 2px; background: #D9DBF0"></span>
+  </div>
+  <section aria-label="README.md in a41c9e2" style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+    <div style="flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px 6px 16px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #16171b">README.md</span>
+      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #6b6e78">in <span style="font-family: 'Geist Mono', monospace">a41c9e2</span> <span style="font-family: 'Geist Mono', monospace"><span style="color: #146c3c">+4</span> <span style="color: #b4232a">−1</span></span></span>
+      <span role="group" aria-label="Show" style="display: flex; gap: 2px">
+        <button type="button" aria-pressed="true" style="height: 24px; padding: 0 8px; border: 0; border-radius: 7px; background: #EEEFFC; color: #3B3EC4; font-size: 11.5px; font-weight: 500">Changes</button>
+        <button type="button" aria-pressed="false" title="The file as it was in this commit" style="height: 24px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: #5C6091; font-size: 11.5px; font-weight: 500">File</button>
+      </span>
+      <button type="button" aria-label="Close README.md" title="Close (Esc)" style="width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #5C6091"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.7; white-space: pre">
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 4px; background: transparent; color: #6b6e78"><span></span><span style="padding-right: 12px; text-align: right; color: #6b6e78"></span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)">@@ -1,4 +1,7 @@</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: transparent; color: #43464f"><span></span><span style="padding-right: 12px; text-align: right; color: #6b6e78">1</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)"># jsonl-reader</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: transparent; color: #43464f"><span></span><span style="padding-right: 12px; text-align: right; color: #6b6e78">2</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)"> </span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: #fdeeee; color: #8e1d23"><span></span><span style="padding-right: 12px; text-align: right; color: #a4545a">3</span><span style="padding-right: 16px; text-decoration: line-through; text-decoration-color: rgba(142,29,35,.35)">Reads JSON Lines.</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: #e9f7ef; color: #0f5530"><span></span><span style="padding-right: 12px; text-align: right; color: #3e7c59">3</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)">Reads JSON Lines from pi’s RPC mode.</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: #e9f7ef; color: #0f5530"><span></span><span style="padding-right: 12px; text-align: right; color: #3e7c59">4</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)"> </span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: #e9f7ef; color: #0f5530"><span></span><span style="padding-right: 12px; text-align: right; color: #3e7c59">5</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)">Large files stream in 64 KB chunks, so a 1 GB input</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: #e9f7ef; color: #0f5530"><span></span><span style="padding-right: 12px; text-align: right; color: #3e7c59">6</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)">no longer sits in memory.</span></div>
+        <div style="display: grid; grid-template-columns: 3px 44px max-content; min-width: 100%; margin-top: 0; background: transparent; color: #43464f"><span></span><span style="padding-right: 12px; text-align: right; color: #6b6e78">7</span><span style="padding-right: 16px; text-decoration: none; text-decoration-color: rgba(142,29,35,.35)"> </span></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

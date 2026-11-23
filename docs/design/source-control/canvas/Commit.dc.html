@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Committing with a drafted message</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3B3EC4}a:hover{color:#2B2E9E}
+</style>
+</helmet>
+<div style="width: 480px; height: 920px; box-sizing: border-box; display: flex; flex-direction: column; background: #fff; border: 1px solid #DEDFF3; border-radius: 14px; overflow: hidden; font-family: Geist, Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.5; letter-spacing: -0.005em; color: #16171b">
+
+  <div style="display: flex; align-items: center; height: 52px; padding: 0 10px 0 6px; margin-bottom: 12px; border-bottom: 1px solid #E8E9F8; box-sizing: border-box">
+    <div style="position: relative; align-self: stretch; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12.5px; font-weight: 500">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-5 4-10.5 6"></path></svg>
+      Source Control
+      <span style="font-size: 11px; color: #3B3EC4; background: #EEEFFC; border-radius: 8px; padding: 0 6px; line-height: 16px">4</span>
+      <span style="position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: #5457E8"></span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 6px; padding: 0 12px 10px 16px; font-size: 12px; color: #43464f">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6e78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-5 4-10.5 6"></path></svg>
+    <span style="font-family: 'Geist Mono', monospace">main</span>
+    <span style="font-family: 'Geist Mono', monospace; color: #6b6e78">origin/main</span>
+    <span style="flex: 1"></span>
+    <span style="color: #3B3EC4; font-weight: 500">Push 1</span>
+  </div>
+
+  <!-- Commit box, focused, with a drafted message -->
+  <div style="margin: 0 12px 6px; padding: 10px 8px 8px 12px; border: 1px solid #C9CBF5; border-radius: 10px; background: #fff; display: flex; flex-direction: column; gap: 8px">
+    <label for="cm" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Commit message</label>
+    <textarea id="cm" rows="5" style="border: 0; outline: none; resize: none; font: inherit; color: #16171b; background: transparent; padding: 0 4px 0 0">Split pasted records on \n only
+
+readline also broke lines at U+2028 and U+2029, which PDF text often holds, so one record became two invalid JSON lines. Use pi's RpcClient and add a regression test.</textarea>
+
+    <label style="display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px; color: #43464f; cursor: pointer">
+        <input type="checkbox" checked style="margin: 2px 0 0; accent-color: #5457E8">
+        <span>Link this session in the commit, so you can see what pi did for it</span>
+      </label>
+
+    <div style="display: flex; align-items: center; gap: 6px">
+      <span style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px; color: #3B3EC4; font-size: 12px; font-weight: 500">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>
+        Drafted · Redo
+      </span>
+      <span style="flex: 1"></span>
+      <span style="position: relative; display: flex">
+        <span style="display: flex; border-radius: 9px; overflow: hidden">
+          <button type="button" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; background: #5457E8; color: #fff; font-size: 12.5px; font-weight: 500"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Commit 3</button>
+          <button type="button" aria-label="More commit actions" aria-expanded="true" style="height: 30px; padding: 0 8px; border: 0; border-left: 1px solid rgba(255,255,255,.28); background: #4447d6; color: #fff"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        </span>
+        <div role="menu" aria-label="Commit actions" style="position: absolute; right: 0; top: calc(100% + 6px); z-index: 3; width: 232px; padding: 5px; border-radius: 12px; background: #fff; box-shadow: 0 12px 32px rgba(19,20,43,.14), 0 0 0 1px rgba(19,20,43,.06); font-size: 12.5px">
+          <button type="button" role="menuitem" style="display: flex; width: 100%; justify-content: space-between; border: 0; border-radius: 7px; background: #EEEFFC; color: #3B3EC4; padding: 6px 9px; text-align: left">Commit<span style="font-size: 11px; color: #5C6091">Ctrl ↵</span></button>
+          <button type="button" role="menuitem" style="display: flex; width: 100%; border: 0; border-radius: 7px; background: transparent; padding: 6px 9px; text-align: left; color: #34374F">Commit and push</button>
+          <button type="button" role="menuitem" style="display: flex; width: 100%; border: 0; border-radius: 7px; background: transparent; padding: 6px 9px; text-align: left; color: #34374F">Commit and sync</button>
+          <div style="height: 1px; background: #E8E9F8; margin: 4px 6px"></div>
+          <button type="button" role="menuitem" style="display: flex; width: 100%; border: 0; border-radius: 7px; background: transparent; padding: 6px 9px; text-align: left; color: #34374F">Amend last commit</button>
+          <button type="button" role="menuitem" style="display: flex; width: 100%; border: 0; border-radius: 7px; background: transparent; padding: 6px 9px; text-align: left; color: #34374F">Undo last commit</button>
+        </div>
+      </span>
+    </div>
+  </div>
+
+  <!-- Files box -->
+  <div style="padding: 4px 0 10px; display: flex; flex-direction: column">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 6px 16px 4px; color: #6b6e78; font-size: 11.5px; font-weight: 500">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="transform: rotate(90deg)"><path d="M9 6l6 6-6 6"></path></svg>
+      Staged <span style="font-weight: 400">3</span>
+    </div>
+    <div style="display: flex; align-items: center; min-height: 26px; padding: 0 16px 0 32px; gap: 8px; color: #43464f">
+      <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9a6700">M</span>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px">reader.ts</span><span style="flex: 1; font-size: 11.5px; color: #6b6e78">src</span>
+      
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px"><span style="color: #146c3c">+5</span> <span style="color: #b4232a">−5</span></span>
+    </div>
+    <div style="display: flex; align-items: center; min-height: 26px; padding: 0 16px 0 32px; gap: 8px; color: #43464f">
+      <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #146c3c">A</span>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px">reader.test.ts</span><span style="flex: 1; font-size: 11.5px; color: #6b6e78">test</span>
+      
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #146c3c">+7</span>
+    </div>
+    <div style="display: flex; align-items: center; min-height: 26px; padding: 0 16px 0 32px; gap: 8px; color: #43464f">
+      <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9a6700">M</span>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px">paths.ts</span><span style="flex: 1; font-size: 11.5px; color: #6b6e78">src</span>
+      
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px"><span style="color: #146c3c">+4</span> <span style="color: #b4232a">−1</span></span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 8px 16px 4px; color: #6b6e78; font-size: 11.5px; font-weight: 500">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" style="transform: rotate(90deg)"><path d="M9 6l6 6-6 6"></path></svg>
+      Changes <span style="font-weight: 400">1</span>
+    </div>
+    <div style="display: flex; align-items: center; min-height: 26px; padding: 0 16px 0 32px; gap: 8px; color: #43464f">
+      <span style="width: 14px; text-align: center; font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: #9a6700">M</span>
+      <span style="flex: 1; font-family: 'Geist Mono', monospace; font-size: 12px">package.json</span>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px"><span style="color: #146c3c">+1</span> <span style="color: #b4232a">−1</span></span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

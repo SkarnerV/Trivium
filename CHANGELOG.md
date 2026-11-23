@@ -2,6 +2,18 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-11-23
+
+### Added
+
+- **Source Control tab.** The Code panel has one Source Control tab in place of Changes and History: the branch with push and pull, a commit message box the session's model can draft, staged and unstaged files with stage, unstage and discard, merge conflicts, and every branch's history. Commits can name their session in a `Trivium-Session` trailer, which History reads back to link the session. Outside a repository it still lists the session's edits with revert and offers to initialize one.
+- **Files tab.** The whole project as a tree with git status, a name filter and git-ignored folders on request.
+
+### Changed
+
+- In Source Control and Files, the picked file opens below the list in the same tab, as its diff or as the whole file with changed lines marked.
+- Summary cards hang from the header button as one list over the thread instead of taking room beside it.
+
 ## [0.13.1] - 2026-11-18
 
 ### Added

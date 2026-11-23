@@ -377,6 +377,8 @@ export interface GitCommitDetail {
 	files: GitCommitFile[];
 	/** It changed more files than are listed. */
 	truncated: boolean;
+	/** The Trivium session its message names in a trailer, which the body leaves out. */
+	session?: string;
 }
 
 export interface GitDiff {
@@ -386,6 +388,36 @@ export interface GitDiff {
 	tooLarge: boolean;
 	binary: boolean;
 }
+
+/** A file read for the Files tab: its text, or why there is none. */
+export interface ProjectFile {
+	text: string | null;
+	binary: boolean;
+	tooLarge: boolean;
+}
+
+/** The files of a session's project folder, by paths relative to it with forward slashes. */
+export interface ProjectTree {
+	files: string[];
+	/** What git ignores, such as node_modules, by top folder (ending in a slash) or file; empty unless asked for. */
+	ignored: string[];
+	/** There are more files than are listed. */
+	truncated: boolean;
+	/** Git listed them, leaving out what it ignores; otherwise a walk of the folder. */
+	git: boolean;
+}
+
+/** A change to the repository the Source Control tab asks for. */
+export type GitAction =
+	| { kind: "stage"; files: Pick<GitFile, "rel" | "area">[] }
+	| { kind: "unstage"; files: Pick<GitFile, "rel" | "area">[] }
+	| { kind: "discard"; files: Pick<GitFile, "rel" | "area">[] }
+	| { kind: "commit"; message: string; all?: boolean; amend?: boolean; push?: boolean; linkSession?: boolean }
+	| { kind: "undoCommit" }
+	| { kind: "push" }
+	| { kind: "pull" }
+	| { kind: "fetch" }
+	| { kind: "init" };
 
 /** How the Preview panel shows a file. "web" is a local service's page, by its address; "diagram" one drawn from the conversation. */
 export type ReaderKind = "html" | "markdown" | "image" | "pdf" | "table" | "text" | "binary" | "web" | "diagram";
@@ -1041,6 +1073,16 @@ export interface TriviumApi {
 	gitCommit(path: string, id: string): Promise<GitCommitDetail>;
 	/** What a commit changed in one file. */
 	gitCommitDiff(path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">): Promise<GitDiff>;
+	/** Stages, commits, pushes and the rest, in the repository a Code session works in; resolves with its git status after. */
+	gitAction(path: string, action: GitAction): Promise<GitStatus | null>;
+	/** A commit message for what is staged, or for every change when nothing is, written by the session's model. */
+	gitDraftMessage(path: string): Promise<string>;
+	/** A file's text as a commit had it. */
+	gitFileAt(path: string, id: string, rel: string): Promise<ProjectFile>;
+	/** The files of a Code session's project folder; with `ignored`, also what git ignores. */
+	projectFiles(path: string, ignored: boolean): Promise<ProjectTree>;
+	/** The text of a file in a Code session's project folder, by its path relative to it. */
+	projectFile(path: string, rel: string): Promise<ProjectFile>;
 	openInEditor(file: string, line?: number): Promise<void>;
 	/** The services every session's commands left running, by session path. */
 	services(): Promise<Record<string, ServiceInfo[]>>;

@@ -13,6 +13,7 @@ import type {
 	ConnectorInput,
 	CustomProvider,
 	DialogAnswer,
+	GitAction,
 	GitCommitFile,
 	GitFile,
 	HostEvent,
@@ -577,6 +578,11 @@ function registerIpc(): void {
 	handle("trivium:gitHistory", (path: string, limit: number) => host.gitHistory(path, limit));
 	handle("trivium:gitCommit", (path: string, id: string) => host.gitCommit(path, id));
 	handle("trivium:gitCommitDiff", (path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">) => host.gitCommitDiff(path, id, file));
+	handle("trivium:gitAction", (path: string, action: GitAction) => host.gitAction(path, action));
+	handle("trivium:gitDraftMessage", (path: string) => host.gitDraftMessage(path));
+	handle("trivium:gitFileAt", (path: string, id: string, rel: string) => host.gitFileAt(path, String(id), String(rel)));
+	handle("trivium:projectFiles", (path: string, ignored: boolean) => host.projectFiles(path, Boolean(ignored)));
+	handle("trivium:projectFile", (path: string, rel: string) => host.projectFile(path, String(rel)));
 	handle("trivium:openInEditor", async (file: string, line?: number) => {
 		const target = String(file);
 		const command = await vsCodeCommand();

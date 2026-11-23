@@ -1,31 +1,54 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { SessionView } from "../../shared/protocol.ts";
-import { BranchIcon, CheckIcon, Chevron, CloudDownIcon, CloudUpIcon, FileIcon, HistoryIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
+import { BranchIcon, CheckIcon, Chevron, CloudDownIcon, CloudUpIcon, FileIcon, FolderIcon, ServerIcon, ViewsIcon } from "../icons.tsx";
 import { type PanelView, panelOpen, panelViews, shownView } from "../panels.ts";
-import { setState, showPanelView, useStore } from "../store.ts";
+import { showPanelView, useStore } from "../store.ts";
 import { transition } from "../transition.ts";
 import { t } from "../i18n.tsx";
-import { branchLabel, ChangeCount, otherChanges } from "./ChangesPanel.tsx";
+import { branchLabel, ChangeCount, changedCount } from "./SourceControl.tsx";
 import { serviceCount, useServices } from "./ServicesPanel.tsx";
 
 function fileCount(n: number): string {
 	return t(n === 1 ? "1 file" : "{n} files", { n });
 }
 
-/** The button in the session's header that shows or hides the summary cards under it. */
-export function SummaryButton({ path }: { path: string }) {
-	const shown = useStore((s) => Boolean(s.summaryShown[path]));
+/**
+ * The button in the session's header and the summary cards that hang from it: one list over the thread, which
+ * takes no room from it and closes when a card is picked, on a click elsewhere or on Escape.
+ */
+export function SummaryButton({ view }: { view: SessionView }) {
+	const [shown, setShown] = useState(false);
+	const anchor = useRef<HTMLSpanElement>(null);
+	useEffect(() => {
+		if (!shown) return;
+		const away = (event: MouseEvent) => {
+			if (!anchor.current?.contains(event.target as Node)) setShown(false);
+		};
+		const escape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setShown(false);
+		};
+		document.addEventListener("mousedown", away);
+		document.addEventListener("keydown", escape);
+		return () => {
+			document.removeEventListener("mousedown", away);
+			document.removeEventListener("keydown", escape);
+		};
+	}, [shown]);
 	return (
-		<button
-			type="button"
-			className="changes-toggle views-toggle"
-			aria-pressed={shown}
-			aria-label={t(shown ? "Hide summary cards" : "Show summary cards")}
-			title={t(shown ? "Hide summary cards" : "Show summary cards")}
-			onClick={() => setState((s) => ({ summaryShown: { ...s.summaryShown, [path]: !shown } }))}
-		>
-			<ViewsIcon size={15} />
-		</button>
+		<span className="views-anchor" ref={anchor}>
+			<button
+				type="button"
+				className="changes-toggle views-toggle"
+				aria-pressed={shown}
+				aria-expanded={shown}
+				aria-label={t(shown ? "Hide summary cards" : "Show summary cards")}
+				title={t(shown ? "Hide summary cards" : "Show summary cards")}
+				onClick={() => setShown(!shown)}
+			>
+				<ViewsIcon size={15} />
+			</button>
+			{shown && <SummaryCards view={view} onPicked={() => setShown(false)} />}
+		</span>
 	);
 }
 
@@ -53,22 +76,26 @@ function Row({ icon, children, value, tone }: { icon: ReactNode; children: React
 }
 
 /**
- * The summary cards beside the conversation, under the header's button: a few facts about the services running,
- * about the branch, this session's edits and any other uncommitted changes, and the repository's history. Picking
- * one opens its view, with the details, in a tab of the panel.
+ * The summary cards under the header's button: a few facts about the services running,
+ * the branch and what is uncommitted, and the project's files. Picking one opens its view, with the details, in a
+ * tab of the panel.
  */
-export function SummaryCards({ view }: { view: SessionView }) {
+function SummaryCards({ view, onPicked }: { view: SessionView; onPicked: () => void }) {
 	const git = useStore((s) => s.git[view.path]);
 	const services = useServices(view.path);
 	const showing = useStore((s) =>
 		panelOpen(s.app, view, s.changesHidden[view.path]) ? shownView(panelViews(view, s.panelTabs[view.path]), s.panelTab[view.path]) : undefined,
 	);
 
-	const open = (name: PanelView) => () => transition("tab", () => showPanelView(view.path, name));
-	const others = otherChanges(view.changes, git).length;
+	const open = (name: PanelView) => () => {
+		onPicked();
+		transition("tab", () => showPanelView(view.path, name));
+	};
+	const changed = changedCount(git);
+	const staged = new Set(git?.files.filter((file) => file.area === "staged").map((file) => file.rel)).size;
 	const ports = services.flatMap((service) => service.ports.map((port) => `:${port}`));
 	return (
-		<aside className="summary" aria-label={t("Session summary")}>
+		<div className="views-menu" role="dialog" aria-label={t("Session summary")}>
 			<Card title={t("Services")} current={showing === "services"} onOpen={open("services")}>
 				{services.length ? (
 					<Row icon={<ServerIcon size={14} />} value={ports.length ? <span className="mono">{ports.join(" ")}</span> : undefined}>
@@ -78,7 +105,7 @@ export function SummaryCards({ view }: { view: SessionView }) {
 					<Row icon={<ServerIcon size={14} />}>{t("Nothing running")}</Row>
 				)}
 			</Card>
-			<Card title={t("Changes")} current={showing === "session"} onOpen={open("session")}>
+			<Card title={t("Source Control")} current={showing === "git"} onOpen={open("git")}>
 				{git && (
 					<Row icon={<BranchIcon size={14} />} value={git.upstream && <span className="mono">{git.upstream}</span>}>
 						<span className="mono">{branchLabel(git)}</span>
@@ -94,27 +121,28 @@ export function SummaryCards({ view }: { view: SessionView }) {
 						{t("{n} to pull", { n: git.behind })}
 					</Row>
 				)}
-				{view.changes.length > 0 && (
+				{git && changed > 0 && (
+					<Row icon={<FileIcon size={14} />} value={staged ? t("{n} staged", { n: staged }) : undefined}>
+						{t("{files} changed", { files: fileCount(changed) })}
+					</Row>
+				)}
+				{!git && view.changes.length > 0 && (
 					<Row icon={<FileIcon size={14} />} value={<ChangeCount changes={view.changes} />}>
 						{t("{files} this session", { files: fileCount(view.changes.length) })}
 					</Row>
 				)}
-				{others > 0 && (
-					<Row icon={<FileIcon size={14} />}>{t(others === 1 ? "1 other uncommitted file" : "{n} other uncommitted files", { n: others })}</Row>
-				)}
-				{!view.changes.length && !others && (git ? (
+				{git && !changed && (
 					<Row icon={<CheckIcon size={14} width={2.2} />} tone="done">
 						{t("Nothing to commit")}
 					</Row>
-				) : (
-					<Row icon={<FileIcon size={14} />}>{t("No changes yet")}</Row>
-				))}
+				)}
+				{git === null && !view.changes.length && <Row icon={<FileIcon size={14} />}>{t("No changes yet")}</Row>}
 			</Card>
 			{!view.chat && (
-				<Card title={t("History")} current={showing === "history"} onOpen={open("history")}>
-					<Row icon={<HistoryIcon size={14} />}>{t("Commits and the files they changed")}</Row>
+				<Card title={t("Files")} current={showing === "files"} onOpen={open("files")}>
+					<Row icon={<FolderIcon size={14} />}>{t("Every file in the project")}</Row>
 				</Card>
 			)}
-		</aside>
+		</div>
 	);
 }

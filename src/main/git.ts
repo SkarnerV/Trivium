@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { t } from "../shared/i18n.ts";
 import type {
@@ -14,6 +14,8 @@ import type {
 	GitHistoryCommit,
 	GitRef,
 	GitStatus,
+	ProjectFile,
+	ProjectTree,
 } from "../shared/protocol.ts";
 
 /** Diffs bigger than this are listed without lines, like the Changes panel's. */
@@ -55,7 +57,8 @@ export function git(
 			"git",
 			["-c", "core.quotepath=false", "--literal-pathspecs", ...args],
 			{ cwd, encoding: "utf8", maxBuffer, windowsHide: true, timeout: options.timeout, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env } },
-			(error, stdout) => (error ? reject(error) : resolve(stdout)),
+			// What git printed on stderr says why it failed, without the command line Node's message starts with.
+			(error, stdout, stderr) => (error ? reject(Object.assign(error, { stderr })) : resolve(stdout)),
 		);
 	});
 }
@@ -312,7 +315,9 @@ export async function readGitCommit(cwd: string, id: string): Promise<GitCommitD
 		git(root, ["-c", "log.showroot=true", "log", "-1", "-m", "--first-parent", "-M", "--raw", "--numstat", "-z", "--format=", id, "--"], LARGE_OUTPUT),
 	]);
 	const files = parseCommitFiles(changed);
-	return { body: message.trim(), files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES };
+	const session = sessionOfMessage(message);
+	const body = message.replace(new RegExp(`^${SESSION_TRAILER}:.*$`, "gm"), "").trim();
+	return { body, files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES, ...(session ? { session } : {}) };
 }
 
 /** Turns `git diff` output for one file into the lines the diff view shows. */
@@ -398,4 +403,182 @@ async function boundedDiff(root: string, args: string[]): Promise<GitDiff> {
 	}
 	if (text.length > MAX_DIFF_BYTES) return { ...parseDiff(""), tooLarge: true };
 	return parseDiff(text);
+}
+
+/** Most files the Files tab lists; a bigger tree says it shows the first ones. */
+const MAX_TREE_FILES = 20000;
+
+/** Bigger files are not read into the Files tab. */
+const MAX_READ_BYTES = 512 * 1024;
+
+/** How long pushing, pulling and fetching may take before they give up. */
+const NETWORK_TIMEOUT = 120_000;
+
+/** Git asks no questions on a terminal it does not have: a missing credential fails instead of hanging. */
+const NO_PROMPT = { GIT_TERMINAL_PROMPT: "0" };
+
+/** The trailer a commit names its Trivium session by. */
+export const SESSION_TRAILER = "Trivium-Session";
+
+/** Puts the files in the index as they are now, deletions too. */
+export async function stageFiles(root: string, rels: string[]): Promise<void> {
+	if (rels.length) await git(root, ["add", "-A", "--", ...rels]);
+}
+
+/** Takes the files out of the index again, keeping their changes. Before the first commit there is no HEAD to go back to. */
+export async function unstageFiles(root: string, rels: string[]): Promise<void> {
+	if (!rels.length) return;
+	if (await readHead(root)) await git(root, ["restore", "--staged", "--", ...rels]);
+	else await git(root, ["rm", "--cached", "-r", "-q", "--", ...rels]);
+}
+
+/**
+ * Throws away the files' changes in the working tree: a tracked file goes back to what the index holds, and an
+ * untracked one is deleted. Staged changes stay.
+ */
+export async function discardFiles(root: string, files: Pick<GitFile, "rel" | "area">[]): Promise<void> {
+	const tracked = files.filter((file) => file.area === "unstaged").map((file) => file.rel);
+	const untracked = files.filter((file) => file.area === "untracked").map((file) => file.rel);
+	if (tracked.length) await git(root, ["restore", "--worktree", "--", ...tracked]);
+	await Promise.all(untracked.map((rel) => rm(join(root, rel), { recursive: true, force: true })));
+}
+
+/** A commit message with the session's trailer below it, unless the message already names one. */
+export function withSessionTrailer(message: string, sessionId: string | undefined): string {
+	const text = message.trim();
+	if (!sessionId || new RegExp(`^${SESSION_TRAILER}:`, "m").test(text)) return text;
+	return `${text}\n\n${SESSION_TRAILER}: ${sessionId}`;
+}
+
+/** The session a commit message names in its trailer, if it names one. */
+export function sessionOfMessage(body: string): string | undefined {
+	return new RegExp(`^${SESSION_TRAILER}:\\s*(\\S+)\\s*$`, "m").exec(body)?.[1];
+}
+
+/**
+ * Commits what is staged, or every change when `all` is set. Amending replaces the last commit, keeping its
+ * message when no new one is given.
+ */
+export async function commitChanges(root: string, options: { message: string; all?: boolean; amend?: boolean }): Promise<void> {
+	const message = options.message.trim();
+	if (!message && !options.amend) throw new Error(t("Write a commit message first."));
+	if (options.all) await git(root, ["add", "-A"]);
+	await git(root, ["commit", "--quiet", ...(options.amend ? ["--amend"] : []), ...(message ? ["-m", message] : ["--no-edit"])]);
+}
+
+/** Undoes the last commit, keeping its changes staged. The first commit has no parent to go back to. */
+export async function undoLastCommit(root: string): Promise<void> {
+	try {
+		await git(root, ["rev-parse", "--verify", "--quiet", "HEAD~1"]);
+	} catch {
+		throw new Error(t("The first commit can't be undone."));
+	}
+	await git(root, ["reset", "--soft", "HEAD~1"]);
+}
+
+/** Pushes the branch. One with no upstream yet gets one on the only remote, or on origin. */
+export async function pushBranch(root: string): Promise<void> {
+	const status = parseStatus(await git(root, ["status", "--porcelain=v2", "--branch", "-z"]), root);
+	if (!status.branch) throw new Error(t("Check out a branch before pushing."));
+	if (status.upstream) {
+		await git(root, ["push", "--quiet"], undefined, { env: NO_PROMPT, timeout: NETWORK_TIMEOUT });
+		return;
+	}
+	const remotes = (await git(root, ["remote"])).split(/\r?\n/).filter(Boolean);
+	const remote = remotes.length === 1 ? remotes[0]! : remotes.includes("origin") ? "origin" : undefined;
+	if (!remote) throw new Error(t("This repository has no remote to push to."));
+	await git(root, ["push", "--quiet", "--set-upstream", remote, status.branch], undefined, { env: NO_PROMPT, timeout: NETWORK_TIMEOUT });
+}
+
+/** Brings in the upstream's commits when they apply without a merge. */
+export async function pullBranch(root: string): Promise<void> {
+	await git(root, ["pull", "--quiet", "--ff-only"], undefined, { env: NO_PROMPT, timeout: NETWORK_TIMEOUT });
+}
+
+/** Reads what the remotes have, without changing any branch. */
+export async function fetchRemotes(root: string): Promise<void> {
+	await git(root, ["fetch", "--quiet", "--all"], undefined, { env: NO_PROMPT, timeout: NETWORK_TIMEOUT });
+}
+
+/** Makes `cwd` a repository. */
+export async function initRepo(cwd: string): Promise<void> {
+	await git(cwd, ["init", "--quiet"]);
+}
+
+/** Reads a text file, unless it is too large or binary. */
+export async function readProjectFile(path: string): Promise<ProjectFile> {
+	const info = await stat(path);
+	if (info.isDirectory()) throw new Error(t("That is a folder, not a file."));
+	if (info.size > MAX_READ_BYTES) return { text: null, binary: false, tooLarge: true };
+	const buffer = await readFile(path);
+	if (buffer.subarray(0, BINARY_PROBE).includes(0)) return { text: null, binary: true, tooLarge: false };
+	return { text: buffer.toString("utf8"), binary: false, tooLarge: false };
+}
+
+/** A file's text as a commit had it. */
+export async function readFileAtCommit(cwd: string, id: string, rel: string): Promise<ProjectFile> {
+	const root = await commitRepo(cwd, id);
+	let text: string;
+	try {
+		text = await git(root, ["show", `${id}:${rel}`], MAX_READ_BYTES * 2);
+	} catch (error) {
+		if ((error as { code?: string }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return { text: null, binary: false, tooLarge: true };
+		throw new Error(t("That file isn't in this commit."));
+	}
+	if (text.length > MAX_READ_BYTES) return { text: null, binary: false, tooLarge: true };
+	if (text.slice(0, BINARY_PROBE).includes("\0")) return { text: null, binary: true, tooLarge: false };
+	return { text, binary: false, tooLarge: false };
+}
+
+/** Folders a walk outside a repository never goes into. */
+const SKIPPED = new Set([".git", "node_modules"]);
+
+/**
+ * Every file under `cwd`, by paths relative to it with forward slashes. In a repository, the files git tracks
+ * that are on disk and the untracked ones it does not ignore; with `ignored`, also what it ignores, by top folder,
+ * folders ending in a slash. Outside one, a walk of the folder.
+ */
+export async function listProjectFiles(cwd: string, options: { ignored?: boolean } = {}): Promise<ProjectTree> {
+	const split = (text: string) => text.split("\0").filter(Boolean);
+	if (await repoRoot(cwd)) {
+		const [listed, deleted, ignored] = await Promise.all([
+			git(cwd, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], LARGE_OUTPUT).then(split),
+			git(cwd, ["ls-files", "-z", "--deleted"], LARGE_OUTPUT).then(split),
+			options.ignored ? git(cwd, ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], LARGE_OUTPUT).then(split) : [],
+		]);
+		// A deleted file stays in the index until it is committed; the tab lists what is on disk.
+		const gone = new Set(deleted);
+		const files = [...new Set(listed)].filter((rel) => !gone.has(rel));
+		return { files: files.slice(0, MAX_TREE_FILES), ignored, truncated: files.length > MAX_TREE_FILES, git: true };
+	}
+	const files: string[] = [];
+	let truncated = false;
+	const walk = async (dir: string, prefix: string): Promise<void> => {
+		const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+		for (const entry of entries) {
+			if (files.length >= MAX_TREE_FILES) {
+				truncated = true;
+				return;
+			}
+			const rel = prefix + entry.name;
+			if (entry.isDirectory()) {
+				if (!SKIPPED.has(entry.name)) await walk(join(dir, entry.name), `${rel}/`);
+			} else if (entry.isFile()) files.push(rel);
+		}
+	};
+	await walk(cwd, "");
+	return { files, ignored: [], truncated, git: false };
+}
+
+/** What a commit message is drafted from: the staged diff, or every change when nothing is staged, cut when long; and recent subjects. */
+export async function draftSource(root: string, limit = 24_000): Promise<{ diff: string; subjects: string[] }> {
+	const head = await readHead(root);
+	let diff = await git(root, ["diff", "--cached", "--no-color", "--no-ext-diff", "-U2"], LARGE_OUTPUT);
+	if (!diff.trim()) {
+		const tracked = await git(root, ["diff", "--no-color", "--no-ext-diff", "-U2", ...(head ? ["HEAD"] : [])], LARGE_OUTPUT);
+		const untracked = (await git(root, ["ls-files", "-z", "--others", "--exclude-standard"])).split("\0").filter(Boolean);
+		diff = tracked + (untracked.length ? `\nNew files:\n${untracked.map((rel) => `  ${rel}`).join("\n")}\n` : "");
+	}
+	const subjects = head ? (await git(root, ["log", "-n10", "--no-color", "--format=%s"])).split(/\r?\n/).filter(Boolean) : [];
+	return { diff: diff.length > limit ? `${diff.slice(0, limit)}\n[diff cut short]` : diff, subjects };
 }

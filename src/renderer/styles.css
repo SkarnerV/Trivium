@@ -1086,61 +1086,6 @@ body.resizing * {
 	min-width: 0;
 }
 
-/* The message box and the latest-button stay under the thread, clear of the cards. */
-.has-summary .dock {
-	padding-right: 296px;
-}
-
-.has-summary .to-latest {
-	left: calc(50% - 136px);
-}
-
-/* Too narrow for the cards beside the thread: they go above it, side by side, and stay in view however far down
-   a long thread is scrolled. */
-@container pane (max-width: 700px) {
-	.scroll-row {
-		flex-direction: column;
-		align-items: stretch;
-	}
-
-	/* On the thread's own white, with a fade under it so the thread scrolls out of sight below the cards. */
-	.scroll-row > .summary {
-		order: -1;
-		z-index: 4;
-		background: #fff;
-		flex-direction: row;
-		flex-wrap: wrap;
-		width: 100%;
-		max-width: var(--conversation-width, 720px);
-		margin: 0 auto;
-		padding: 2px var(--thread-gutter, 24px) 6px;
-	}
-
-	.scroll-row > .summary::after {
-		content: "";
-		position: absolute;
-		top: 100%;
-		left: 0;
-		right: 0;
-		height: 14px;
-		background: linear-gradient(#fff, rgba(255, 255, 255, 0));
-		pointer-events: none;
-	}
-
-	.scroll-row > .summary > .summary-card {
-		flex: 1 1 200px;
-		min-width: 0;
-	}
-
-	.has-summary .dock {
-		padding-right: 24px;
-	}
-
-	.has-summary .to-latest {
-		left: 50%;
-	}
-}
-
 /* Shown once the user scrolls up from the end of the thread; takes them back and follows again. */
 .to-latest {
 	position: absolute;
@@ -2533,42 +2478,72 @@ body.resizing * {
 	flex: none;
 }
 
-/* The summary cards beside the conversation, under the header's button; each opens its view in the Code panel. */
+/* The summary cards: a list hanging from the header's button, over the thread; each opens its view in the Code panel. */
 
-.summary {
-	position: sticky;
-	top: 0;
-	flex: none;
-	width: 272px;
+.views-anchor {
+	position: relative;
+	display: flex;
+}
+
+.views-menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	z-index: 30;
+	width: 288px;
+	max-height: min(70vh, 520px);
+	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	padding: 2px 20px 16px 0;
+	padding: 4px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow:
+		0 12px 32px rgba(19, 20, 43, 0.14),
+		0 0 0 1px rgba(19, 20, 43, 0.06);
+	animation: ctx-in 120ms ease-out;
+	/* The header it hangs from moves the window when dragged; the list must take clicks. */
+	-webkit-app-region: no-drag;
 }
 
 .summary-card {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 12px 14px 14px;
-	border: 1px solid var(--line);
-	border-radius: 12px;
-	background: #fff;
-	box-shadow: 0 2px 8px rgba(19, 20, 43, 0.06);
+	gap: 6px;
+	padding: 9px 10px 10px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
 	color: var(--ink);
 	text-align: left;
-	transition:
-		border-color 120ms ease,
-		box-shadow 120ms ease;
 }
 
-.summary-card:hover {
-	border-color: var(--edge);
-	box-shadow: 0 4px 14px rgba(19, 20, 43, 0.1);
+.summary-card + .summary-card {
+	position: relative;
 }
 
-.summary-card[aria-current="true"] {
-	border-color: var(--accent);
+.summary-card + .summary-card::before {
+	content: "";
+	position: absolute;
+	top: -1px;
+	left: 10px;
+	right: 10px;
+	height: 1px;
+	background: var(--line);
+}
+
+.summary-card:hover,
+.summary-card:focus-visible {
+	background: var(--tab);
+}
+
+.summary-card:hover::before,
+.summary-card:hover + .summary-card::before {
+	background: transparent;
+}
+
+.summary-card[aria-current="true"] .summary-card-title {
+	color: var(--accent-text);
 }
 
 .summary-card-title {
@@ -8229,3 +8204,678 @@ body.resizing * {
 }
 
 /* A writer's name opens its branch, files and patch. */
+
+/*
+ * Source Control and Files: one tab each, flat like the rest of the panel. Lists run edge to edge from one 16px
+ * edge, sections part with a single hairline, and what a list picks opens below it in the same tab.
+ */
+
+.panel-tab-badge {
+	margin-left: 2px;
+	padding: 0 6px;
+	border-radius: 8px;
+	background: var(--soft);
+	color: var(--accent-text);
+	font-size: 11px;
+	line-height: 16px;
+	font-variant-numeric: tabular-nums;
+}
+
+.panel-tab[aria-current="false"] .panel-tab-badge {
+	background: var(--tab);
+	color: var(--ink-3);
+}
+
+.sc-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.sc-branch {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 0 10px 8px 16px;
+	color: var(--ink-2);
+	font-size: 12px;
+}
+
+.sc-branch > svg {
+	flex: none;
+	color: var(--ink-4);
+}
+
+.sc-upstream {
+	color: var(--ink-4);
+}
+
+.sc-spacer {
+	flex: 1;
+}
+
+.sc-ghost {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 26px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.sc-ghost:hover:not(:disabled) {
+	background: var(--tab);
+	color: var(--ink);
+}
+
+.sc-ghost.is-accent {
+	color: var(--accent-text);
+}
+
+.sc-ghost.is-outline {
+	box-shadow: inset 0 0 0 1px var(--edge);
+	color: var(--ink);
+}
+
+.sc-ghost[aria-pressed="true"] {
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.icon-btn.sc-action {
+	width: 24px;
+	height: 24px;
+	font-size: 12.5px;
+	font-weight: 500;
+}
+
+.icon-btn.sc-action:hover:not(:disabled) {
+	color: var(--ink);
+}
+
+/* The message box has no border until it has the keyboard. */
+.sc-commit {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0 12px 6px;
+	padding: 10px 8px 8px 12px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: var(--tray);
+	transition:
+		background 120ms ease,
+		border-color 120ms ease;
+}
+
+.sc-commit:focus-within {
+	border-color: color-mix(in srgb, var(--accent) 30%, #fff);
+	background: #fff;
+}
+
+.sc-message {
+	width: 100%;
+	min-height: 40px;
+	max-height: 160px;
+	padding: 0;
+	border: 0;
+	outline: none;
+	resize: vertical;
+	background: transparent;
+	color: var(--ink);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.sc-message::placeholder {
+	color: var(--ink-4);
+}
+
+.sc-commit-bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: -4px;
+}
+
+.sc-busy {
+	flex: 1;
+	min-width: 0;
+	color: var(--ink-4);
+	font-size: 11.5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sc-split {
+	flex: none;
+	display: flex;
+	border-radius: 9px;
+	overflow: hidden;
+}
+
+.sc-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 12px;
+	border: 0;
+	background: var(--accent);
+	color: #fff;
+	font-size: 12.5px;
+	font-weight: 500;
+}
+
+.sc-primary:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+.sc-primary.sc-more {
+	padding: 0 8px;
+	border-left: 1px solid rgb(255 255 255 / 0.28);
+}
+
+.sc-note {
+	margin: 0;
+	color: var(--ink-3);
+	font-size: 11.5px;
+}
+
+.sc-section-head {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 10px 4px 12px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+	font-weight: 500;
+}
+
+.sc-section-head.is-conflict {
+	color: var(--del);
+}
+
+.sc-fold {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 0 0 4px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+
+.sc-fold:hover {
+	color: var(--ink-2);
+}
+
+.sc-count {
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+}
+
+.sc-section-actions {
+	display: none;
+	gap: 1px;
+}
+
+.sc-section-head:hover .sc-section-actions,
+.sc-section-head:focus-within .sc-section-actions {
+	display: flex;
+}
+
+.sc-group .change-file {
+	padding: 3px 16px 3px 32px;
+}
+
+.sc-row {
+	position: relative;
+}
+
+.sc-row-actions {
+	position: absolute;
+	top: 1px;
+	right: 10px;
+	display: none;
+	gap: 1px;
+}
+
+.sc-row:hover .sc-row-actions,
+.sc-row:focus-within .sc-row-actions {
+	display: flex;
+}
+
+.sc-row:hover .change-meta,
+.sc-row:focus-within .change-meta {
+	visibility: hidden;
+}
+
+.sc-row:hover .change-file {
+	background: var(--tab);
+}
+
+.sc-row:hover .change-file[aria-current="true"] {
+	background: var(--soft);
+}
+
+.sc-empty {
+	margin: 2px 16px 6px 34px;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.sc-history {
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--line);
+}
+
+.sc-history .commit-row {
+	padding-left: 4px;
+	padding-right: 16px;
+}
+
+.sc-history .commit-detail {
+	padding-left: 4px;
+}
+
+.commit-session {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 10px 4px 6px;
+	color: var(--ink-3);
+	font-size: 12px;
+}
+
+.link-btn {
+	flex: none;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--accent-text);
+	font-size: 12px;
+}
+
+.link-btn:hover {
+	text-decoration: underline;
+}
+
+.sc-norepo {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 4px 16px 12px;
+	color: var(--ink-3);
+	font-size: 12.5px;
+}
+
+.sc-norepo p {
+	margin: 0;
+}
+
+/* A list and what it picked, in one tab. */
+.split-view {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.split-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: 8px;
+}
+
+.split-list.has-pane {
+	flex: 0 1 46%;
+	min-height: 96px;
+}
+
+.split-handle {
+	flex: none;
+	display: grid;
+	place-items: center;
+	height: 11px;
+	border-top: 1px solid var(--line);
+	cursor: row-resize;
+}
+
+.split-handle span {
+	width: 28px;
+	height: 3px;
+	border-radius: 2px;
+	background: var(--border);
+	transition: background 120ms ease;
+}
+
+.split-handle:hover span,
+.split-handle:focus-visible span {
+	background: var(--accent);
+}
+
+.split-handle:focus-visible {
+	outline: none;
+}
+
+body.resizing-rows,
+body.resizing-rows * {
+	cursor: row-resize !important;
+	user-select: none !important;
+}
+
+.split-pane {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.content-pane {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.cp-head {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px 6px 16px;
+}
+
+.cp-name {
+	flex: 0 1 auto;
+	min-width: 0;
+	color: var(--ink);
+	font-size: 12px;
+}
+
+.cp-dir {
+	flex: 1 1 0;
+	min-width: 0;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.cp-meta {
+	margin-left: 6px;
+}
+
+.cp-switch {
+	flex: none;
+	display: flex;
+	gap: 2px;
+}
+
+.cp-switch button {
+	height: 24px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 11.5px;
+	font-weight: 500;
+}
+
+.cp-switch button:hover {
+	background: var(--tab);
+}
+
+.cp-switch button[aria-pressed="true"] {
+	background: var(--soft);
+	color: var(--accent-text);
+}
+
+.cp-head .icon-btn {
+	width: 26px;
+	height: 26px;
+}
+
+.cp-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: 8px;
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.7;
+}
+
+.cp-body .diff-hunk {
+	padding-left: 16px;
+}
+
+.cp-body .diff-note {
+	padding: 4px 16px;
+}
+
+/* A whole file: line numbers, and a bar in the margin where git sees lines added or changed. */
+.file-lines {
+	width: max-content;
+	min-width: 100%;
+}
+
+.file-line {
+	display: grid;
+	grid-template-columns: 3px 44px max-content;
+	color: var(--ink-2);
+	white-space: pre;
+}
+
+.file-line::before {
+	content: "";
+}
+
+.file-line.is-add::before {
+	background: #3fa66b;
+}
+
+.file-line.is-change::before {
+	background: #d9a43a;
+}
+
+.file-line .no {
+	position: sticky;
+	left: 0;
+	padding-right: 12px;
+	text-align: right;
+	color: var(--ink-4);
+	background: #fff;
+	user-select: none;
+}
+
+.file-line .text {
+	padding-right: 16px;
+}
+
+/* Files */
+
+.files-head {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0 10px 6px 16px;
+}
+
+.files-summary {
+	flex: 1;
+	min-width: 0;
+	color: var(--ink-4);
+	font-size: 12px;
+}
+
+.files-filter {
+	margin: 0 12px 6px;
+}
+
+.files-filter input {
+	width: 100%;
+	height: 30px;
+	padding: 0 10px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	outline: none;
+	background: var(--tray);
+	color: var(--ink);
+	font-size: 12.5px;
+}
+
+.files-filter input:focus {
+	border-color: color-mix(in srgb, var(--accent) 30%, #fff);
+	background: #fff;
+}
+
+.files-filter input::placeholder {
+	color: var(--ink-4);
+}
+
+.tree-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 24px;
+}
+
+.tree-row:hover {
+	background: var(--tab);
+}
+
+.tree-row[aria-selected="true"] {
+	background: var(--soft);
+}
+
+.tree-row.is-ignored {
+	opacity: 0.55;
+}
+
+.tree-item {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding-right: 4px;
+	border: 0;
+	background: transparent;
+	color: var(--secondary);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.tree-item:disabled {
+	opacity: 1;
+	cursor: default;
+}
+
+.tree-item > svg {
+	flex: none;
+	color: var(--muted);
+}
+
+.tree-row[aria-selected="true"] .tree-item {
+	color: var(--accent-text);
+}
+
+.tree-item.is-modified,
+.tree-item.is-renamed,
+.tree-item.is-typechange {
+	color: #9a6700;
+}
+
+.tree-item.is-added,
+.tree-item.is-untracked {
+	color: var(--add);
+}
+
+.tree-item.is-conflicted {
+	color: var(--del);
+}
+
+.tree-chevron {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 10px;
+	color: var(--ink-4);
+}
+
+.tree-name {
+	flex: 0 1 auto;
+}
+
+.tree-dir {
+	flex: 1 1 0;
+	color: var(--ink-4);
+	font-size: 11.5px;
+}
+
+.tree-status {
+	flex: none;
+	width: 20px;
+	margin-right: 8px;
+	text-align: center;
+	font-family: var(--mono);
+	font-size: 11px;
+	font-weight: 500;
+	color: #9a6700;
+}
+
+.tree-status.is-added,
+.tree-status.is-untracked {
+	color: var(--add);
+}
+
+.tree-status.is-deleted,
+.tree-status.is-conflicted {
+	color: var(--del);
+}
+
+.tree-dot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin: 0 15px 0 7px;
+	border-radius: 50%;
+	background: #9a6700;
+}
+
+.tree-actions {
+	display: none;
+	gap: 1px;
+	padding-right: 8px;
+}
+
+.tree-row:hover .tree-actions,
+.tree-row:focus-within .tree-actions {
+	display: flex;
+}
+
+.tree-row:hover .tree-status,
+.tree-row:focus-within .tree-status {
+	display: none;
+}

@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GitCommitDetail, GitCommitFile, GitDiff, GitHistory, GitHistoryCommit, GitRef, GitStatus, SessionView } from "../../shared/protocol.ts";
-import { baseName, relativeTime } from "../format.ts";
+import type { GitCommitDetail, GitCommitFile, GitHistory, GitHistoryCommit, GitRef, GitStatus, SessionView } from "../../shared/protocol.ts";
+import { relativeTime } from "../format.ts";
 import { type GraphLine, type GraphRow, layoutGraph, linesBelow } from "../graph.ts";
 import { t } from "../i18n.tsx";
-import { CloseIcon } from "../icons.tsx";
-import { errorText, trivium } from "../store.ts";
-import { BranchBar } from "./ChangesPanel.tsx";
-import { DiffView } from "./DiffView.tsx";
-import { EmptyBody } from "./EmptyPanel.tsx";
-import { dirName, emptyNote, FileRow } from "./FileRow.tsx";
+import { Chevron } from "../icons.tsx";
+import { errorText, openSession, trivium, useStore } from "../store.ts";
+import { FileRow } from "./FileRow.tsx";
 
 /** Commits read at first, and each time the list goes further back. */
 const PAGE = 200;
@@ -71,7 +68,22 @@ function commitTitle(commit: GitHistoryCommit): string {
 	return `${commit.subject}\n${commit.id.slice(0, 7)} · ${commit.author} · ${new Date(commit.time).toLocaleString()}`;
 }
 
-/** What opens under a commit: who wrote it and when, the rest of its message, and the files it changed. */
+/** The session a commit's trailer names: its title and a way to open it when Trivium knows it. */
+function SessionLine({ id }: { id: string }) {
+	const session = useStore((s) => s.sessions.find((summary) => summary.id === id));
+	return (
+		<p className="commit-session">
+			<span className="ellipsis">{session ? t("Session: {title}", { title: session.title }) : t("Session {id}", { id: id.slice(0, 8) })}</span>
+			{session && (
+				<button type="button" className="link-btn" onClick={() => void openSession(session.path)}>
+					{t("Open session")}
+				</button>
+			)}
+		</p>
+	);
+}
+
+/** What opens under a commit: when it was made, the rest of its message, the session it came from, and the files it changed. */
 function CommitFiles({ commit, detail, picked, onPick }: {
 	commit: GitHistoryCommit;
 	detail: { commit?: GitCommitDetail; error?: string } | undefined;
@@ -88,6 +100,7 @@ function CommitFiles({ commit, detail, picked, onPick }: {
 			{detail?.commit && (
 				<>
 					{detail.commit.body && <p className="commit-message">{detail.commit.body}</p>}
+					{detail.commit.session && <SessionLine id={detail.commit.session} />}
 					{detail.commit.files.map((file) => (
 						<FileRow
 							key={file.rel}
@@ -110,20 +123,24 @@ function CommitFiles({ commit, detail, picked, onPick }: {
 }
 
 /**
- * The Code panel's History view: every branch's commits as a graph. A commit opens in place to list the files it
- * changed, and a file's diff in that commit shows below.
+ * Source Control's History: every branch's commits as a graph, under a heading that folds it. A commit opens in
+ * place to its files; picking one shows its diff in the pane below the list.
  */
-export function HistoryBody({ view, git }: { view: SessionView; git: GitStatus | null | undefined }) {
+export function HistorySection({ view, git, picked, onPick }: {
+	view: SessionView;
+	git: GitStatus;
+	picked: { id: string; rel: string } | undefined;
+	onPick: (commit: GitHistoryCommit, file: GitCommitFile) => void;
+}) {
+	const [folded, setFolded] = useState(false);
 	const [limit, setLimit] = useState(PAGE);
 	const [history, setHistory] = useState<GitHistory>();
 	const [error, setError] = useState<string>();
 	const [openId, setOpenId] = useState<string>();
 	const [detail, setDetail] = useState<{ id: string; commit?: GitCommitDetail; error?: string }>();
-	const [file, setFile] = useState<{ id: string; file: GitCommitFile }>();
-	const [shown, setShown] = useState<{ id: string; rel: string; diff?: GitDiff; error?: string }>();
 
 	// Read again when a commit lands, the branch changes or the remote is fetched. A new read keeps how far back the list goes.
-	const version = `${git?.head}:${git?.branch}:${git?.ahead}:${git?.behind}:${git?.fetchedAt}`;
+	const version = `${git.head}:${git.branch}:${git.ahead}:${git.behind}:${git.fetchedAt}`;
 	useEffect(() => {
 		let live = true;
 		trivium.gitHistory(view.path, limit).then(
@@ -151,48 +168,32 @@ export function HistoryBody({ view, git }: { view: SessionView; git: GitStatus |
 		};
 	}, [view.path, openId]);
 
-	useEffect(() => {
-		if (!file) return;
-		let live = true;
-		const { id, file: { rel, from } } = file;
-		trivium.gitCommitDiff(view.path, id, { rel, from }).then(
-			(diff) => live && setShown({ id, rel, diff }),
-			(reason: unknown) => live && setShown({ id, rel, error: errorText(reason) }),
-		);
-		return () => {
-			live = false;
-		};
-	}, [view.path, file]);
-
 	const commits = history?.commits ?? [];
 	const graph = useMemo(() => layoutGraph(commits), [commits]);
 	const width = GRAPH_INSET * 2 + Math.min(graph.lanes, MAX_LANES) * LANE_WIDTH;
 
-	const toggle = (id: string) => {
-		setOpenId(openId === id ? undefined : id);
-		setFile(undefined);
-	};
-
-	const diff = file && shown?.id === file.id && shown.rel === file.file.rel ? shown : undefined;
 	return (
-		<>
-			{git && <BranchBar git={git} />}
-			{error ? (
-				<p className="diff-note">{error}</p>
-			) : git === null ? (
-				<EmptyBody kind="noRepo" />
-			) : history && !commits.length ? (
-				<EmptyBody kind="history" />
-			) : history ? (
-				<>
-					<div className={`history-list${file ? "" : " is-last"}`} role="list" aria-label={t("History")}>
+		<section className="sc-history" aria-label={t("History")}>
+			<div className="sc-section-head">
+				<button type="button" className="sc-fold" aria-expanded={!folded} onClick={() => setFolded(!folded)}>
+					<Chevron open={!folded} size={10} />
+					<span>{t("History")}</span>
+				</button>
+			</div>
+			{!folded &&
+				(error ? (
+					<p className="sc-empty">{error}</p>
+				) : history && !commits.length ? (
+					<p className="sc-empty">{t("No commits yet.")}</p>
+				) : (
+					<div role="list" aria-label={t("Commits")}>
 						{commits.map((commit, index) => {
 							const row = graph.rows[index]!;
 							const open = commit.id === openId;
 							const head = commit.refs.some((ref) => ref.current || ref.kind === "head");
 							return (
 								<div key={commit.id} role="listitem">
-									<button type="button" className="commit-row" aria-expanded={open} title={commitTitle(commit)} onClick={() => toggle(commit.id)}>
+									<button type="button" className="commit-row" aria-expanded={open} title={commitTitle(commit)} onClick={() => setOpenId(open ? undefined : commit.id)}>
 										<GraphCell row={row} width={width} merge={commit.parents.length > 1} head={head} />
 										{commit.refs.length > 0 && (
 											<span className="commit-refs">
@@ -210,45 +211,21 @@ export function HistoryBody({ view, git }: { view: SessionView; git: GitStatus |
 											<CommitFiles
 												commit={commit}
 												detail={detail?.id === commit.id ? detail : undefined}
-												picked={file?.id === commit.id ? file.file.rel : undefined}
-												onPick={(next) => setFile({ id: commit.id, file: next })}
+												picked={picked?.id === commit.id ? picked.rel : undefined}
+												onPick={(file) => onPick(commit, file)}
 											/>
 										</div>
 									)}
 								</div>
 							);
 						})}
-						{history.more && (
+						{history?.more && (
 							<button type="button" className="history-more" onClick={() => setLimit(commits.length + PAGE)}>
 								{t("Show older commits")}
 							</button>
 						)}
 					</div>
-					{file && (
-						<div className="diff is-last" role="region" aria-label={t("Diff of {file}", { file: file.file.rel })}>
-							<div className="diff-path change-diff-path" title={file.file.from ? `${file.file.from} → ${file.file.rel}` : file.file.rel}>
-								<span className="change-name ellipsis">{baseName(file.file.rel)}</span>
-								<span className="change-dir ellipsis">{dirName(file.file.rel)}</span>
-								{(file.file.adds > 0 || file.file.dels > 0) && (
-									<span className="change-count">
-										<span className="plus">+{file.file.adds}</span> <span className="minus">−{file.file.dels}</span>
-									</span>
-								)}
-								<button type="button" className="icon-btn" aria-label={t("Close diff")} title={t("Close diff")} onClick={() => setFile(undefined)}>
-									<CloseIcon size={12} />
-								</button>
-							</div>
-							<div className="diff-scroll">
-								{diff?.error ? (
-									<p className="diff-note">{diff.error}</p>
-								) : diff?.diff ? (
-									<DiffView lines={diff.diff.lines} tooLarge={diff.diff.tooLarge} empty={emptyNote(file.file.status, diff.diff.binary)} />
-								) : null}
-							</div>
-						</div>
-					)}
-				</>
-			) : null}
-		</>
+				))}
+		</section>
 	);
 }

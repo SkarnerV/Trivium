@@ -16,14 +16,14 @@ test("Write has its documents, and Review only while there are edits to look at"
 
 test("Code keeps the tabs the user opened", () => {
 	const code = { app: "code", changes: [] } as unknown as SessionView;
-	assert.deepEqual(panelViews(code, undefined), ["session"]);
-	assert.deepEqual(panelViews(code, ["session", "services"]), ["session", "services"]);
+	assert.deepEqual(panelViews(code, undefined), ["git", "files"]);
+	assert.deepEqual(panelViews(code, ["git", "services"]), ["git", "services"]);
 });
 
 test("subagents add no tab of their own: they open beside the thread", () => {
 	const code = { app: "code", changes: [], runs: [{ steps: [{ id: "fanout", subagent: { children: [{}, {}] } }] }] } as unknown as SessionView;
-	const views = panelViews(code, ["session", "services"]);
-	assert.deepEqual(views, ["session", "services"]);
+	const views = panelViews(code, ["git", "services"]);
+	assert.deepEqual(views, ["git", "services"]);
 	assert.equal(shownView(views, undefined), "services");
 	assert.equal(panelOpen("code", code, undefined), false);
 });

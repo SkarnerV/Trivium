@@ -1,10 +1,32 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { parseCommitFiles, parseDiff, parseHistory, parseLog, parseRefs, parseStatus, readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "../src/main/git.ts";
+import {
+	commitChanges,
+	discardFiles,
+	listProjectFiles,
+	parseCommitFiles,
+	parseDiff,
+	parseHistory,
+	parseLog,
+	parseRefs,
+	parseStatus,
+	readFileAtCommit,
+	readGitCommit,
+	readGitCommitDiff,
+	readGitDiff,
+	readGitHistory,
+	readGitStatus,
+	readProjectFile,
+	sessionOfMessage,
+	stageFiles,
+	undoLastCommit,
+	unstageFiles,
+	withSessionTrailer,
+} from "../src/main/git.ts";
 
 /** A repository in a temporary folder with one commit, which git outside it is never asked about. */
 function setup() {
@@ -332,6 +354,108 @@ test("only a full commit id reaches git", async () => {
 	try {
 		await assert.rejects(readGitCommit(repo, "--output=/tmp/x"));
 		await assert.rejects(readGitCommitDiff(repo, "HEAD", { rel: "README.md" }));
+	} finally {
+		cleanup();
+	}
+});
+
+/** Commits made by the code under test need a name, which a test machine may not have configured. */
+function identity() {
+	Object.assign(process.env, { GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.com", GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.com" });
+}
+
+test("staging, unstaging and discarding move files between areas, and discarding deletes untracked ones", async () => {
+	const { repo, cleanup } = setup();
+	try {
+		writeFileSync(join(repo, "README.md"), "# Shop\nMore\n");
+		writeFileSync(join(repo, "notes.txt"), "draft\n");
+		rmSync(join(repo, "old name.txt"));
+		await stageFiles(repo, ["README.md", "old name.txt"]);
+		let status = await readGitStatus(repo);
+		assert.deepEqual(status!.files.map(({ rel, area }) => `${area}:${rel}`).sort(), ["staged:README.md", "staged:old name.txt", "untracked:notes.txt"]);
+		await unstageFiles(repo, ["README.md"]);
+		status = await readGitStatus(repo);
+		assert.ok(status!.files.some((file) => file.rel === "README.md" && file.area === "unstaged"));
+		await discardFiles(repo, [{ rel: "README.md", area: "unstaged" }, { rel: "notes.txt", area: "untracked" }]);
+		status = await readGitStatus(repo);
+		assert.deepEqual(status!.files.map(({ rel, area }) => `${area}:${rel}`), ["staged:old name.txt"]);
+		assert.equal(readFileSync(join(repo, "README.md"), "utf8"), "# Shop\n");
+		assert.equal(existsSync(join(repo, "notes.txt")), false);
+	} finally {
+		cleanup();
+	}
+});
+
+test("a commit names its session in a trailer, which the commit's details read back out of the body", async () => {
+	const { repo, cleanup } = setup();
+	identity();
+	try {
+		writeFileSync(join(repo, "README.md"), "# Shop\nMore\n");
+		await commitChanges(repo, { message: withSessionTrailer("Describe the shop\n\nIt sells things.", "abc-123"), all: true });
+		const [top] = (await readGitHistory(repo, 1)).commits;
+		assert.equal(top!.subject, "Describe the shop");
+		const detail = await readGitCommit(repo, top!.id);
+		assert.equal(detail.session, "abc-123");
+		assert.equal(detail.body, "It sells things.");
+		assert.equal(sessionOfMessage("Fix\n\nTrivium-Session: xyz\n"), "xyz");
+		assert.equal(withSessionTrailer("Fix\n\nTrivium-Session: xyz", "other"), "Fix\n\nTrivium-Session: xyz");
+		await assert.rejects(commitChanges(repo, { message: "  " }), /commit message/);
+	} finally {
+		cleanup();
+	}
+});
+
+test("undoing a commit keeps its changes staged, and the first commit can't be undone", async () => {
+	const { repo, cleanup } = setup();
+	identity();
+	try {
+		await assert.rejects(undoLastCommit(repo), /first commit/);
+		writeFileSync(join(repo, "README.md"), "# Shop\nMore\n");
+		await commitChanges(repo, { message: "More", all: true });
+		await undoLastCommit(repo);
+		const status = await readGitStatus(repo);
+		assert.deepEqual(status!.files.map(({ rel, area }) => `${area}:${rel}`), ["staged:README.md"]);
+		assert.equal((await readGitHistory(repo, 5)).commits.length, 1);
+	} finally {
+		cleanup();
+	}
+});
+
+test("the project's files leave out what git ignores and what was deleted, unless ignored files are asked for", async () => {
+	const { repo, git, cleanup } = setup();
+	try {
+		writeFileSync(join(repo, ".gitignore"), "dist/\n");
+		mkdirSync(join(repo, "dist"));
+		writeFileSync(join(repo, "dist", "main.js"), "x\n");
+		writeFileSync(join(repo, "src", "new.ts"), "export {};\n");
+		rmSync(join(repo, "old name.txt"));
+		const tree = await listProjectFiles(repo);
+		assert.equal(tree.git, true);
+		assert.deepEqual(tree.files.sort(), [".gitignore", "README.md", "src/cart.ts", "src/new.ts"]);
+		assert.deepEqual(tree.ignored, []);
+		assert.deepEqual((await listProjectFiles(repo, { ignored: true })).ignored, ["dist/"]);
+		rmSync(join(repo, ".git"), { recursive: true, force: true });
+		const plain = await listProjectFiles(repo);
+		assert.equal(plain.git, false);
+		assert.ok(plain.files.includes("dist/main.js"));
+		void git;
+	} finally {
+		cleanup();
+	}
+});
+
+test("a file reads as text, or says it is binary, and a commit's version reads by its id", async () => {
+	const { repo, cleanup } = setup();
+	identity();
+	try {
+		assert.deepEqual(await readProjectFile(join(repo, "README.md")), { text: "# Shop\n", binary: false, tooLarge: false });
+		writeFileSync(join(repo, "logo.png"), Buffer.from([0x89, 0x50, 0x00, 0x01]));
+		assert.equal((await readProjectFile(join(repo, "logo.png"))).binary, true);
+		const [first] = (await readGitHistory(repo, 1)).commits;
+		writeFileSync(join(repo, "README.md"), "# Changed\n");
+		assert.equal((await readFileAtCommit(repo, first!.id, "README.md")).text, "# Shop\n");
+		await assert.rejects(readFileAtCommit(repo, first!.id, "missing.txt"));
+		await assert.rejects(readFileAtCommit(repo, "HEAD", "README.md"));
 	} finally {
 		cleanup();
 	}

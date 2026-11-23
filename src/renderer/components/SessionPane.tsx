@@ -16,7 +16,7 @@ import { Steps } from "./Steps.tsx";
 import { type SubagentOpener, SubagentNoticeLine, SubagentOpenerContext } from "./Subagents.tsx";
 import { SubagentDrawer } from "./SubagentSession.tsx";
 import { backgroundSubagents, SubagentsMenu } from "./SubagentsMenu.tsx";
-import { SummaryButton, SummaryCards } from "./SummaryCards.tsx";
+import { SummaryButton } from "./SummaryCards.tsx";
 import { AgentSession } from "../agent-context.ts";
 
 /** "PDF", "TS file" or "Image": the extension says more than the word "file". */
@@ -392,7 +392,6 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	const allDialogs = useStore((s) => s.dialogs);
 	const app = useStore((s) => s.app);
 	const open = useStore((s) => panelOpen(s.app, view, s.changesHidden[view.path]));
-	const summary = useStore((s) => s.app === "code" && Boolean(s.summaryShown[view.path]));
 	useGitStatus(view, app);
 	useWorkingDocument(view, app);
 	const dialogs = allDialogs.filter((d) => d.sessionPath === view.path);
@@ -410,7 +409,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 	);
 	return (
 		<SubagentOpenerContext.Provider value={opener}>
-			<main className={`pane${summary ? " has-summary" : ""}${subagent ? " has-subagent" : ""}`} data-session-path={view.path} aria-label={split ? view.title : undefined}>
+			<main className={`pane${subagent ? " has-subagent" : ""}`} data-session-path={view.path} aria-label={split ? view.title : undefined}>
 				<header className="pane-head drag">
 					{split?.tabs ? (
 						<SplitTabs tabs={split.tabs} current={view.path} />
@@ -427,7 +426,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 					<ServicesButton view={view} />
 					{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 					{app === "code" ? (
-						<SummaryButton path={view.path} />
+						<SummaryButton view={view} />
 					) : (
 						<button
 							type="button"
@@ -470,7 +469,6 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 									<AskCard key={request.id} request={request} />
 								))}
 							</div>
-							{summary && <SummaryCards view={view} />}
 						</div>
 					</div>
 					{scroll.away && (

@@ -38,6 +38,7 @@ import type {
 	ExtensionSource,
 	FileChange,
 	FileReview,
+	GitAction,
 	GitCommitDetail,
 	GitCommitFile,
 	GitDiff,
@@ -48,6 +49,8 @@ import type {
 	ModelOption,
 	NewSessionInput,
 	PermissionSettings,
+	ProjectFile,
+	ProjectTree,
 	QueueInfo,
 	SessionSummary,
 	SessionView,
@@ -78,7 +81,27 @@ import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
-import { readGitCommit, readGitCommitDiff, readGitDiff, readGitHistory, readGitStatus } from "./git.ts";
+import {
+	commitChanges,
+	discardFiles,
+	draftSource,
+	fetchRemotes,
+	initRepo,
+	listProjectFiles,
+	pullBranch,
+	pushBranch,
+	readFileAtCommit,
+	readGitCommit,
+	readGitCommitDiff,
+	readGitDiff,
+	readGitHistory,
+	readGitStatus,
+	readProjectFile,
+	stageFiles,
+	undoLastCommit,
+	unstageFiles,
+	withSessionTrailer,
+} from "./git.ts";
 import { isInside } from "./reader.ts";
 import type { ExportInfo } from "./export.ts";
 import { createUiContext, type DialogBroker } from "./dialogs.ts";
@@ -705,6 +728,114 @@ export class SessionHost {
 
 	async gitCommitDiff(path: string, id: string, file: Pick<GitCommitFile, "rel" | "from">): Promise<GitDiff> {
 		return readGitCommitDiff(this.require(path).cwd, id, file);
+	}
+
+	async gitFileAt(path: string, id: string, rel: string): Promise<ProjectFile> {
+		return readFileAtCommit(this.require(path).cwd, id, rel);
+	}
+
+	/**
+	 * Stages, commits, pushes and the rest. Files must be ones git lists as changed in that area, so the renderer
+	 * cannot reach other paths. Discarding waits for the run to stop, as reverting does.
+	 */
+	async gitAction(path: string, action: GitAction): Promise<GitStatus | null> {
+		const live = this.require(path);
+		if (!this.hasGit(live)) throw new Error(t("Source control works in a Code session's project."));
+		if (action.kind === "init") {
+			await initRepo(live.cwd);
+			return this.gitStatus(path);
+		}
+		const git = await readGitStatus(live.cwd);
+		if (!git) throw new Error(t("This folder is not a git repository."));
+		const listed = (files: Pick<GitFile, "rel" | "area">[]) => {
+			const known = files.filter((file) => git.files.some((f) => f.rel === file.rel && f.area === file.area));
+			if (known.length !== files.length) {
+				this.scheduleGit(live);
+				throw new Error(t("That file has no changes any more."));
+			}
+			return known;
+		};
+		try {
+			switch (action.kind) {
+				case "stage":
+					await stageFiles(git.root, listed(action.files).map((file) => file.rel));
+					break;
+				case "unstage":
+					await unstageFiles(git.root, listed(action.files).map((file) => file.rel));
+					break;
+				case "discard":
+					if (live.running) throw new Error(t("Stop the run before discarding changes."));
+					await discardFiles(git.root, listed(action.files));
+					break;
+				case "commit": {
+					const sessionId = action.linkSession ? live.session.sessionId : undefined;
+					const message = action.message.trim() ? withSessionTrailer(action.message, sessionId) : "";
+					await commitChanges(git.root, { message, all: action.all, amend: action.amend });
+					if (action.push) await pushBranch(git.root);
+					break;
+				}
+				case "undoCommit":
+					await undoLastCommit(git.root);
+					break;
+				case "push":
+					await pushBranch(git.root);
+					break;
+				case "pull":
+					await pullBranch(git.root);
+					break;
+				case "fetch":
+					await fetchRemotes(git.root);
+					break;
+			}
+		} catch (error) {
+			throw new Error(gitError(error));
+		}
+		if (action.kind === "discard") await this.emitChanges(live);
+		return this.gitStatus(path);
+	}
+
+	/** A commit message for the staged changes, or for all of them when nothing is staged, from the session's model. */
+	async gitDraftMessage(path: string): Promise<string> {
+		const live = this.require(path);
+		const git = this.hasGit(live) ? await readGitStatus(live.cwd) : null;
+		if (!git) throw new Error(t("This folder is not a git repository."));
+		const model = live.session.model;
+		if (!model) throw new Error(t("Pick a model for this session first."));
+		const { diff, subjects } = await draftSource(git.root);
+		if (!diff.trim()) throw new Error(t("There are no changes to describe."));
+		const prompt = [
+			"Write a git commit message for this diff.",
+			"First line: a short summary in the imperative mood, at most 72 characters, no trailing period.",
+			"If the change needs explaining, add a blank line and a short body that says why. No lists of files, no Markdown, no quotes around the message.",
+			subjects.length ? `Match the style of this repository's recent subjects:\n${subjects.map((subject) => `- ${subject}`).join("\n")}` : "",
+			`The work came from a session titled: ${this.titleFor(live)}`,
+			"Reply with the message only.",
+			"",
+			diff,
+		].filter((line, index) => line || index > 4).join("\n");
+		const reply = await this.modelRuntime.completeSimple(model, { messages: [{ role: "user", content: prompt, timestamp: Date.now() }] });
+		const text = reply.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("").trim();
+		if (!text) throw new Error(reply.errorMessage || t("The model wrote no message."));
+		return text.replace(/^```\w*\n?|\n?```$/g, "").trim();
+	}
+
+	/** The files of a Code session's project folder. */
+	async projectFiles(path: string, ignored: boolean): Promise<ProjectTree> {
+		const live = this.require(path);
+		if (!this.hasGit(live)) throw new Error(t("Files are listed for a Code session's project."));
+		return listProjectFiles(live.cwd, { ignored });
+	}
+
+	/** A file in the session's project folder, which it may not leave by `..` or a link. */
+	async projectFile(path: string, rel: string): Promise<ProjectFile> {
+		const live = this.require(path);
+		if (!this.hasGit(live)) throw new Error(t("Files are listed for a Code session's project."));
+		const project = await realpath(live.cwd);
+		const real = await realpath(resolve(project, rel)).catch(() => {
+			throw new Error(t("There's no file at {path}.", { path: rel }));
+		});
+		if (!isInside(project, real)) throw new Error(t("Only files in this session's project can be read here."));
+		return readProjectFile(real);
 	}
 
 	/** Takes files committed since the last look off the session's list. A run's commit waits for the run to end, when its edits have settled. */
@@ -1564,4 +1695,12 @@ export class SessionHost {
 		await writeFile(tmp, JSON.stringify(this.appIndex, null, 2), { mode: 0o600 });
 		await rename(tmp, this.indexFile);
 	}
+}
+
+/** What git said when it refused, without the command line Node puts in front of it. */
+function gitError(error: unknown): string {
+	const stderr = (error as { stderr?: unknown }).stderr;
+	const text = typeof stderr === "string" ? stderr.trim() : "";
+	if (text) return text.replace(/^(error|fatal|hint): /gm, "").split(/\r?\n/).slice(0, 6).join("\n");
+	return error instanceof Error ? error.message : String(error);
 }

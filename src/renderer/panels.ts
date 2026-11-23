@@ -25,16 +25,20 @@ export function panelOpen(app: AppId, view: SessionView, hidden: boolean | undef
 	return hidden === undefined ? panelFor(app, view) !== undefined : !hidden;
 }
 
-/** What the tabbed panel can show: the changes (this session's edits and the repository's others), the repository's commits, files open to read, what commands left running, or a document's edits to accept or reject. */
-export type PanelView = "session" | "history" | "preview" | "services" | "review";
+/**
+ * What the tabbed panel can show: Source Control (the repository's changes, commits and history, or outside one this
+ * session's edits), the project's files, files open to read, what commands left running, or a document's edits to
+ * accept or reject.
+ */
+export type PanelView = "git" | "files" | "preview" | "services" | "review";
 
 /**
- * The views in a session's tabbed panel. Code's are the ones open as tabs, in the order they were opened, or the
- * changes before the user opens any. Write always has its documents, and Review for as long as there are edits.
+ * The views in a session's tabbed panel. Code's are the ones open as tabs, in the order they were opened, or Source
+ * Control and Files before the user changes them. Write always has its documents, and Review for as long as there are edits.
  */
 export function panelViews(view: Pick<SessionView, "app" | "changes">, open: PanelView[] | undefined): PanelView[] {
 	if (view.app === "write") return liveChanges(view).length ? ["preview", "review"] : ["preview"];
-	return open?.length ? open : ["session"];
+	return open?.length ? open : ["git", "files"];
 }
 
 /** The tab showing: the one the user picked while it is open, else the last one. */

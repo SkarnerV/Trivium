@@ -68,7 +68,6 @@ export interface State {
 	/** The panel tab the user picked for each session; unset shows the last one. */
 	panelTab: Record<string, PanelView>;
 	/** Sessions showing the summary cards beside the conversation. */
-	summaryShown: Record<string, boolean>;
 	/** The subagent whose own session shows in a drawer beside each session's thread. */
 	subagentShown: Record<string, SubagentTarget>;
 	/** The files open in each session's Preview panel, oldest first, and the one showing. */
@@ -155,7 +154,6 @@ let state: State = {
 	changesHidden: {},
 	panelTabs: {},
 	panelTab: {},
-	summaryShown: {},
 	subagentShown: {},
 	previews: {},
 	followed: {},
@@ -873,7 +871,6 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 		changesHidden: Object.fromEntries(Object.entries(s.changesHidden).filter(([path]) => !gone.has(path))),
 		panelTabs: Object.fromEntries(Object.entries(s.panelTabs).filter(([path]) => !gone.has(path))),
 		followed: Object.fromEntries(Object.entries(s.followed).filter(([path]) => !gone.has(path))),
-		summaryShown: Object.fromEntries(Object.entries(s.summaryShown).filter(([path]) => !gone.has(path))),
 		subagentShown: Object.fromEntries(Object.entries(s.subagentShown).filter(([path]) => !gone.has(path))),
 		pinnedSessions: Object.fromEntries(Object.entries(s.pinnedSessions).filter(([path]) => !gone.has(path))),
 	}));

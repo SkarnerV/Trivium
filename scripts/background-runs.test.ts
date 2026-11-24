@@ -9,15 +9,20 @@ import {
 	agentsOf,
 	BackgroundRuns,
 	CHANGES_WINDOW_MS,
+	DETACHED_GRACE_MS,
+	GONE_RECHECK_MS,
+	hasLiveAgents,
 	LAUNCH_GRACE_MS,
 	markBackground,
+	RESULT_GRACE_MS,
 	readRunStatus,
 	STALE_STATUS_MS,
 	stateFromStatus,
 } from "../src/main/background-runs.ts";
 import { ChangeTracker } from "../src/main/changes.ts";
-import { delegationHooks, noticeRunIds } from "../src/main/delegation-hooks.ts";
-import { agentSteps } from "../src/shared/agent-counts.ts";
+import { delegationHooks, noticeRunIds, noticeStatuses } from "../src/main/delegation-hooks.ts";
+import { subagentOf } from "../src/main/subagents.ts";
+import { agentCounts, agentSteps, supervisorQuestions } from "../src/shared/agent-counts.ts";
 import type { AppId, Run } from "../src/shared/protocol.ts";
 
 const NOW = 1_800_000_000_000;
@@ -36,6 +41,15 @@ test("a background run counts as running only while its status shows it alive", 
 	assert.equal(stateFromStatus({ state: "partial" }, evidence()), "error");
 	assert.equal(stateFromStatus({ state: "stopped" }, evidence()), "stopped");
 	assert.equal(stateFromStatus({ state: "something new" }, evidence()), "gone");
+	// Paused: alive while its process is and it has not ended, or while a child of it waits for an answer.
+	const paused = { ...running, state: "paused" };
+	assert.equal(stateFromStatus(paused, evidence()), "running", "its runner is still winding down");
+	assert.equal(stateFromStatus(paused, evidence({ alive: () => false })), "stopped");
+	assert.equal(stateFromStatus({ ...paused, endedAt: NOW - 500 }, evidence()), "stopped", "an interrupted run ends paused");
+	assert.equal(stateFromStatus({ ...paused, endedAt: NOW - 500, steps: [{ status: "paused", activityState: "needs_attention" }] }, evidence()), "running", "its child waits for an answer");
+	assert.equal(stateFromStatus({ ...paused, steps: [{ status: "paused", activityState: "needs_attention" }] }, evidence({ alive: () => false })), "stopped");
+	assert.equal(stateFromStatus({ ...paused, lastUpdate: NOW - STALE_STATUS_MS - 1 }, evidence()), "stopped");
+	assert.equal(stateFromStatus({ state: "paused" }, evidence()), "stopped", "no evidence of life");
 	for (const bad of [null, undefined, "running", [], 3]) assert.equal(stateFromStatus(bad, evidence()), "gone");
 	// Its status may not be written yet just after this process launched it, and only then.
 	assert.equal(stateFromStatus(null, evidence({ launchedAt: NOW - 1000 })), "running");
@@ -107,6 +121,7 @@ function session(app: AppId = "code") {
 	let status: unknown = { state: "running", pid: 1, lastUpdate: NOW };
 	const background = new BackgroundRuns({
 		closeWindow: () => tracker.afterSubagents(),
+		openWindow: () => tracker.beforeSubagents(),
 		onChange: () => {},
 		read: async () => status,
 		now: () => clock,
@@ -141,6 +156,7 @@ function session(app: AppId = "code") {
 		background,
 		call,
 		notice,
+		message: (message: unknown) => handlers.message_end!({ message }),
 		write,
 		listed,
 		setStatus: (value: unknown) => (status = value),
@@ -156,7 +172,10 @@ test("a foreground launch is detected by the host's hooks and its children's edi
 	try {
 		await s.call("subagent", scout, { results: [] }, () => s.write("src/app.ts", "child\n"));
 		assert.deepEqual(await s.listed(), ["src/app.ts"]);
+		// They may be the user's, made while the child worked: reverting all leaves them, and the file can be named.
 		await s.tracker.revert();
+		assert.deepEqual(await s.listed(), ["src/app.ts"]);
+		await s.tracker.revert((await s.tracker.list()).map((change) => change.path));
 		assert.equal((await s.listed()).length, 0);
 	} finally {
 		s.cleanup();
@@ -195,7 +214,7 @@ test("a background launch that never reports back closes its Changes window when
 		s.write("src/user.ts", "mine\n");
 		await s.call("bash", { command: "npm test -- --update" }, {}, () => {});
 		assert.deepEqual(await s.listed(), ["src/app.ts"]);
-		await s.tracker.revert();
+		await s.tracker.revert((await s.tracker.list()).map((change) => change.path));
 		assert.equal((await s.listed()).length, 0);
 	} finally {
 		s.cleanup();
@@ -241,4 +260,180 @@ test("the session list refreshes when a session's agent counts change, not on ev
 	assert.equal(watch.changed({ running: 2, waiting: 0 }), false, "progress alone");
 	assert.equal(watch.changed({ running: 2, waiting: 1 }), true, "one began waiting");
 	assert.equal(watch.changed({ running: 0, waiting: 0 }), true, "they finished");
+});
+
+test("a status that is late past the grace period brings a run back, and one that never comes stays gone", async () => {
+	let status: unknown = null;
+	let clock = NOW;
+	let closed = 0;
+	let opened = 0;
+	const runs = new BackgroundRuns({
+		closeWindow: async () => closed++,
+		openWindow: async () => opened++,
+		onChange: () => {},
+		read: async () => status,
+		now: () => clock,
+		alive: (pid) => pid === 7,
+		bootedAt: 0,
+		poll: false,
+	});
+	runs.launched("late", "/x/late");
+	clock += LAUNCH_GRACE_MS + 1;
+	await runs.refresh();
+	assert.equal(runs.state("late"), "gone");
+	assert.equal(closed, 1);
+	status = { state: "running", pid: 7, lastUpdate: clock };
+	assert.equal(await runs.refresh(), true);
+	assert.equal(runs.state("late"), "running", "gone is not for good while a live status can still appear");
+	assert.equal(runs.windowsOpen(), 1, "what it edits from here on is its own again");
+	assert.equal(opened, 1);
+	// A status caught between two writes is no different.
+	status = null;
+	await runs.refresh();
+	assert.equal(runs.state("late"), "gone");
+	status = { state: "complete" };
+	await runs.refresh();
+	assert.equal(runs.state("late"), "done");
+	assert.equal(runs.windowsOpen(), 0);
+	// Truly dead: no status, or one whose process is gone.
+	for (const dead of [null, { state: "running", pid: 8, lastUpdate: clock }]) {
+		status = dead;
+		runs.launched("dead", "/x/dead");
+		clock += LAUNCH_GRACE_MS + 1;
+		await runs.refresh();
+		await runs.refresh();
+		assert.equal(runs.state("dead"), "gone");
+		clock += GONE_RECHECK_MS;
+		status = { state: "running", pid: 7, lastUpdate: clock };
+		assert.equal(await runs.refresh(), false);
+		assert.equal(runs.state("dead"), "gone", "settled: it is not looked at for ever");
+	}
+	assert.equal(runs.liveRuns(), 0);
+});
+
+/** The result of a single foreground child that asked its supervisor something, as pi-subagents 0.82.1 returns it. */
+const detachedDetails = (runId: string) => ({
+	mode: "single",
+	runId,
+	timeoutMs: 1_800_000,
+	results: [{ index: 0, agent: "worker", task: "Do it", exitCode: -2, detached: true, detachedReason: "intercom coordination", finalOutput: "Detached for intercom coordination before task completion.", progressSummary: { toolCount: 1, tokens: 20, durationMs: 248 } }],
+});
+const detachedHistory = (runId: string) => [{ steps: [{ id: "s", tool: "subagent", status: "done", subagent: subagentOf({ agent: "worker", task: "Do it" }, detachedDetails(runId), "done") }] }] as unknown as Run[];
+
+test("a child detached by its question stays alive across idle and reload, until its completion notice", async () => {
+	const s = session();
+	try {
+		await s.call("subagent", { ...scout, async: false }, detachedDetails("run-1"));
+		assert.equal(s.background.windowsOpen(), 1, "its edits are still to come");
+		const history = detachedHistory("run-1");
+		const child = agentSteps(markBackground(history, s.background))[0]!.subagent!.children[0]!;
+		assert.equal(child.status, "running", "not failed, though its exit code is -2");
+		assert.deepEqual(agentsOf(detachedHistory("run-1"), s.background), { running: 1, waiting: 0 });
+		assert.equal(hasLiveAgents(detachedHistory("run-1"), s.background), true, "unloading the session, idle or to reload it, would kill it");
+		s.advance(20 * 60_000);
+		await s.background.refresh();
+		assert.equal(hasLiveAgents(detachedHistory("run-1"), s.background), true);
+		// Counted by its run, even where no row shows it.
+		assert.equal(hasLiveAgents([], s.background), true);
+		s.write("src/app.ts", "child\n");
+		// The notice of a detached child that ended says "paused" when its work was not accepted.
+		await s.notice({ runs: [{ runId: "run-1", agent: "worker", status: "paused", source: "foreground" }] });
+		assert.equal(s.background.windowsOpen(), 0);
+		assert.deepEqual(await s.listed(), ["src/app.ts"]);
+		assert.equal(hasLiveAgents(detachedHistory("run-1"), s.background), false);
+		const ended = [...detachedHistory("run-1"), { steps: [], notice: { runIds: ["run-1"], status: "completed", text: "Did it" } }] as unknown as Run[];
+		assert.equal(agentSteps(markBackground(ended, s.background))[0]!.subagent!.children[0]!.output, "Did it");
+		assert.equal(agentSteps(ended)[0]!.subagent!.children[0]!.status, "done");
+	} finally {
+		s.cleanup();
+	}
+});
+
+test("a session stays loaded until the result of a run that just ended has arrived, or will not", async () => {
+	let clock = NOW;
+	let status: unknown = { state: "running", pid: 1, lastUpdate: NOW };
+	const make = () => new BackgroundRuns({ closeWindow: async () => {}, onChange: () => {}, read: async () => status, now: () => clock, alive: () => true, bootedAt: 0, poll: false });
+	const runs = make();
+	runs.launched("told", "/x/told");
+	runs.launched("untold", "/x/untold");
+	status = { state: "complete" };
+	await runs.refresh();
+	assert.deepEqual([runs.state("told"), runs.state("untold")], ["done", "done"]);
+	assert.equal(hasLiveAgents([], runs), true, "both results are still on their way");
+	await runs.finished(["told"]);
+	assert.equal(runs.liveRuns(), 1);
+	clock += RESULT_GRACE_MS;
+	assert.equal(hasLiveAgents([], runs), false, "the other's never came");
+	// One that ended before this session was opened has nothing to deliver here.
+	const reopened = make();
+	await reopened.restore([{ steps: [launch("run-1")] }] as unknown as Run[]);
+	assert.equal(hasLiveAgents([], reopened), false);
+});
+
+test("a detached child that never reports back ends with its time limit, and none outlives its process", async () => {
+	let clock = NOW;
+	const runs = new BackgroundRuns({ closeWindow: async () => {}, onChange: () => {}, read: async () => null, now: () => clock, bootedAt: 0, poll: false });
+	runs.detached("run-1", 60_000);
+	clock += 60_000 + DETACHED_GRACE_MS - 1;
+	await runs.refresh();
+	assert.equal(runs.state("run-1"), "running");
+	clock += 1;
+	await runs.refresh();
+	assert.equal(runs.state("run-1"), "gone");
+	assert.equal(runs.windowsOpen(), 0);
+	const reopened = new BackgroundRuns({ closeWindow: async () => {}, onChange: () => {}, read: async () => null, poll: false });
+	await reopened.restore(detachedHistory("run-1"));
+	const history = detachedHistory("run-1");
+	assert.equal(hasLiveAgents(history, reopened), false);
+	const child = agentSteps(markBackground(history, reopened))[0]!.subagent!.children[0]!;
+	assert.equal(child.status, "stopped");
+	assert.equal(child.unreported, true);
+});
+
+test("a background workflow counts as live before it lists a child, and a paused one while its child waits", async () => {
+	let status: unknown = { state: "running", pid: 1, lastUpdate: NOW };
+	let alive = true;
+	const runs = new BackgroundRuns({ closeWindow: async () => {}, onChange: () => {}, read: async () => status, now: () => NOW, alive: () => alive, bootedAt: 0, poll: false });
+	runs.launched("flow", "/x/flow");
+	const launchOf = (children: unknown[]) => [{ steps: [{ id: "f", tool: "subagent", status: "done", subagent: { background: true, asyncId: "flow", asyncDir: "/x/flow", children } }] }] as unknown as Run[];
+	assert.equal(agentsOf(launchOf([]), runs).running, 0, "no rows yet");
+	assert.equal(hasLiveAgents(launchOf([]), runs), true, "but a run");
+	status = { state: "paused", pid: 1, lastUpdate: NOW, endedAt: NOW, steps: [{ status: "paused", activityState: "needs_attention" }] };
+	await runs.finished(["flow"], noticeStatuses({ runs: [{ runId: "flow", status: "paused" }] }));
+	assert.equal(runs.state("flow"), "running", "the pause is not its end");
+	const child = { agent: "worker", task: "x", status: "running", steps: [], tools: 0, label: "api" };
+	const paused = [...launchOf([child]), { steps: [], notice: { runIds: ["flow"], status: "paused", text: "Paused" } }] as unknown as Run[];
+	assert.equal(agentSteps(markBackground(paused, runs))[0]!.subagent!.children[0]!.status, "running");
+	// Read back after a restart, the status still decides.
+	const reopened = new BackgroundRuns({ closeWindow: async () => {}, onChange: () => {}, read: async () => status, now: () => NOW, alive: () => alive, bootedAt: 0, poll: false });
+	await reopened.restore(paused);
+	assert.equal(hasLiveAgents(paused, reopened), true);
+	alive = false;
+	await runs.refresh();
+	assert.equal(runs.state("flow"), "stopped");
+	assert.equal(agentSteps(markBackground(paused, runs))[0]!.subagent!.children[0]!.status, "stopped");
+});
+
+test("a child's question shows as waiting until the main agent's reply, a refused reply or the end of its run", async () => {
+	const s = session();
+	try {
+		await s.call("subagent", { ...scout, async: false }, detachedDetails("run-1"));
+		const asked = (id: string) => ({ steps: [], notice: { agent: "worker", status: "waiting", text: "May I push?", request: { id, runId: "run-1", childIndex: 0 } } });
+		const replied = (id: string, status = "done") => ({ steps: [{ id: `r-${id}`, tool: "subagent_supervisor", status, reply: { request: id, message: "No, leave it." } }] });
+		const counts = (...more: unknown[]) => agentCounts(markBackground([...detachedHistory("run-1"), ...more] as Run[], s.background));
+		assert.deepEqual(counts(asked("q1")), { running: 1, waiting: 1 });
+		const row = agentSteps(markBackground([...detachedHistory("run-1"), asked("q1")] as unknown as Run[], s.background))[0]!.subagent!.children[0]!;
+		assert.equal(row.waitingOn, "main");
+		assert.equal(row.current?.target, "May I push?");
+		assert.deepEqual(counts(asked("q1"), replied("q1", "running")), { running: 1, waiting: 1 }, "a reply still on its way answers nothing");
+		assert.deepEqual(counts(asked("q1"), replied("q1")), { running: 1, waiting: 0 });
+		assert.deepEqual(counts(asked("q1"), replied("other")), { running: 1, waiting: 1 });
+		assert.deepEqual(counts(asked("q1"), replied("q1"), asked("q2")), { running: 1, waiting: 1 }, "it asks again");
+		assert.deepEqual(counts(asked("q1"), replied("q1", "error")), { running: 1, waiting: 0 }, "refused: the question had expired");
+		const questions = supervisorQuestions([asked("q1"), replied("q1"), asked("q2")] as unknown as Run[]);
+		assert.deepEqual([questions.get("q1")?.reply, questions.get("q1")?.waiting, questions.get("q2")?.waiting], ["No, leave it.", false, true]);
+		assert.equal(supervisorQuestions([asked("q1"), { steps: [], notice: { runIds: ["run-1"], status: "completed" } }] as unknown as Run[]).get("q1")?.waiting, false);
+	} finally {
+		s.cleanup();
+	}
 });

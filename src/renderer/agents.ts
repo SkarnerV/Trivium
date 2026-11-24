@@ -1,7 +1,17 @@
-import type { Run } from "../shared/protocol.ts";
+import type { Run, SubagentNotice } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 
-export { agentCounts, agentSteps } from "../shared/agent-counts.ts";
+export { agentCounts, agentSteps, supervisorQuestions } from "../shared/agent-counts.ts";
+
+const NOTICE_WORDS: Record<SubagentNotice["status"], string> = { completed: "Reported done", failed: "Failed", paused: "Paused", stopped: "Stopped", waiting: "Waiting" };
+
+/**
+ * How a notice says its run ended. A subagent's is its own report, which nothing here has checked; a command's is the
+ * exit code the host saw.
+ */
+export function noticeWord(notice: Pick<SubagentNotice, "status" | "command">): string {
+	return t(notice.command !== undefined && notice.status === "completed" ? "Finished" : NOTICE_WORDS[notice.status]);
+}
 
 /** The step the thread's live line shows: the latest running one, until the answer starts coming in. */
 export function currentStep(run: Run | undefined) {

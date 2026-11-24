@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { FileChange, GitAction, GitArea, GitCommitFile, GitDiff, GitFile, GitHistoryCommit, GitStatus, ProjectFile, SessionView } from "../../shared/protocol.ts";
 import { baseName } from "../format.ts";
+import { sentences } from "../../shared/i18n.ts";
 import { t } from "../i18n.tsx";
 import { BranchIcon, Chevron, CheckIcon, CloudDownIcon, CloudUpIcon, ExternalIcon, MinusIcon, MoreIcon, PlusIcon, UndoIcon } from "../icons.tsx";
 import { IS_WINDOWS } from "../platform.ts";
@@ -46,11 +47,25 @@ type Picked =
 	| { kind: "commit"; id: string; short: string; file: GitCommitFile }
 	| { kind: "session"; path: string };
 
+/** Marks a file changed while a subagent or a background command worked: the edits may be the user's. */
+function uncertainTag(change: FileChange | undefined): string | undefined {
+	return change?.uncertain ? t("may include your edits") : undefined;
+}
+
+/** What to add before undoing files that may hold the user's own edits. */
+function uncertainWarning(changes: (FileChange | undefined)[]): string | false {
+	const doubtful = changes.filter((change) => change?.uncertain);
+	if (!doubtful.length) return false;
+	return doubtful.length === 1 && changes.length === 1
+		? t("It changed while a subagent or a background command was working, so it may include your own edits, and they would be lost too.")
+		: t("Some changed while a subagent or a background command was working, so they may include your own edits, and those would be lost too.");
+}
+
 /** A file's row in a group, with its actions beside it, shown while the row is hovered or focused. */
 function Row({ file, current, counts, onSelect, actions }: { file: GitFile; current: boolean; counts?: FileChange; onSelect: () => void; actions: ReactNode }) {
 	return (
 		<div className="sc-row">
-			<FileRow status={file.status} rel={file.rel} title={file.from ? `${file.from} → ${file.rel}` : file.rel} current={current} onSelect={onSelect}>
+			<FileRow status={file.status} rel={file.rel} title={file.from ? `${file.from} → ${file.rel}` : file.rel} current={current} tag={uncertainTag(counts)} onSelect={onSelect}>
 				{counts && counts.adds > 0 && <span className="plus">+{counts.adds}</span>}
 				{counts && counts.dels > 0 && <span className="minus">−{counts.dels}</span>}
 			</FileRow>
@@ -162,9 +177,12 @@ export function SourceControlBody({ view, git }: { view: SessionView; git: GitSt
 	const discard = async (list: GitFile[]) => {
 		const ok = await askConfirm({
 			title: list.length === 1 ? t("Discard changes to {file}?", { file: baseName(list[0]!.rel) }) : t("Discard {n} files' changes?", { n: list.length }),
-			message: list.some((file) => file.area === "untracked")
-				? t("Changes that aren't staged are lost, and new files are deleted. This can't be undone.")
-				: t("Changes that aren't staged are lost. This can't be undone."),
+			message: sentences(
+				list.some((file) => file.area === "untracked")
+					? t("Changes that aren't staged are lost, and new files are deleted. This can't be undone.")
+					: t("Changes that aren't staged are lost. This can't be undone."),
+				uncertainWarning(list.map((file) => counts.get(pathKey(file.path)))),
+			),
 			confirmLabel: t("Discard"),
 		});
 		if (ok) await run(t("Discarding"), { kind: "discard", files: list.map(({ rel, area }) => ({ rel, area })) });
@@ -495,7 +513,10 @@ function NoRepository({ view, picked, onPick, onClose, onInit, busy }: {
 		const file = baseName(target.rel);
 		const ok = await askConfirm({
 			title: t("Revert {files}?", { files: file }),
-			message: t(target.status === "added" ? "This session created {file}, so reverting deletes it." : "{file} goes back to how it was before this session changed it.", { file }),
+			message: sentences(
+				t(target.status === "added" ? "This session created {file}, so reverting deletes it." : "{file} goes back to how it was before this session changed it.", { file }),
+				uncertainWarning([target]),
+			),
 			confirmLabel: t("Revert"),
 		});
 		if (!ok) return;
@@ -521,7 +542,7 @@ function NoRepository({ view, picked, onPick, onClose, onInit, busy }: {
 				<Group label={t("This session")} count={view.changes.length}>
 					{view.changes.map((each) => (
 						<div key={each.path} className="sc-row">
-							<FileRow status={each.status} rel={each.rel} current={each.path === picked} onSelect={() => onPick(each.path)}>
+							<FileRow status={each.status} rel={each.rel} current={each.path === picked} tag={uncertainTag(each)} onSelect={() => onPick(each.path)}>
 								{each.adds > 0 && <span className="plus">+{each.adds}</span>}
 								{each.dels > 0 && <span className="minus">−{each.dels}</span>}
 							</FileRow>

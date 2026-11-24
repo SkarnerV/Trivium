@@ -88,6 +88,8 @@ export interface Step {
 	tail?: string;
 	/** The child agents a subagent step started, and what each is doing or did. */
 	subagent?: Subagent;
+	/** The main agent's answer to a subagent's question: which request it names, and whether it got there. */
+	reply?: { request: string; message: string };
 }
 
 /** One child agent started by the subagent tool. */
@@ -101,6 +103,13 @@ export interface SubagentChild {
 	/** It timed out or stopped with only part of its output written. */
 	outputPartial?: boolean;
 	childId?: string;
+	/** A workflow child's own run, which its handoff manifest belongs to; or a detached child's. */
+	runId?: string;
+	/**
+	 * It asked the main agent something, so its call ended while it works on, in this process, until its completion
+	 * notice. Its status is then the host's: running while there is evidence of life.
+	 */
+	detached?: boolean;
 	role?: "mutation" | "review" | "scout" | "gate";
 	worktree?: boolean;
 	timedOut?: boolean;
@@ -184,7 +193,10 @@ export interface SubagentNotice {
 	agent: string;
 	/** The command, when this is one rather than a subagent. */
 	command?: string;
-	status: "completed" | "failed" | "paused" | "stopped";
+	/** "waiting" is a subagent's question to the main agent, which is the one to answer it. */
+	status: "completed" | "failed" | "paused" | "stopped" | "waiting";
+	/** Set for a question: the request a reply names, and the child that waits for it. */
+	request?: { id: string; runId: string; childIndex: number };
 	durationMs?: number;
 	/** The child's result, as pi-subagents previewed it. */
 	text: string;
@@ -289,6 +301,8 @@ export interface FileChange {
 	tooLarge: boolean;
 	/** Set for a file that is not text, which has no lines to show. */
 	binary?: boolean;
+	/** Changed while a subagent or a background command worked, so the changes may be the user's: reverting all leaves it alone. */
+	uncertain?: boolean;
 }
 
 /** Where a changed file sits in git: in the index, the working tree only, not tracked, or mid-merge. */
@@ -1061,7 +1075,10 @@ export interface TriviumApi {
 	answerDialog(id: string, answer: DialogAnswer): Promise<void>;
 	/** Accepts changes; all files when `files` is omitted. */
 	keepChanges(path: string, files?: string[]): Promise<FileChange[]>;
-	/** Restores files to their state before the agent touched them; all files when `files` is omitted. */
+	/**
+	 * Restores files to their state before the agent touched them. With `files` omitted, all of them but the ones that
+	 * may hold the user's own edits (`uncertain`), which are reverted only when named.
+	 */
 	revertChanges(path: string, files?: string[]): Promise<FileChange[]>;
 	/** The branch and changed files of the repository a Code session works in, or null when it is in none. */
 	gitStatus(path: string): Promise<GitStatus | null>;

@@ -1980,6 +1980,11 @@ body.resizing * {
 	overflow-wrap: anywhere;
 }
 
+.agent-notice-reply {
+	margin: 10px 0 4px;
+	font-size: 12px;
+	font-weight: 600;
+}
 .agent-notice-body > :first-child {
 	margin-top: 0;
 }

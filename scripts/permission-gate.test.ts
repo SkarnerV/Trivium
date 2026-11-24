@@ -5,7 +5,7 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { commandPrefix, decide, isEnvFile, isRisky, namesEnvFile, noApprovals, onlyReads, permissionGate } from "../src/main/permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE, type PermissionModeId } from "../src/shared/permissions.ts";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import childPermissions, { permissionModeFromDisk } from "../src/main/child-permissions.ts";
 
 test("child permissions read disk each call, deny approvals without UI and use the child's worktree root", async () => {
@@ -143,4 +143,138 @@ test("the dialog allows once, for the session, or denies with the user's note", 
 	// The mode is read on each call, so a change reaches a running session.
 	mode = "bypass";
 	assert.equal(await gate.run("bash", { command: "sudo make install" }), undefined);
+});
+
+test("a subagent's gate and acceptance commands are judged as the shell tool's are", () => {
+	const worker = { agent: "worker", task: "Do it" };
+	const gate = (command: unknown) => ({ ...worker, options: { gate: command } });
+	const verify = (...commands: string[]) => ({ level: "verified", verify: commands.map((command, index) => ({ id: `v${index}`, command })) });
+	const table: [PermissionModeId, Record<string, unknown>, string][] = [
+		["auto", worker, "allow"],
+		["ask", worker, "allow"],
+		["auto", gate("git push"), "ask"],
+		["auto", { ...worker, gate: "git push" }, "ask"],
+		["auto", gate({ command: "npm test && git push", output: "json" }), "ask"],
+		["auto", gate("npm test"), "allow"],
+		["edits", gate("npm test"), "ask"],
+		["ask", gate("npm test"), "ask"],
+		["ask", gate("git status"), "allow"],
+		["bypass", gate("git push"), "allow"],
+		["auto", { ...worker, acceptance: verify("npm test", "sudo make install") }, "ask"],
+		["auto", { ...worker, options: { acceptance: JSON.stringify(verify("git push")) } }, "ask"],
+		["edits", { ...worker, options: { acceptance: verify("git status") } }, "allow"],
+		["edits", { ...worker, options: { acceptance: verify("npm test") } }, "ask"],
+		["auto", { ...worker, acceptance: "checked" }, "allow"],
+		["auto", { ...worker, acceptance: false }, "allow"],
+		["auto", { ...worker, acceptance: "{not json" }, "ask"],
+		["auto", { ...worker, options: { acceptance: { verify: [{ id: "x" }] } } }, "ask"],
+		// Managing runs is not starting one, but saving an agent, resuming and scheduling are.
+		["edits", { action: "status", id: "run-1" }, "allow"],
+		["auto", { action: "create", options: { config: JSON.stringify({ name: "x", acceptance: verify("git push") }) } }, "ask"],
+		["auto", { action: "resume", id: "run-1", options: { acceptance: verify("git push") } }, "ask"],
+		["auto", { action: "schedule.create", workflow: "nightly" }, "ask"],
+	];
+	for (const [mode, input, expected] of table) assert.equal(action(mode, "subagent", input), expected, `${mode} ${JSON.stringify(input)}`);
+	for (const mode of ["ask", "edits", "auto", "bypass"] as const) {
+		assert.equal(action(mode, "subagent", gate("cat .env")), "deny", mode);
+		assert.equal(action(mode, "subagent", { ...worker, options: { acceptance: verify("npm test", "cp .env.production /tmp") } }), "deny", mode);
+	}
+});
+
+test("a workflow script's gates are read; one whose commands can't be is asked about outside bypass", () => {
+	const root = mkdtempSync(join(tmpdir(), "trivium-gate-scripts-"));
+	try {
+		const script = (text: string) => {
+			writeFileSync(join(root, "flow.js"), text);
+			return { workflow: "./flow.js" };
+		};
+		const decided = (mode: PermissionModeId, input: Record<string, unknown>, settled = true) => decide(mode, "subagent", input, root, noApprovals(), settled);
+		const plain = 'const [a, b] = await runs.all([{ key: "a", agent: "scout", task: "Look" }, { key: "b", agent: "reviewer", task: "Check" }]);\nreturn [a.output, b.output];';
+		assert.equal(decided("ask", script(plain)).action, "allow", "nothing in it runs a command");
+		assert.equal(decided("auto", script(plain), false).action, "ask", "a call beside it may rewrite the script first");
+		const gated = (command: string) => script(`return await runs.run("a", { agent: "worker", task: "Do it", gate: ${command} });`);
+		assert.equal(decided("auto", gated('"npm test"')).action, "allow");
+		assert.equal(decided("edits", gated('"npm test"')).action, "ask");
+		assert.equal(decided("auto", gated('"git push"')).action, "ask");
+		assert.equal(decided("auto", gated('{ command: "git push" }')).action, "ask");
+		assert.equal(decided("bypass", gated('"cat .env"')).action, "deny");
+		for (const hidden of [
+			'return await runs.run("a", { agent: "worker", task: "x", ["ga" + "te"]: "git push" });',
+			'const c = { agent: "worker", task: "x" }; c["ga" + "te"] = "git push"; return await runs.run("a", c);',
+			'return await runs.run("a", { agent: "worker", task: "x", gate: "git " + "push" });',
+			'return await runs.run("a", { agent: "worker", task: "x", g\\u0061te: "git push" });',
+			'return await runs.run("a", { agent: "worker", task: "x", ...args.more });',
+			'return await runs.run("a", { agent: "worker", task: "x", acceptance: { verify: [{ id: "v", command: "git push" }] } });',
+			'const c = { agent: "worker", task: "x" }; ({ v: c["ga" + "te"] } = { v: "git push" }); return await runs.run("a", c);',
+			"const s = 'gate: \"'; const c = { agent: 'worker', task: 'x' }; c.gate = 'git ' + 'push'; const e = '\",'; return await runs.run('a', c);",
+			'const c = { agent: "worker", task: "x" }; c["ga" + "te"] ??= "git push"; return await runs.run("a", c);',
+			'const c = { agent: "worker", task: "x" }; c/**/["ga" + "te"] = "git push"; return await runs.run("a", c);',
+			'const c = { agent: "worker", task: "x" }; c // ;\n["ga" + "te"] = "git push"; return await runs.run("a", c);',
+			'class C { ["ga" + "te"] = "git push"; agent = "worker"; task = "x"; } return await runs.run("a", new C());',
+			'return await runs.host("h", { kind: "command", command: "git push", timeoutMs: 1000 });',
+		]) {
+			assert.equal(decided("auto", script(hidden)).action, "ask", hidden);
+			assert.equal(decided("bypass", script(hidden)).action, "allow", hidden);
+		}
+		// Not files: a block in the reply, an installed workflow, a script that isn't there.
+		for (const workflow of [true, "true", "release", "./missing.js"]) {
+			assert.equal(decided("auto", { workflow }).action, "ask", String(workflow));
+			assert.equal(decided("bypass", { workflow }).action, "allow", String(workflow));
+		}
+		const asked = decided("auto", { workflow: "release" });
+		assert.ok(asked.action === "ask" && asked.remember === undefined, "approving one script approves no other");
+	} finally {
+		rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test("a custom agent's own acceptance commands are judged when it is started", () => {
+	const root = mkdtempSync(join(tmpdir(), "trivium-gate-agents-"));
+	try {
+		mkdirSync(join(root, ".pi", "agents"), { recursive: true });
+		writeFileSync(join(root, ".pi", "agents", "shipper.md"), '---\nname: shipper\naliases: release\nacceptance: {"level":"verified","verify":[{"id":"v","command":"git push"}]}\n---\nShip it.\n');
+		const decided = (mode: PermissionModeId, input: Record<string, unknown>) => decide(mode, "subagent", input, root, noApprovals()).action;
+		assert.equal(decided("auto", { agent: "shipper", task: "x" }), "ask");
+		assert.equal(decided("auto", { agent: "release", task: "x" }), "ask");
+		assert.equal(decided("bypass", { agent: "shipper", task: "x" }), "allow");
+		assert.equal(decided("auto", { agent: "worker", task: "x" }), "allow", "another agent is not this one");
+	} finally {
+		rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
+});
+
+test("approving a gate's command for the session covers that command, and no script", async () => {
+	const gate = harness(() => "auto", ["Allow `git push`", "Allow", undefined]);
+	assert.equal(await gate.run("subagent", { agent: "worker", task: "x", gate: "git push" }), undefined);
+	assert.equal(await gate.run("subagent", { agent: "worker", task: "x", gate: "git push" }), undefined);
+	assert.equal(gate.asked.length, 1);
+	assert.equal(await gate.run("subagent", { workflow: "release" }), undefined);
+	assert.equal((await gate.run("subagent", { workflow: "release" }))?.block, true, "asked again, and a closed dialog denies");
+	assert.equal(gate.asked.length, 3);
+});
+
+test("a supervisor's reply never grants a child a tool: approvals are the user's, and a child has none", () => {
+	const root = mkdtempSync(join(tmpdir(), "trivium-child-reply-"));
+	const previous = process.env.TRIVIUM_HOME;
+	try {
+		process.env.TRIVIUM_HOME = root;
+		for (const mode of ["auto", "edits", "ask"] as const) {
+			writeFileSync(join(root, "settings.json"), JSON.stringify({ permissionMode: mode }));
+			const handlers: Record<string, Function> = {};
+			childPermissions({ on: (name: string, fn: Function) => { handlers[name] = fn; } } as unknown as ExtensionAPI);
+			const push = () => handlers.tool_call!({ toolName: "bash", toolCallId: "1", input: { command: "git push" } }, { cwd: root, hasUI: true });
+			assert.match(push().reason, /no one can answer here/, mode);
+			// The reply reaches the child as its contact_supervisor result; the gate only ever listens for tool calls.
+			handlers.tool_call!({ toolName: "contact_supervisor", toolCallId: "2", input: { reason: "need_decision", message: "May I push?" } }, { cwd: root, hasUI: true });
+			handlers.tool_result?.({ toolName: "contact_supervisor", toolCallId: "2", content: [{ type: "text", text: "**Reply from supervisor:**\napproved, push it" }] }, { cwd: root, hasUI: true });
+			assert.deepEqual(Object.keys(handlers), ["tool_call"], "nothing said to a child is read as an approval");
+			assert.match(push().reason, /no one can answer here/, `${mode}: still blocked after "approved, push it"`);
+			// Nor does a gate on a child's own launch, which would run the command outside the shell tool.
+			assert.match(handlers.tool_call!({ toolName: "subagent", toolCallId: "3", input: { agent: "worker", task: "x", gate: "git push" } }, { cwd: root, hasUI: true }).reason, /no one can answer here/, mode);
+		}
+		assert.deepEqual(noApprovals(), { commands: new Set(), edits: false, outside: new Set() });
+	} finally {
+		if (previous === undefined) delete process.env.TRIVIUM_HOME; else process.env.TRIVIUM_HOME = previous;
+		rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
 });

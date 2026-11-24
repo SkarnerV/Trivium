@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { childSessionFile, describeSubagent, noticeOf, subagentOf } from "../src/main/subagents.ts";
+import { childSessionFile, describeSubagent, detachedRuns, noticeOf, subagentOf } from "../src/main/subagents.ts";
 import { RunTracker } from "../src/main/transcript.ts";
 
 type Messages = ConstructorParameters<typeof RunTracker>[0];
@@ -266,4 +266,68 @@ test("a background stop is a request file in the run's control folder, as pi-sub
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+/** A child's question and the main agent's answer, as pi-subagents 0.82.1 puts them in a session. */
+const request = {
+	role: "custom",
+	customType: "subagent_supervisor_request",
+	content: "Subagent needs a supervisor decision.\nRun: run-1\nAgent: worker\nChild index: 0\n\nMay I push?\n\nReply with: subagent_supervisor({ … })",
+	display: true,
+	details: { id: "q1", requestId: "q1", reason: "need_decision", expectsReply: true, runId: "run-1", agent: "worker", childIndex: 0, requestBody: "May I push?" },
+	timestamp: 2000,
+};
+
+test("a child's question to the main agent is shown, and a progress update is not", () => {
+	assert.deepEqual(noticeOf(request), { agent: "worker", status: "waiting", text: "May I push?", request: { id: "q1", runId: "run-1", childIndex: 0 } });
+	const interview = noticeOf({ ...request, details: { ...request.details, reason: "interview_request", requestBody: "", interview: { questions: ["Which port?"] } } });
+	assert.match(interview!.text, /Which port\?/);
+	assert.equal(noticeOf({ ...request, details: { ...request.details, reason: "progress_update", expectsReply: false } }), undefined);
+	assert.equal(noticeOf({ ...request, details: {} }), undefined);
+});
+
+test("a question opens a run of its own, its reply is read from the main agent's call, live and after a reopen", () => {
+	const call = { type: "toolCall", id: "c2", name: "subagent_supervisor", arguments: { action: "reply", replyTo: "q1", message: "No.\nLeave it." } };
+	const messages = [
+		{ role: "user", content: "Go", timestamp: 1000 },
+		request,
+		{ role: "assistant", content: [call], timestamp: 3000 },
+		{ role: "toolResult", toolCallId: "c2", toolName: "subagent_supervisor", content: [{ type: "text", text: "Replied to supervisor request q1." }], details: { replyTo: "q1", runId: "run-1", agent: "worker" }, isError: false, timestamp: 3100 },
+	] as unknown as Messages;
+	const reopened = new RunTracker(messages).all();
+	assert.equal(reopened.length, 2);
+	assert.equal(reopened[1]!.notice?.request?.id, "q1");
+	assert.deepEqual(reopened[1]!.steps[0]!.reply, { request: "q1", message: "No.\nLeave it." });
+	assert.equal(reopened[1]!.steps[0]!.target, "No.");
+	const live = new RunTracker([messages[0]!]);
+	assert.equal(live.apply({ type: "message_start", message: request } as unknown as Event), true);
+	assert.equal(live.all()[1]!.notice?.text, "May I push?");
+	live.apply({ type: "tool_execution_start", toolCallId: "c9", toolName: "subagent_supervisor", args: { action: "pending" } } as unknown as Event);
+	assert.equal(live.all()[1]!.steps.length, 0, "a look at what is pending is not a reply");
+	// The only question pending may be answered without naming it; the result says which it was.
+	const unnamed = { ...call, arguments: { action: "reply", message: "Yes" } };
+	const named = new RunTracker([messages[0]!, request, { role: "assistant", content: [unnamed], timestamp: 3000 }, messages[3]!] as unknown as Messages).all();
+	assert.deepEqual(named[1]!.steps[0]!.reply, { request: "q1", message: "Yes" });
+});
+
+test("a child detached by its question is running, not failed, and an ordinary failure still is", () => {
+	const details = { mode: "single", runId: "run-1", results: [{ index: 0, agent: "scout", exitCode: -2, detached: true, finalOutput: "Detached for intercom coordination before task completion.", progress: { index: 0, agent: "scout", status: "detached", currentTool: "contact_supervisor", currentToolArgs: "May I push?" } }] };
+	const view = subagentOf(scoutArgs, details, "done");
+	const [child] = view.children;
+	assert.equal(child!.status, "running");
+	assert.equal(child!.detached, true);
+	assert.equal(child!.runId, "run-1");
+	assert.equal(child!.error, undefined);
+	assert.equal(child!.output, undefined, "its receipt is not its answer");
+	assert.equal(child!.waitingOn, undefined, "whether it still waits is read from the question and its reply");
+	assert.deepEqual(describeSubagent(view, scoutArgs, "done"), { target: "scout: Map the auth flow", meta: "background", tone: "plain" });
+	assert.equal(subagentOf(scoutArgs, { ...details, results: [{ index: 0, agent: "scout", exitCode: -2 }] }, "done").children[0]!.status, "running", "by its exit code alone");
+	assert.equal(subagentOf(scoutArgs, { ...details, results: [{ index: 0, agent: "scout", exitCode: 1 }] }, "done").children[0]!.status, "error");
+	assert.deepEqual(detachedRuns(details), [{ runId: "run-1", timeoutMs: undefined }]);
+	assert.deepEqual(detachedRuns({ ...details, asyncId: "run-1" }), []);
+	assert.deepEqual(detachedRuns({ runId: "flow", results: [{ exitCode: 0, runId: "a" }, { exitCode: -2, runId: "b" }] }), [{ runId: "b", timeoutMs: undefined }]);
+	// A workflow still waiting for its detached child has not left it running.
+	const workflow = { results: [], workflowChildren: { children: [{ childId: "api", runId: "run-a", state: "detached" }] } };
+	assert.equal(subagentOf({ workflow: true }, workflow, "running").children[0]!.detached, undefined);
+	assert.equal(subagentOf({ workflow: true }, workflow, "done").children[0]!.detached, true);
 });

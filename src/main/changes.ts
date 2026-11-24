@@ -78,11 +78,19 @@ function diffLines(rel: string, before: string, after: string): DiffLine[] {
  * An edit or write is recorded as it is made. A command is not known to change anything until it has, so the
  * files are snapshotted before it runs and compared after: see `beforeCommand` and `afterCommand`. That leaves
  * out what git ignores, files over the snapshot's size limit, and anything outside the project.
+ *
+ * While a subagent works, or a command goes on in the background, the user can edit the project too, and a comparison
+ * cannot tell whose edit is whose. A file it finds changed then is `uncertain`: it is listed, and reverted only when
+ * named, never with the rest.
  */
 export class ChangeTracker {
 	private baselines = new Map<string, Baseline>();
 	/** Folders that did not exist before the agent wrote a file into them, deepest first per file. */
 	private createdDirs = new Map<string, string[]>();
+	/** Recorded files that may hold the user's own edits. */
+	private uncertain = new Set<string>();
+	/** The snapshot to compare with was taken before a subagent started, not before the command that just ran. */
+	private doubtful = false;
 	/** Where HEAD was when the first of the baselines was taken, or last checked: commits after it are the session's to clear. */
 	private since: string | null = null;
 	private readonly file: string;
@@ -108,12 +116,21 @@ export class ChangeTracker {
 	async beforeSubagents(): Promise<void> {
 		await this.beforeCommand();
 		this.delegations++;
+		this.doubtful = true;
 	}
 
 	async afterSubagents(): Promise<boolean> {
 		const changed = await this.afterCommand();
 		this.delegations = Math.max(0, this.delegations - 1);
 		return changed;
+	}
+
+	/**
+	 * Called when a command that had moved to the background ends: records what changed since the last snapshot, all of
+	 * it uncertain. What changed before a later command's snapshot was taken is not known any more, and is left out.
+	 */
+	afterBackground(): Promise<boolean> {
+		return this.compare(true);
 	}
 
 	/** `onOff` is called once if the project turns out too large to snapshot, which the user should hear. */
@@ -134,8 +151,10 @@ export class ChangeTracker {
 				files: Record<string, Baseline>;
 				dirs: Record<string, string[]>;
 				since?: string | null;
+				uncertain?: string[];
 			};
 			this.since = saved.since ?? null;
+			for (const path of Array.isArray(saved.uncertain) ? saved.uncertain : []) this.uncertain.add(path);
 			for (const [path, content] of Object.entries(saved.files)) this.baselines.set(path, content);
 			for (const [path, dirs] of Object.entries(saved.dirs)) this.createdDirs.set(path, dirs);
 		} catch {
@@ -148,6 +167,7 @@ export class ChangeTracker {
 			files: Object.fromEntries(this.baselines),
 			dirs: Object.fromEntries(this.createdDirs),
 			since: this.since,
+			...(this.uncertain.size ? { uncertain: [...this.uncertain] } : {}),
 		});
 		this.saving = this.saving
 			.catch(() => {})
@@ -195,6 +215,7 @@ export class ChangeTracker {
 			if (this.delegations) return;
 			const [, dirty] = await Promise.all([this.shadow.sync(), readDirty(this.cwd)]);
 			this.before = { dirty, at: Date.now() };
+			this.doubtful = false;
 			if (this.shadow.off === "size" && !this.told) {
 				this.told = true;
 				this.onOff?.();
@@ -213,12 +234,17 @@ export class ChangeTracker {
 	 * left it clean, since that is uncommitted work the command threw away.
 	 */
 	afterCommand(): Promise<boolean> {
-		const step = this.commands.then(() => this.adopt());
+		return this.compare(false);
+	}
+
+	private compare(doubtful: boolean): Promise<boolean> {
+		const step = this.commands.then(() => this.adopt(doubtful || this.doubtful));
 		this.commands = step.catch(() => {});
 		return step.catch(() => false);
 	}
 
-	private async adopt(): Promise<boolean> {
+	private async adopt(doubtful: boolean): Promise<boolean> {
+		await this.loaded;
 		const [changed, after] = await Promise.all([this.shadow.changed(), readDirty(this.cwd)]);
 		if (!changed?.length) return false;
 		const { dirty: before, at } = this.before;
@@ -229,7 +255,20 @@ export class ChangeTracker {
 			.filter((change) => !known.has(pathKey(change.path)))
 			.filter((change) => !dirtyBefore || !dirtyAfter || dirtyBefore.has(pathKey(change.rel)) || dirtyAfter.has(pathKey(change.rel)))
 			.slice(0, MAX_COMMAND_FILES);
-		if (!mine.length) return false;
+		// Recorded earlier, and changed again since the snapshot, by no one can say whom.
+		let doubted = 0;
+		if (doubtful) {
+			const again = new Set(changed.map((change) => pathKey(change.path)));
+			for (const path of this.baselines.keys()) {
+				if (this.uncertain.has(path) || !again.has(pathKey(path))) continue;
+				this.uncertain.add(path);
+				doubted++;
+			}
+		}
+		if (!mine.length) {
+			if (doubted) await this.save();
+			return doubted > 0;
+		}
 		const contents = await this.shadow.contents(mine.filter((change) => change.status !== "added").map((change) => change.rel));
 		const top = pathKey(resolve(this.cwd));
 		let recorded = 0;
@@ -248,6 +287,7 @@ export class ChangeTracker {
 			// The session's changes are counted from the commit before the command, which may have committed.
 			if (!this.baselines.size) this.since = before ? before.head : await readHead(this.cwd);
 			this.baselines.set(change.path, baseline);
+			if (doubtful) this.uncertain.add(change.path);
 			if (baseline === null) {
 				// A folder made since the snapshot was made for this file, or for others the command wrote.
 				const made: string[] = [];
@@ -260,8 +300,8 @@ export class ChangeTracker {
 			}
 			recorded++;
 		}
-		if (recorded) await this.save();
-		return recorded > 0;
+		if (recorded || doubted) await this.save();
+		return recorded + doubted > 0;
 	}
 
 	/** Text that survives being read as UTF-8 goes in the record, as an edit's does. Other bytes go in a file named by their hash. */
@@ -304,6 +344,7 @@ export class ChangeTracker {
 					lines: [],
 					tooLarge: !before.binary,
 					...(before.binary ? { binary: true } : {}),
+					...(this.uncertain.has(path) ? { uncertain: true } : {}),
 				});
 				continue;
 			}
@@ -323,6 +364,7 @@ export class ChangeTracker {
 				lines,
 				tooLarge,
 				...(binary ? { binary: true } : {}),
+				...(this.uncertain.has(path) ? { uncertain: true } : {}),
 			});
 		}
 		return changes.sort((a, b) => a.rel.localeCompare(b.rel));
@@ -397,6 +439,7 @@ export class ChangeTracker {
 		for (const path of paths ?? [...this.baselines.keys()]) {
 			this.baselines.delete(path);
 			this.createdDirs.delete(path);
+			this.uncertain.delete(path);
 		}
 		await this.save();
 	}
@@ -418,10 +461,13 @@ export class ChangeTracker {
 		return paths.length > 0;
 	}
 
-	/** Restores each file to its baseline, deleting files the agent created. */
+	/**
+	 * Restores each file to its baseline, deleting files the agent created. Without `paths`, every file but those that
+	 * may hold the user's own edits, which stay as they are, and listed.
+	 */
 	async revert(paths?: string[]): Promise<void> {
 		await this.loaded;
-		for (const path of paths ?? [...this.baselines.keys()]) {
+		for (const path of paths ?? [...this.baselines.keys()].filter((path) => !this.uncertain.has(path))) {
 			if (!this.baselines.has(path)) continue;
 			const before = this.baselines.get(path)!;
 			if (before === null) {
@@ -435,6 +481,7 @@ export class ChangeTracker {
 			}
 			this.baselines.delete(path);
 			this.createdDirs.delete(path);
+			this.uncertain.delete(path);
 		}
 		await this.save();
 	}

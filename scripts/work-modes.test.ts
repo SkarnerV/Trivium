@@ -20,6 +20,29 @@ test("Default keeps the system prompt byte-identical and the extension reads the
 	assert.equal(handler({ systemPrompt: prompt }), undefined);
 });
 
+test("the Orchestrator prompt asks for one forked writer, single calls and a verified answer", () => {
+	// The writer has the user's words, not a retelling of them, or the main agent does the work.
+	assert.match(ORCHESTRATOR_PROMPT, /subagent\(\{agent: "worker", task, async: \w+, options: \{[^}]*context: "fork"[^}]*\}\}\)/);
+	assert.match(ORCHESTRATOR_PROMPT, /one writer at a time/);
+	// In the background with a time limit, so the user can keep talking and a child's question can be answered.
+	const calls = [...ORCHESTRATOR_PROMPT.matchAll(/subagent\(\{[^)]*\}\)/g)].map(([text]) => text);
+	assert.equal(calls.length, 2);
+	for (const text of calls) assert.match(text, /async: true, options: \{[^}]*timeoutMs: \d+\}/);
+	assert.doesNotMatch(ORCHESTRATOR_PROMPT, /async: false/);
+	assert.match(ORCHESTRATOR_PROMPT, /end your turn; do not wait, poll or repeat it/);
+	assert.match(ORCHESTRATOR_PROMPT, /answer it with subagent_supervisor/);
+	assert.match(ORCHESTRATOR_PROMPT, /If the fork is refused or unavailable, make the changes yourself/);
+	// No scripts, plans of them or patch handling, and nothing that reviews beside a writer.
+	for (const gone of [/runs\.(?:all|run)/, /preflight/i, /\bworkflow\b/, /worktree/, /git apply/, /results\.map/, /\.js\b/, /globalConcurrencyLimit/, /parallel/i]) assert.doesNotMatch(ORCHESTRATOR_PROMPT, gone);
+	assert.match(ORCHESTRATOR_PROMPT, /reviewer only once the writer has ended/);
+	assert.match(ORCHESTRATOR_PROMPT, /only after its patch is verified and applied/);
+	assert.match(ORCHESTRATOR_PROMPT, /never commit, stash or discard/);
+	// What a child says is not a pass, and neither is a command still running.
+	assert.match(ORCHESTRATOR_PROMPT, /name the command you ran and its exit code, or say plainly that the work is unverified/);
+	assert.match(ORCHESTRATOR_PROMPT, /moved to background has not ended and is never a pass/);
+	assert.match(ORCHESTRATOR_PROMPT, /your answer cannot give it a permission/);
+});
+
 test("session modes persist, fork by session id and delete without affecting another session", async () => {
 	const root = mkdtempSync(join(tmpdir(), "trivium-modes-"));
 	try {

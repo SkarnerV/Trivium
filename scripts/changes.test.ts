@@ -57,9 +57,98 @@ test("subagent project edits are adopted and revertable, including after interve
 		await tracker.afterCommand();
 		await tracker.afterSubagents();
 		assert.deepEqual((await tracker.list()).map((file) => file.rel.replaceAll("\\", "/")).sort(), ["src/cart.ts", "src/child.ts"]);
+		// Made in a child's window, so they may be the user's: reverting everything leaves them, and each can be named.
 		await tracker.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), "child edit\n");
+		assert.equal(existsSync(file("src/child.ts")), true);
+		await tracker.revert((await tracker.list()).map((change) => change.path));
 		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), "one\n");
 		assert.equal(existsSync(file("src/child.ts")), false);
+		assert.deepEqual(await tracker.list(), []);
+	} finally { cleanup(); }
+});
+
+test("Revert All keeps what the user wrote while a subagent worked, byte for byte, also after a restart", async () => {
+	const { root, repo, tracker, edit, file, saved, cleanup } = setup();
+	try {
+		await edit("src/agent.ts", "agent\n");
+		await tracker.beforeSubagents();
+		const mine = "my own work \u00e9\r\n\tnot the child's\r\n";
+		writeFileSync(file("src/cart.ts"), mine);
+		writeFileSync(file("src/notes.txt"), mine);
+		writeFileSync(file("src/child.ts"), "child\n");
+		await tracker.afterSubagents();
+		const flags = async (of: ChangeTracker) => Object.fromEntries((await of.list()).map((change) => [change.rel.replaceAll("\\", "/"), change.uncertain ?? false]));
+		const expected = { "src/agent.ts": false, "src/cart.ts": true, "src/child.ts": true, "src/notes.txt": true };
+		assert.deepEqual(await flags(tracker), expected);
+		const reopened = new ChangeTracker(saved, repo);
+		assert.deepEqual(await flags(reopened), expected, "the doubt is kept with the record");
+		await reopened.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), mine);
+		assert.equal(readFileSync(file("src/notes.txt"), "utf8"), mine);
+		assert.equal(readFileSync(file("src/child.ts"), "utf8"), "child\n");
+		assert.equal(existsSync(file("src/agent.ts")), false, "the session's own edit is reverted");
+		assert.deepEqual(Object.keys(await flags(reopened)).sort(), ["src/cart.ts", "src/child.ts", "src/notes.txt"], "what was left stays listed");
+		await reopened.revert([file("src/child.ts")]);
+		assert.equal(existsSync(file("src/child.ts")), false, "one file can still be reverted when it is named");
+		await reopened.keep([file("src/notes.txt")]);
+		await reopened.keep();
+		// The doubt goes with the record: the same file, changed by a command later, is the command's.
+		const later = new ChangeTracker(join(root, "later.json"), repo);
+		await later.beforeSubagents();
+		await later.afterSubagents();
+		await later.beforeCommand();
+		writeFileSync(file("src/cart.ts"), "formatted\n");
+		await later.afterCommand();
+		assert.deepEqual(await flags(later), { "src/cart.ts": false });
+		await later.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), mine);
+	} finally { cleanup(); }
+});
+
+test("a file recorded before a subagent started is in doubt once it changes while one works", async () => {
+	const { tracker, edit, file, cleanup } = setup();
+	try {
+		await edit("src/cart.ts", "agent\n");
+		await edit("README.md", "# Agent\n");
+		await tracker.beforeSubagents();
+		writeFileSync(file("src/cart.ts"), "agent\nand me\n");
+		assert.equal(await tracker.afterSubagents(), true, "the list changed: one file is marked");
+		assert.deepEqual((await tracker.list()).map((change) => change.uncertain ?? false), [false, true]);
+		await tracker.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), "agent\nand me\n");
+		assert.equal(readFileSync(file("README.md"), "utf8"), "# Shop\n");
+	} finally { cleanup(); }
+});
+
+test("a command that overlaps a subagent's window is in doubt, and one started after it is not", async () => {
+	const { tracker, file, command, cleanup } = setup();
+	try {
+		await tracker.beforeSubagents();
+		// Started while the child works, ends after its window closed: the snapshot is still the one from before it.
+		await tracker.beforeCommand();
+		await tracker.afterSubagents();
+		writeFileSync(file("src/mine.ts"), "mine\n");
+		await tracker.afterCommand();
+		await command(() => writeFileSync(file("src/command.ts"), "command\n"));
+		assert.deepEqual((await tracker.list()).map((change) => [change.rel.replaceAll("\\", "/"), change.uncertain ?? false]), [["src/command.ts", false], ["src/mine.ts", true]]);
+	} finally { cleanup(); }
+});
+
+test("what changed by the time a background command ends is listed in doubt, and Revert All leaves it", async () => {
+	const { tracker, file, command, listed, cleanup } = setup();
+	try {
+		await command(() => writeFileSync(file("src/built.ts"), "first\n"));
+		// The command moved to the background here, and went on while the user edited.
+		writeFileSync(file("src/built.ts"), "second\n");
+		writeFileSync(file("src/cart.ts"), "mine\n");
+		assert.equal(await tracker.afterBackground(), true);
+		assert.deepEqual((await tracker.list()).map((change) => [change.rel.replaceAll("\\", "/"), change.uncertain ?? false]), [["src/built.ts", true], ["src/cart.ts", true]]);
+		await tracker.revert();
+		assert.equal(readFileSync(file("src/cart.ts"), "utf8"), "mine\n");
+		assert.equal(readFileSync(file("src/built.ts"), "utf8"), "second\n");
+		assert.deepEqual(await listed(), ["src/built.ts", "src/cart.ts"]);
+		assert.equal(await tracker.afterBackground(), false, "nothing new to say");
 	} finally { cleanup(); }
 });
 

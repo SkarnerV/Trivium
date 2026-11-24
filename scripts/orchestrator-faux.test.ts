@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -7,8 +7,10 @@ import faux from "../dev/faux-extension.ts";
 import { HandoffCache, manifestOf } from "../src/main/handoffs.ts";
 import { handoffRoots } from "../src/main/extension-paths.ts";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { subagentOf } from "../src/main/subagents.ts";
+
+/** The temp root a scripted fan-out wrote its runs under, from the run folder its receipt gives for a child. */
+const rootOf = (details: any): string => dirname(dirname(details.mission.workflowChildren[0].artifactPaths[0]));
 
 test("the faux workflow exercises plan, waiting, failure, eight children, timeout and real handoff patches", async () => {
 	let execute: Function = () => {};
@@ -23,8 +25,7 @@ test("the faux workflow exercises plan, waiting, failure, eight children, timeou
 			let waiting = false;
 			let count = 0;
 			const result = await execute("faux-run", { workflow: true, options: { scenario } }, undefined, (update: { details: any }) => {
-				const path = update.details.parallelHandoff?.path;
-				if (path) roots.add(dirname(path));
+				roots.add(rootOf(update.details));
 				const view = subagentOf({ workflow: true }, update.details, "running");
 				plan ||= view.children.every((child) => child.status === "pending");
 				waiting ||= view.children.some((child) => child.waitingOn === "main");
@@ -38,15 +39,27 @@ test("the faux workflow exercises plan, waiting, failure, eight children, timeou
 				assert.ok(view.children.some((child) => child.timedOut));
 			} else {
 				assert.equal(waiting, true);
-				const path = result.details.parallelHandoff.path;
-				const manifest = manifestOf(JSON.parse(await readFile(path, "utf8")))!;
-				assert.equal(manifest.children.length, 2);
-				assert.equal(manifest.kept.length, 1);
+				// The receipt a real workflow ends with: no manifest of its own, and none named for a child.
+				assert.equal(result.details.parallelHandoff, undefined);
+				assert.ok(!JSON.stringify(result.details).includes("handoff.json"));
+				for (const [index, entry] of result.details.mission.workflowChildren.slice(0, 2).entries()) {
+					const manifest = manifestOf(JSON.parse(await readFile(join(entry.artifactPaths[0], "handoff.json"), "utf8")))!;
+					assert.equal(manifest.runId, result.details.results[index].runId);
+					assert.equal(manifest.children.length, 1);
+					assert.equal(manifest.kept.length, index);
+				}
 				const cache = new HandoffCache(handoffRoots({ agentDir: join(tmpdir(), "no-agent"), cwd: join(tmpdir(), "no-project"), env: {} }));
 				await cache.capture(result.details);
 				const runs = [{ steps: [{ subagent: view }] }] as any;
 				cache.attach(runs);
-				assert.equal(cache.patch(view.children[0]!.handoff!.id).length, 2);
+				const [api, web, tests] = view.children;
+				assert.deepEqual(cache.patch(api!.handoff!.id).map((file) => file.file), ["src/api/refresh.ts", "test/api.test.ts"]);
+				assert.match(web!.handoff!.error ?? "", /capture failed/);
+				assert.equal(tests!.handoff, undefined, "a reviewer hands nothing back");
+				assert.equal(view.keptWorktrees?.length, 1);
+				const report = cache.report(result.details)!;
+				assert.ok(report.includes(api!.handoff!.path), "the main agent is told where the patch is");
+				assert.match(report, /- web \(worker\): BLOCKED, do not integrate/);
 			}
 		}));
 	} finally {
@@ -66,12 +79,12 @@ test("the faux workflow also queues, stops at a usage limit, and runs background
 	try {
 		let queued = false;
 		await execute("faux-queued", { workflow: true, options: { scenario: "orchestrator queued" } }, undefined, (update: { details: any }) => {
-			if (update.details.parallelHandoff?.path) roots.add(dirname(update.details.parallelHandoff.path));
+			roots.add(rootOf(update.details));
 			queued ||= subagentOf({ workflow: true }, update.details, "running").children.every((child) => child.queued);
 		});
 		assert.equal(queued, true, "children show queued while the workflow waits for a slot");
 		const limited = await execute("faux-limit", { workflow: true, options: { scenario: "orchestrator limit" } }, undefined, (update: { details: any }) => {
-			if (update.details.parallelHandoff?.path) roots.add(dirname(update.details.parallelHandoff.path));
+			roots.add(rootOf(update.details));
 		});
 		assert.equal(limited.isError, true);
 		const view = subagentOf({ workflow: true }, limited.details, "error");

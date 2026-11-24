@@ -43,6 +43,8 @@ interface ResultLike {
 	runId?: unknown;
 	sessionFile?: unknown;
 	exitCode?: unknown;
+	/** It asked its supervisor something and went on running after its call returned. */
+	detached?: unknown;
 	error?: unknown;
 	finalOutput?: unknown;
 	model?: unknown;
@@ -108,8 +110,25 @@ function splitCall(text: string): { tool: string; target: string } {
 	return { tool, target: rest.join(" ") };
 }
 
+/** pi-subagents 0.82.1 reports a child left running as exit code -2 (`detachForeground` in `foreground/execution.js`). */
+export const DETACHED_EXIT = -2;
+
+function isDetached(result: { exitCode?: unknown; detached?: unknown } | undefined): boolean {
+	return result?.detached === true || result?.exitCode === DETACHED_EXIT;
+}
+
+/** The runs a finished call left going: each lives in this process, under its own run id, until its notice arrives. */
+export function detachedRuns(details: unknown): { runId: string; timeoutMs?: number }[] {
+	const info = record(details);
+	// A background launch has a run folder to read instead.
+	if (typeof info.asyncId === "string") return [];
+	const ids = list<ResultLike>(info.results).flatMap((result) => (isDetached(result) ? [str(result.runId) || str(info.runId)] : []));
+	return [...new Set(ids.filter(Boolean))].map((runId) => ({ runId, timeoutMs: num(info.timeoutMs) }));
+}
+
 function childStatus(progress: ProgressLike | undefined, result: ResultLike | undefined, toolStatus: Step["status"]): SubagentChild["status"] {
 	const reported = str(progress?.status);
+	if (isDetached(result)) return "running";
 	if (reported === "failed") return "error";
 	if (reported === "completed") return "done";
 	if (toolStatus === "running") return reported === "pending" ? "pending" : "running";
@@ -134,7 +153,9 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 	const steps = recent.length
 		? recent.map((call) => ({ tool: str(call.tool), target: str(call.args), ...(num(call.endMs) !== undefined ? { endMs: num(call.endMs) } : {}) }))
 		: list<{ text?: unknown }>(result?.toolCalls).map((call) => splitCall(str(call.text)));
-	const currentTool = str(progress?.currentTool);
+	// A detached child's receipt stops at its question; what it does now is not in it.
+	const detached = isDetached(result);
+	const currentTool = detached ? "" : str(progress?.currentTool);
 	const usage = result?.usage;
 	const usageTokens = (num(usage?.input) ?? 0) + (num(usage?.output) ?? 0);
 	const context = str(result?.context);
@@ -146,6 +167,8 @@ function child(result: ResultLike | undefined, progress: ProgressLike | undefine
 		agent: str(result?.agent) || str(progress?.agent) || "agent",
 		task: str(result?.task) || str(progress?.task),
 		label: str(result?.workflowKey) || undefined,
+		runId: str(result?.runId) || undefined,
+		...(detached ? { detached: true } : {}),
 		status,
 		current: status === "running" && currentTool ? { tool: currentTool, target: str(progress?.currentToolArgs) } : undefined,
 		steps,
@@ -174,7 +197,10 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		const live = result?.progress ?? progress.find((item) => item.index === index) ?? progress[index];
 		const position = num(result?.index) ?? num(live?.index) ?? index;
 		const own = str(result?.runId);
-		children.push(child(result, live, toolStatus, own ? childSessionFile(parentSessionFile, own, 0) : childSessionFile(parentSessionFile, runId, position)));
+		const made = child(result, live, toolStatus, own ? childSessionFile(parentSessionFile, own, 0) : childSessionFile(parentSessionFile, runId, position));
+		// A single child's receipt names the run it goes on in only once, for the whole call.
+		if (made.detached) made.runId ||= runId || undefined;
+		children.push(made);
 	}
 	// A single child's progress may leave out what the call already said.
 	if (children.length === 1 && typeof args.agent === "string") {
@@ -207,9 +233,12 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 			merged.push({
 				...(existing ?? { agent: str(live?.agent) || "agent", task: "", status: "pending", steps: [], tools: 0 }),
 				childId: key, label: key, role: lane?.mode,
+				runId: existing?.runId ?? (str(live?.runId) || undefined),
 				agent: str(live?.agent) || existing?.agent || "agent",
 				status: status ?? existing?.status ?? "pending",
 				waitingOn: state === "paused" || activity.currentTool === "contact_supervisor" ? "main" : undefined,
+				// While its workflow runs, the workflow waits for it; only a call that ended leaves one running.
+				...(state === "detached" && toolStatus !== "running" && !background && (existing?.runId || str(live?.runId)) ? { detached: true } : {}),
 				current: typeof activity.currentTool === "string" ? { tool: activity.currentTool, target: "" } : existing?.current,
 				tools: num(activity.toolCount) ?? existing?.tools ?? 0,
 				tokens: num(activity.tokens) ?? existing?.tokens,
@@ -233,7 +262,7 @@ export function subagentOf(args: Record<string, unknown>, details: unknown, tool
 		item.durationMs ??= num(completed?.durationMs);
 		if (queued && item.status === "pending") item.queued = true;
 		if (args.worktree === true) item.worktree = true;
-		if (toolStatus === "error" && item.status === "running" && !background) item.status = "stopped";
+		if (toolStatus === "error" && item.status === "running" && !background && !item.detached) item.status = "stopped";
 		if (item.current?.tool === "contact_supervisor") item.waitingOn = "main";
 		item.role ??= /^(worker|delegate)$|writer$/.test(item.agent) ? "mutation" : item.agent === "reviewer" ? "review" : item.agent === "scout" ? "scout" : undefined;
 	}
@@ -267,6 +296,8 @@ export function describeSubagent(subagent: Subagent, args: Record<string, unknow
 				: "workflow";
 	if (subagent.background) return { target, meta: status === "error" ? "failed" : "background", tone: status === "error" ? "error" : "plain" };
 	const failed = children.filter((item) => item.status === "error").length;
+	// Left running: its result comes later, as a background one does.
+	if (status !== "error" && !failed && children.some((item) => item.detached)) return { target, meta: "background", tone: "plain" };
 	if (status === "error" || failed) {
 		return { target, meta: children.length > 1 && failed ? `${failed} failed` : "failed", tone: "error" };
 	}
@@ -277,8 +308,33 @@ export function describeSubagent(subagent: Subagent, args: Record<string, unknow
 /** Lines pi-subagents adds after the result for the model's sake: where the run lives and what to do next. */
 const TRAILER = /^(Parent action|Session|Session file|Session share error|Retention-managed async directory|Workflow run|Workflow receipt|Child runs|Parallel handoff|Reconciled detached child): /;
 
-/** A background child's result, or undefined for any other message. */
+/** How pi-subagents 0.82.1 hands a child's question to the main agent (`src/intercom/supervisor-ui.js`). */
+export const SUPERVISOR_REQUEST = "subagent_supervisor_request";
+/** The main agent's tool that answers one. */
+export const SUPERVISOR_TOOL = "subagent_supervisor";
+
+/** A child's question to the main agent. A progress update expects no answer, and is not one. */
+function questionOf(message: { content?: unknown; details?: unknown }): SubagentNotice | undefined {
+	const details = record(message.details);
+	const id = str(details.requestId) || str(details.id);
+	const runId = str(details.runId);
+	if (!id || !runId || details.expectsReply === false) return undefined;
+	const interview = details.interview === undefined ? "" : `\n\n\`\`\`json\n${JSON.stringify(details.interview, null, 2)}\n\`\`\``;
+	const text = `${str(details.requestBody)}${interview}`.trim() || (typeof message.content === "string" ? message.content : "");
+	return { agent: str(details.agent) || "subagent", status: "waiting", text, request: { id, runId, childIndex: num(details.childIndex) ?? 0 } };
+}
+
+/** The main agent's answer to a child's question, from its `subagent_supervisor` call. */
+export function supervisorReply(name: string, args: Record<string, unknown>, details: unknown): { request: string; message: string } | undefined {
+	if (name !== SUPERVISOR_TOOL || args.action !== "reply") return undefined;
+	// A reply to the only question pending may leave out which; the result says.
+	const request = str(record(details).replyTo) || str(args.replyTo);
+	return request ? { request, message: str(args.message) } : undefined;
+}
+
+/** A background child's result, a child's question, or undefined for any other message. */
 export function noticeOf(message: { role?: unknown; customType?: unknown; content?: unknown; details?: unknown }): SubagentNotice | undefined {
+	if (message.role === "custom" && message.customType === SUPERVISOR_REQUEST) return questionOf(message);
 	if (message.role !== "custom" || message.customType !== "subagent-notify") return commandNotice(message);
 	const content = typeof message.content === "string"
 		? message.content

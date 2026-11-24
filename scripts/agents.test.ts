@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentCounts, agentSteps, currentStep } from "../src/renderer/agents.ts";
+import { agentCounts, agentSteps, currentStep, noticeWord } from "../src/renderer/agents.ts";
 import type { Run } from "../src/shared/protocol.ts";
 
 test("workflow counts include all eight children and waiting is distinct from user attention", () => {
@@ -21,6 +21,13 @@ test("background children stay active until their grouped run-id notification ar
 	assert.equal(launch.subagent.children[0]!.status, "running", "display pairing does not mutate the stored launch");
 });
 
+test("a subagent's notice says it reported done, and a command's that it finished", () => {
+	assert.equal(noticeWord({ status: "completed" }), "Reported done");
+	assert.equal(noticeWord({ status: "completed", command: "npm test" }), "Finished");
+	assert.equal(noticeWord({ status: "failed" }), "Failed");
+	assert.equal(noticeWord({ status: "waiting" }), "Waiting");
+});
+
 test("the thread's live line follows the current step and stop showing an old tool when the answer starts", () => {
 	const run = { status: "running", answer: "", steps: [{ tool: "bash", target: "npm test", status: "running" }, { tool: "note", status: "done" }] } as unknown as Run;
 	assert.equal(currentStep(run)?.target, "npm test");
@@ -37,6 +44,7 @@ test("a lane's claimed files read as a short list, and the live verbs are transl
 	assert.equal(listOf([]), "");
 	const { TABLES } = await import("../src/shared/i18n.ts");
 	const { VERBS } = await import("../src/renderer/verbs.ts");
-	const keys = Object.values(VERBS);
+	// Words looked up by status, which the check of t() calls can't see.
+	const keys = [...Object.values(VERBS), "Reported done", "Finished", "Failed", "Paused", "Stopped", "Waiting"];
 	for (const [locale, table] of Object.entries(TABLES)) assert.deepEqual(keys.filter((key) => !(key in table)), [], locale);
 });

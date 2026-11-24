@@ -4,7 +4,7 @@ import { type AgentSessionEvent, type SessionEntry, sessionEntryToContextMessage
 import type { ReplyTiming, Run, Step, TranscriptImage } from "../shared/protocol.ts";
 import { explainLimit } from "./limits.ts";
 import { movedToBackground } from "./long-commands.ts";
-import { describeSubagent, launchesSubagents, noticeOf, subagentOf } from "./subagents.ts";
+import { describeSubagent, launchesSubagents, noticeOf, subagentOf, supervisorReply } from "./subagents.ts";
 
 /**
  * Turns pi's message stream into runs: one user message, the steps the agent
@@ -178,6 +178,8 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 	const path = str(args.path) || str(args.file_path);
 	const running = tool.status === "running";
 	if (launchesSubagents(tool.name, args)) return describeSubagent(subagentOf(args, tool.details, tool.status), args, tool.status);
+	const reply = supervisorReply(tool.name, args, tool.details);
+	if (reply && tool.status !== "error") return { target: firstLine(reply.message, 120), meta: running ? "" : "reply", tone: "plain" };
 	if (tool.status === "error") {
 		const target = path || str(args.command) || str(args.pattern) || firstLine(JSON.stringify(args), 80);
 		const code = /exit(?:ed with)? code (\d+)/i.exec(result ?? "")?.[1];
@@ -529,6 +531,7 @@ export class RunTracker {
 				images: tool.images,
 				tail: tool.tail,
 				subagent: launchesSubagents(tool.name, tool.args) ? subagentOf(tool.args, tool.details, status, this.sessionFile) : undefined,
+				reply: supervisorReply(tool.name, tool.args, tool.details),
 			});
 		});
 		return {

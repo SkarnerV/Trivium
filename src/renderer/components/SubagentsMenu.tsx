@@ -54,10 +54,11 @@ export function sessionSubagents(runs: Run[], running: boolean): { groups: Group
 	return { groups, all };
 }
 
-/** Background children by session file, with how they did as their results reported it. */
+/** Background children, and those their calls left running, by session file, with how they did as their results reported it. */
 export function backgroundSubagents(runs: Run[], running: boolean): ReadonlyMap<string, SubagentChild> {
-	const group = sessionSubagents(runs, running).groups.find((item) => item.id === "background");
-	return new Map(group?.entries.flatMap((entry) => (entry.child.sessionFile ? [[entry.child.sessionFile, entry.child] as const] : [])));
+	const { groups } = sessionSubagents(runs, running);
+	const entries = groups.flatMap((group) => group.entries.filter((entry) => entry.background || entry.child.detached));
+	return new Map(entries.flatMap((entry) => (entry.child.sessionFile ? [[entry.child.sessionFile, entry.child] as const] : [])));
 }
 
 /** The header button that lists every subagent in the session, and opens any of them. */

@@ -29,6 +29,8 @@
 		"build": "node scripts/build.mjs",
 		"package": "node scripts/build.mjs --production && electron-builder",
 		"test": "node --experimental-strip-types --test scripts/*.test.ts scripts/*.test.mjs",
+		"test:real": "node --experimental-strip-types --test --test-force-exit scripts/real/pi-subagents.real.ts",
+		"real:live": "node --experimental-strip-types scripts/real/live.ts",
 		"start": "node scripts/build.mjs && node scripts/start.mjs",
 		"dev": "node scripts/dev.mjs",
 		"check": "tsc --noEmit -p tsconfig.json"

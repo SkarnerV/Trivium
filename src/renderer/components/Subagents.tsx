@@ -2,8 +2,9 @@ import { createContext, useContext, useState } from "react";
 import type { LimitNotice, Step, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
 import { duration, tokens } from "../format.ts";
 import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
+import type { SupervisorQuestion } from "../../shared/agent-counts.ts";
 import { AgentSession } from "../agent-context.ts";
-import { claimsOf } from "../agents.ts";
+import { claimsOf, noticeWord } from "../agents.ts";
 import { Markdown } from "./Markdown.tsx";
 import { t } from "../i18n.tsx";
 
@@ -200,12 +201,13 @@ export function SubagentRow({
 	place?: "thread" | "menu";
 }) {
 	const opener = useContext(SubagentOpenerContext);
-	// A background child works on after its launch step ends, until its result says otherwise.
-	const later = background && reported.sessionFile ? opener?.background?.get(reported.sessionFile) : undefined;
-	const child: SubagentChild = background ? (later ?? { ...reported, status: "running" }) : reported;
+	// A background child works on after its launch step ends, until its result says otherwise; so does one left running.
+	const later = (background || reported.detached) && reported.sessionFile ? opener?.background?.get(reported.sessionFile) : undefined;
+	const child: SubagentChild = later ?? (background ? { ...reported, status: "running" } : reported);
+	const alone = background || Boolean(child.detached);
 	const target = targetOf(child);
 	const { text, code: asCode, warn } =
-		background && child.status === "running" ? { text: t("Its result arrives as its own message"), code: false, warn: false } : rowActivity(child, claims);
+		alone && child.status === "running" && !child.waitingOn ? { text: t("Its result arrives as its own message"), code: false, warn: false } : rowActivity(child, claims);
 	const status = agentStatus(child);
 	const finished = child.status === "done" || child.status === "error" || child.status === "stopped";
 	const time = finished || child.status === "running" ? duration(child.durationMs) : "";
@@ -221,7 +223,7 @@ export function SubagentRow({
 				</span>
 				<span className={`agent-row-activity ellipsis${asCode ? " code" : ""}${child.status === "error" && child.error ? " error" : warn ? " warn" : ""}`}>{text}</span>
 			</span>
-			{background && !finished ? (
+			{alone && !finished && !child.waitingOn ? (
 				<span className="agent-pill">{t("Runs on its own")}</span>
 			) : (
 				(menu || status !== "done") && <span className={`agent-status is-${status}`}>{statusWord(status)}</span>
@@ -374,17 +376,17 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 	);
 }
 
-const NOTICE_STATUS: Record<SubagentNotice["status"], { status: AgentStatus; word: string }> = {
-	completed: { status: "done", word: "Finished" },
-	failed: { status: "error", word: "Failed" },
-	paused: { status: "stopped", word: "Paused" },
-	stopped: { status: "stopped", word: "Stopped" },
-};
+const NOTICE_STATUS: Record<SubagentNotice["status"], AgentStatus> = { completed: "done", failed: "error", paused: "stopped", stopped: "stopped", waiting: "waiting" };
 
-/** The row that opens a run started by a background subagent's result, in place of a user message. */
-export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
+/**
+ * The row that opens a run started by a background subagent's result, in place of a user message. A subagent's
+ * question opens one too, and shows the main agent's answer once there is one: the main agent replies, not the user.
+ */
+export function SubagentNoticeLine({ notice, question }: { notice: SubagentNotice; question?: SupervisorQuestion }) {
 	const [open, setOpen] = useState(false);
-	const { status, word } = NOTICE_STATUS[notice.status];
+	if (notice.request) return <QuestionLine notice={notice} question={question} open={open} onToggle={() => setOpen(!open)} />;
+	const status = NOTICE_STATUS[notice.status];
+	const word = noticeWord(notice);
 	const command = notice.command !== undefined;
 	// A command's verdict is what it printed last.
 	const line = command ? firstLine(notice.text.trim().split("\n").at(-1) ?? "") : preview(notice.text);
@@ -404,9 +406,9 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 						<span className="agent-row-name">
 							{command ? <code className="agent-row-command ellipsis">{notice.command!.split("\n")[0]}</code> : <span className="agent-row-agent">{notice.agent}</span>}
 						</span>
-						<span className={`agent-row-activity ellipsis${command ? " code" : ""}${status === "error" ? " error" : ""}`}>{line || t(word)}</span>
+						<span className={`agent-row-activity ellipsis${command ? " code" : ""}${status === "error" ? " error" : ""}`}>{line || word}</span>
 					</span>
-					<span className={`agent-status is-${status}`}>{t(word)}</span>
+					<span className={`agent-status is-${status}`}>{word}</span>
 					<span className="agent-row-time">{duration(notice.durationMs)}</span>
 					{notice.text && <Chevron open={open} />}
 				</button>
@@ -414,6 +416,40 @@ export function SubagentNoticeLine({ notice }: { notice: SubagentNotice }) {
 			{open && (
 				<div className="agent-notice-body">
 					<Markdown text={notice.text} />
+				</div>
+			)}
+		</div>
+	);
+}
+
+function QuestionLine({ notice, question, open, onToggle }: { notice: SubagentNotice; question?: SupervisorQuestion; open: boolean; onToggle: () => void }) {
+	const answered = question?.reply !== undefined;
+	const status: AgentStatus = answered ? "done" : question?.waiting === false ? "stopped" : "waiting";
+	return (
+		<div className={`agent-notice${open ? " open" : ""}`}>
+			<div className="agent-notice-head">
+				<button type="button" className="agent-row is-button" aria-expanded={open} onClick={onToggle}>
+					<AgentAvatar agent={notice.agent} status={status} />
+					<span className="agent-row-main">
+						<span className="agent-row-name">
+							<span className="agent-row-agent">{notice.agent}</span>
+							<span className="agent-row-task ellipsis">{t("asks the main agent")}</span>
+						</span>
+						<span className="agent-row-activity ellipsis">{preview(notice.text)}</span>
+					</span>
+					<span className={`agent-status is-${status}`}>{t(answered ? "Answered" : status === "waiting" ? "Waiting" : "Not answered")}</span>
+					<Chevron open={open} />
+				</button>
+			</div>
+			{open && (
+				<div className="agent-notice-body">
+					<Markdown text={notice.text} />
+					{answered && (
+						<>
+							<p className="agent-notice-reply">{t("The main agent's reply")}</p>
+							<Markdown text={question.reply!} />
+						</>
+					)}
 				</div>
 			)}
 		</div>

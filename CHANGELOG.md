@@ -4,8 +4,18 @@ All notable changes to Trivium are listed here. Versions follow [Semantic Versio
 
 ## [Unreleased]
 
+### Changed
+
+- **Orchestrator uses one writer, in the background.** The writer is forked from the session, so it has your own words and corrections rather than a summary. The turn ends when it starts, so you can keep talking to the agent, which answers the writer's questions. While a writer works, Trivium refuses a second one and the agent's own edits and commands that change anything; scouts still run. In Always ask, a writer is refused at once, since no one could approve what it does. The agent no longer writes workflow scripts or splits changes over parallel worktrees on its own.
+- A subagent's result says "Reported done" rather than "Finished", since nothing has checked it yet, and Orchestrator's answers name the check that ran and its exit code, or say the work is unverified.
+
 ### Fixed
 
+- **A subagent call could run a command past the permission gate.** The `gate` and `acceptance.verify` commands pi-subagents runs after a subagent finishes follow the same rules as the agent's own commands, also in a workflow script and a project's own agents. A workflow whose commands can't be read beforehand asks first, except in Bypass.
+- A workflow's patches were not found after a real run, so neither the thread nor the agent saw them. Each is now matched to its writer by the writer's own run, the agent is told where each one is, and a writer whose patch is missing or belongs to another run is named and not integrated.
+- A subagent that asked the main agent something showed as failed, stopped counting as running, and could be ended when its session went idle or its settings changed. It now stays running until it reports back, and its question and the agent's answer show in the thread.
+- A background subagent whose status was late showed as gone for good. It is looked at again.
+- Edits you make while a subagent or a background command works are no longer undone with the session's: such files are marked "may include your edits", reverting everything leaves them, and reverting one asks first.
 - A memory file saved with Windows line endings (CRLF) showed no entries on the Memory page. Its entries now show, and adding, editing, moving, deleting and undoing keep the file's line endings.
 
 ## [0.14.0] - 2026-11-23

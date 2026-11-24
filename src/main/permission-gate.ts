@@ -4,13 +4,14 @@ import type { ExtensionAPI, ExtensionContext, ToolCallEventResult } from "@earen
 import type { PermissionModeId } from "../shared/permissions.ts";
 import { t } from "../shared/i18n.ts";
 import { isInside } from "./reader.ts";
+import { embeddedCommands } from "./subagent-commands.ts";
 
 /**
  * Trivium's permission gate for Code, with the rules PERMISSION_MODES describes and nothing else. It reads the mode
  * on every call, so a change in the composer reaches sessions already running.
  */
 
-export type Decision = { action: "allow" } | { action: "deny"; reason: string } | { action: "ask"; title: string; remember: Remembered };
+export type Decision = { action: "allow" } | { action: "deny"; reason: string } | { action: "ask"; title: string; remember?: Remembered };
 
 /** What "Allow for this session" approves from then on. */
 export type Remembered =
@@ -90,21 +91,57 @@ export interface Approvals {
 
 export const noApprovals = (): Approvals => ({ commands: new Set(), edits: false, outside: new Set() });
 
-/** The gate's answer for one tool call, before anyone is asked. */
-export function decide(mode: PermissionModeId, toolName: string, input: Record<string, unknown>, cwd: string, approved: Approvals): Decision {
+const ENV_REASON = "Blocked: .env files are off limits. Ask the user for the values you need.";
+
+/** Whether a mode asks about a shell command, whoever is to run it: the shell tool, or pi-subagents for a call's gate. */
+function asksAbout(mode: PermissionModeId, command: string, approved: Approvals): boolean {
+	if (mode === "bypass" || approved.commands.has(commandPrefix(command))) return false;
+	return mode === "auto" ? isRisky(command) : !onlyReads(command);
+}
+
+/**
+ * A `subagent` call can make pi-subagents run shell commands itself (subagent-commands.ts), past every tool this gate
+ * sees, so each is judged as the shell tool's would be. A script whose commands can't be read is asked about whole.
+ */
+function decideSubagent(mode: PermissionModeId, input: Record<string, unknown>, cwd: string, approved: Approvals, settled: boolean): Decision {
+	const { commands, unknown } = embeddedCommands(input, cwd, settled);
+	if (commands.some(namesEnvFile)) return { action: "deny", reason: ENV_REASON };
+	if (mode === "bypass") return { action: "allow" };
+	const asking = [...new Set(commands)].filter((command) => asksAbout(mode, command, approved));
+	const command = asking.join("\n");
+	if (unknown !== undefined) {
+		// Never remembered: the next script may be another one.
+		return {
+			action: "ask",
+			title: asking.length
+				? t("Run subagents with commands that can't be checked first?\n\n{name}\n\nThey also run:\n{command}", { name: unknown, command })
+				: t("Run subagents with commands that can't be checked first?\n\n{name}", { name: unknown }),
+		};
+	}
+	if (!asking.length) return { action: "allow" };
+	return {
+		action: "ask",
+		title: t("Run this command when the subagent finishes?\n\n{command}", { command }),
+		...(asking.length === 1 ? { remember: { kind: "command", prefix: commandPrefix(command) } } : {}),
+	};
+}
+
+/**
+ * The gate's answer for one tool call, before anyone is asked. `settled` is false when other calls of the same reply
+ * are still to run, which can rewrite a script this call names.
+ */
+export function decide(mode: PermissionModeId, toolName: string, input: Record<string, unknown>, cwd: string, approved: Approvals, settled = true): Decision {
 	const allow = { action: "allow" } as const;
 	if (SHELL_TOOLS.has(toolName)) {
 		const command = typeof input.command === "string" ? input.command : "";
-		if (namesEnvFile(command)) return { action: "deny", reason: "Blocked: .env files are off limits. Ask the user for the values you need." };
-		if (mode === "bypass") return allow;
-		const prefix = commandPrefix(command);
-		if (approved.commands.has(prefix)) return allow;
-		const asks = mode === "auto" ? isRisky(command) : !onlyReads(command);
-		return asks ? { action: "ask", title: t("Run this command?\n\n{command}", { command }), remember: { kind: "command", prefix } } : allow;
+		if (namesEnvFile(command)) return { action: "deny", reason: ENV_REASON };
+		if (!asksAbout(mode, command, approved)) return allow;
+		return { action: "ask", title: t("Run this command?\n\n{command}", { command }), remember: { kind: "command", prefix: commandPrefix(command) } };
 	}
+	if (toolName === "subagent") return decideSubagent(mode, input, cwd, approved, settled);
 	if (!FILE_TOOLS.has(toolName)) return allow;
 	const path = targetPath(input, cwd);
-	if (isEnvFile(path)) return { action: "deny", reason: "Blocked: .env files are off limits. Ask the user for the values you need." };
+	if (isEnvFile(path)) return { action: "deny", reason: ENV_REASON };
 	if (mode === "bypass") return allow;
 	const writes = WRITE_TOOLS.has(toolName);
 	if (!isInside(cwd, path)) {
@@ -126,22 +163,35 @@ function rememberLabel(remember: Remembered): string {
 	return t("Allow {dir} for this session", { dir: remember.dir });
 }
 
+/** Whether the reply that made this call made no other: pi checks every call of a reply before it runs any of them. */
+function onlyCall(ctx: ExtensionContext, toolCallId: string): boolean {
+	const branch = ctx.sessionManager?.getBranch() ?? [];
+	for (let index = branch.length - 1; index >= 0; index--) {
+		const entry = branch[index]!;
+		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+		const calls = entry.message.content.filter((part) => part.type === "toolCall");
+		if (calls.some((call) => call.id === toolCallId)) return calls.length === 1;
+	}
+	return true;
+}
+
 /** The extension, with the mode read from Trivium's settings each time. */
 export function permissionGate(mode: () => PermissionModeId) {
 	return (pi: ExtensionAPI) => {
 		const approved = noApprovals();
 		pi.on("tool_call", async (event, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined> => {
-			const decision = decide(mode(), event.toolName, event.input as Record<string, unknown>, ctx.cwd, approved);
+			const settled = event.toolName !== "subagent" || onlyCall(ctx, event.toolCallId);
+			const decision = decide(mode(), event.toolName, event.input as Record<string, unknown>, ctx.cwd, approved, settled);
 			if (decision.action === "allow") return undefined;
 			if (decision.action === "deny") return { block: true, reason: decision.reason };
 			if (!ctx.hasUI) return { block: true, reason: "Blocked: this needs the user's approval, and no one can answer here." };
 			const yes = t("Allow");
-			const always = rememberLabel(decision.remember);
+			const always = decision.remember && rememberLabel(decision.remember);
 			const no = t("Deny");
 			const noWithNote = t("Deny and say what to do instead");
-			const answer = await ctx.ui.select(decision.title, [yes, always, no, noWithNote]);
+			const answer = await ctx.ui.select(decision.title, [yes, ...(always ? [always] : []), no, noWithNote]);
 			if (answer === yes) return undefined;
-			if (answer === always) {
+			if (decision.remember && answer === always) {
 				const { remember } = decision;
 				if (remember.kind === "command") approved.commands.add(remember.prefix);
 				else if (remember.kind === "edits") approved.edits = true;

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
+import { supervisorQuestions } from "../agents.ts";
 import { baseName, duration } from "../format.ts";
 import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
 import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, openSubagent, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
@@ -260,7 +261,7 @@ export function RunBlock({ run, live, view, index, from }: { run: Run; live: boo
 			{Boolean(run.prompt.trim() || run.attachments?.length) &&
 				(view ? <UserMessage run={run} view={view} index={index} /> : <QuotedMessage run={run} from={from} />)}
 			<div className="agent">
-				{run.notice && <SubagentNoticeLine notice={run.notice} />}
+				{run.notice && <SubagentNoticeLine notice={run.notice} question={run.notice.request && supervisorQuestions(view?.runs ?? [run]).get(run.notice.request.id)} />}
 				<Steps run={run} live={live} tally={!view} />
 				{run.answer && (
 					<div className="reply">

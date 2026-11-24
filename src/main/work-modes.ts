@@ -7,28 +7,29 @@ import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 /**
  * Compact standing instructions; parameter names follow pi-subagents 0.82.1's execution schema.
  *
- * The two call shapes are spelled out with an example because naming the parts was not enough: told only to "use
- * runs.all" and "supply options.preflight", a model put `runs` inside `options` and a preflight on a single child,
- * the extension rejected both, and the model gave up delegating. A workflow's children are named in a script, not
- * in the tool call, and a preflight is accepted only with such a script.
+ * One writer, started by one native call, is what this mode asks for. It is forked from the session, so it has the
+ * user's own words and every correction since: a fresh child has only the main agent's retelling of them, which is
+ * where requirements were lost. An explicit `context: "fork"` is strict in pi-subagents (`fork-context.js`): where the
+ * session can't be forked the call fails, and the main agent then does the work, rather than hand a summary to a
+ * fresh child.
  *
- * The script goes in a file, not in a fenced block of the reply, which the extension also accepts: a model that
- * writes prose before its tool call leaves the block out, and the call is rejected. The file goes under
- * .pi/subagents/ because anywhere else in the project it is an uncommitted change, and the extension refuses to
- * start worktree writers from a folder that has any; that folder is the one it leaves out of the check.
+ * Every call is in the background, with a time limit of its own. A foreground call holds the turn: the user can't talk
+ * to the main agent, and a child's question reaches it only by leaving the child behind (pi-subagents detaches it). In
+ * the background the turn ends, a question arrives as a message the main agent answers, and the result as another.
+ * While the writer works the host refuses another, and the main agent's own changes (writer-lock.ts).
+ *
+ * Scripts that start several children are left to the user's own request. Asked for here, they cost more than they
+ * gave: the model wrote a script, a plan of it and the patch handling, a reviewer started beside a writer in a
+ * worktree had nothing to review, and what came back was prose with no way to tell done from said.
  */
 export const ORCHESTRATOR_PROMPT = `The user chose Orchestrator work mode. This is standing authorization to delegate with subagent. If subagent is not active, call subagents_enable first.
-Do small tasks directly. For large tasks, scout before deciding a split, then announce the split in one or two sentences. Fan out scouts and reviewers freely. Use ONE writer by default. Parallel writers require disjoint files and no undecided shared interface; each must be a workflow child with worktree: true.
-One child: call subagent({agent, task, async: false}) with no options.
-Several children: first write a workflow script with the write tool to a file under .pi/subagents/ in the project, such as .pi/subagents/implement.js (only that folder is not counted as an uncommitted change), then call subagent({workflow: "./.pi/subagents/implement.js", async: false, options: {globalConcurrencyLimit: 4, preflight}}). The script names the children, for example:
-const results = await runs.all([
-  { key: "api", label: "Implement the API", agent: "worker", task: "...", worktree: true },
-  { key: "tests", label: "Review the tests", agent: "reviewer", task: "..." }
-]);
-return results.map((result) => result.output);
-runs.all, the children and worktree belong in that script, never in options. preflight is {version: 1, coverage: "complete", lanes: [{key, mode, claims}]}: one lane per child with the same key, mode "mutation" for writers and "scout" or "review" for readers, and for writers claims naming the files they will change. Use one workflow call per phase. If a call is rejected, read the error, correct the call and try again before working without subagents.
-After writers finish, apply each child's patch one at a time using git apply <patch path>, then run the project's checks in the main folder. Fresh worktrees have no installed dependencies. If the working tree has uncommitted changes, use one writer in the project folder or tell the user; never commit or stash the user's work on your own.
-Risky commands (rm -r, sudo, git push, writing outside the project) belong to the main agent, not children. If a child cannot continue, report its blocker and partial results; handle any needed user question in the main session.`;
+Do small tasks directly. For a large task, scout first if you need to, then say in one or two sentences what you will hand over.
+Changes are made by one writer at a time, in the project folder: subagent({agent: "worker", task, async: true, options: {context: "fork", timeoutMs: 3600000}}). The fork already holds the user's request and corrections word for word, so task only names the part to do and how to tell it is done; never put your summary in place of their words. If the fork is refused or unavailable, make the changes yourself instead of starting a writer without it.
+Scouts and reviewers only read: subagent({agent: "scout", task, async: true, options: {timeoutMs: 900000}}), one call for each, quoting in task what they need of the user's words. Start a reviewer only once the writer has ended and you have looked at what it changed; if a writer worked in a folder of its own, only after its patch is verified and applied. Leave out any patch reported as BLOCKED.
+A call returns at once and its result arrives later as a message, so say what you started and end your turn; do not wait, poll or repeat it. The user can talk to you meanwhile. While a writer works, your own edits and commands that change anything are refused: read, start scouts, or answer.
+Use these single calls only. Do not write scripts for subagent or split the changes over several writers. The user's uncommitted changes stay in place: never commit, stash or discard them on your own. If a call is rejected, read the error, correct the call and try again before working without subagents.
+Risky commands (rm -r, sudo, git push, writing outside the project) belong to the main agent, not children. If a child asks something, answer it with subagent_supervisor from what the user said, or ask the user first; your answer cannot give it a permission. If a child cannot continue, report its blocker and partial results.
+A child that reports done has only said so. Run the project's checks in the main folder yourself, and in your final answer name the command you ran and its exit code, or say plainly that the work is unverified and why. A command that moved to background has not ended and is never a pass.`;
 
 export function workModePrompt(systemPrompt: string, mode: WorkModeId): string {
 	return mode === "orchestrator" ? `${systemPrompt}\n\n${ORCHESTRATOR_PROMPT}` : systemPrompt;

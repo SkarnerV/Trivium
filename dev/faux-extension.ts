@@ -419,7 +419,15 @@ function orchestratorStory(scenario: string): Step[] {
 	];
 }
 
-/** Real artifact files exercise the same manifest validation and patch IPC as the package. No git writes. */
+/**
+ * Real artifact files, where the package keeps them, and the receipt a real workflow call ends with, so the same
+ * manifest validation and patch IPC run as for the package. No git writes.
+ *
+ * As pi-subagents 0.82.1 reports a workflow (captured from a real run, scripts/real): each writer is a background run
+ * of its own, whose manifest is in its run folder. The receipt has no `parallelHandoff` and names no manifest. It
+ * gives each child's run id, its files in the artifacts folder (`results[].artifactPaths`), and, in the call's
+ * mission, its run folder.
+ */
 async function orchestratorFanout(id: string, scenario: string, signal: AbortSignal | undefined, update: ((value: any) => void) | undefined, parentFile?: string, cwd = process.cwd()) {
 	const eight = scenario.includes("eight");
 	const queued = scenario.includes("queued");
@@ -428,39 +436,54 @@ async function orchestratorFanout(id: string, scenario: string, signal: AbortSig
 	const lanes = children.map((child, index) => ({ key: child.label!, mode: !eight && index < 2 ? "mutation" : "review", claims: !eight && index < 2 ? [index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx"] : [] }));
 	// Where pi-subagents keeps temporary runs, so the host accepts it as the extension's own (extension-paths.ts).
 	const dir = await mkdtemp(join(tmpdir(), "pi-subagents-trivium-faux-"));
-	const manifestPath = join(dir, "handoff.json");
-	const patches = [];
+	// Each child is a run of its own, whose session sits in that run's first folder.
+	const childRuns = children.map((_, index) => `faux-run-${index}-${Date.now().toString(36)}`);
+	const runDirs = childRuns.map((run) => join(dir, "async-subagent-runs", run));
+	const artifacts = join(dir, "artifacts");
+	const manifests: { path: string; value: object }[] = [];
 	for (const [index, child] of children.entries()) {
 		if (eight || index > 1) continue;
 		const file = index === 0 ? "src/api/refresh.ts" : "src/web/banner.tsx";
-		const path = join(dir, `${child.label}.patch`);
+		const runDir = runDirs[index]!;
+		const branch = `pi-subagents/${child.label}-faux-s0-t0`;
+		const worktree = join(dir, `kept-${child.label}`);
+		await mkdir(join(runDir, "worktree-diffs", "step-0"), { recursive: true });
+		await writeFile(join(runDir, "status.json"), JSON.stringify({ runId: childRuns[index], mode: "single", state: "running", pid: process.pid, startedAt: Date.now(), lastUpdate: Date.now(), steps: [{ agent: child.agent, status: "running", worktreePath: worktree, branch }] }));
+		const path = join(runDir, "worktree-diffs", "step-0", `task-0-${child.agent}.patch`);
 		const text = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1,2 @@\n-export const ready = false;\n+export const ready = true;\n+// Added by the scripted writer.\ndiff --git a/test/${child.label}.test.ts b/test/${child.label}.test.ts\nnew file mode 100644\n--- /dev/null\n+++ b/test/${child.label}.test.ts\n@@ -0,0 +1 @@\n+// Regression coverage.\n`;
 		await writeFile(path, index === 1 ? "" : text);
-		patches.push({ index, taskIndex: index, agent: child.agent, workflowKey: child.label, status: "completed", summary: child.output, patch: { path, branch: `pi-sub/faux-${child.label}`, changed: true, diffStat: "", filesChanged: 2, insertions: 3, deletions: 1, ...(index === 1 ? { error: "Scripted patch capture failed; worktree preserved." } : {}) } });
+		const patch = { path, branch, changed: true, diffStat: "", filesChanged: 2, insertions: 3, deletions: 1, ...(index === 1 ? { error: "Scripted patch capture failed; worktree preserved." } : {}) };
+		const kept = index === 1 ? { worktreeRemoved: false, branchRemoved: false, preserved: true, reason: "changes were not captured" } : { worktreeRemoved: true, branchRemoved: true, preserved: false };
+		const group = { stepIndex: 0, baseCommit: "faux", repoRoot: process.cwd() };
+		const manifest = { version: 1, runId: childRuns[index], mode: "single", source: "async", cwd: process.cwd(), createdAt: Date.now(), updatedAt: Date.now() };
+		// Set up first with its worktree alone, then written again with its patch when the child ends.
+		const pending = { ...group, children: [], laneBindings: [{ index: 0, taskIndex: 0, workflowKey: child.label, runId: childRuns[index] }], cleanup: { state: "partial", pruned: false, tasks: [{ index: 0, path: worktree, branch, worktreeRemoved: false, branchRemoved: false, preserved: true, reason: "cleanup pending durable handoff capture" }] } };
+		const manifestPath = join(runDir, "handoff.json");
+		await writeFile(manifestPath, JSON.stringify({ ...manifest, groups: [pending] }));
+		manifests.push({ path: manifestPath, value: { ...manifest, groups: [{ ...group, children: [{ index: 0, taskIndex: 0, agent: child.agent, workflowKey: child.label, runId: childRuns[index], status: "completed", summary: child.output, patch }], cleanup: { state: index === 1 ? "partial" : "complete", pruned: true, tasks: [{ index: 0, path: worktree, branch, ...kept }] } }] } });
 	}
-	const manifest = { version: 1, runId: id, mode: "parallel", source: "foreground", cwd: process.cwd(), createdAt: Date.now(), updatedAt: Date.now(), groups: [{ stepIndex: 0, baseCommit: "faux", repoRoot: process.cwd(), children: patches, cleanup: { state: "partial", pruned: false, tasks: eight ? [] : [{ index: 1, path: join(dir, "kept-web"), branch: "pi-sub/faux-web", worktreeRemoved: false, branchRemoved: false, preserved: true, reason: "changes were not captured" }] } }] };
-	await writeFile(manifestPath, JSON.stringify({ ...manifest, groups: manifest.groups.map((group) => ({ ...group, children: [], laneBindings: patches.map((child) => ({ index: child.index, taskIndex: child.taskIndex, workflowKey: child.workflowKey })), cleanup: { ...group.cleanup, tasks: patches.map((child) => ({ index: child.index, branch: child.patch.branch, path: join(dir, child.workflowKey!), worktreeRemoved: false })) } })) }));
-	// As pi-subagents runs them: each child is a run of its own, whose session sits in that run's first folder.
-	const childRuns = children.map((_, index) => `faux-run-${index}-${Date.now().toString(36)}`);
 	const sessions = parentFile ? children.map((child, index) => new FauxChildSession(parentFile, childRuns[index]!, 0, child, cwd)) : [];
 	const started = Date.now();
 	for (;;) {
 		if (signal?.aborted) throw new Error("Stopped");
 		const elapsed = Date.now() - started;
 		const { finished, details } = fauxDetails(children, Math.max(0, elapsed - 1800), "workflow", undefined, elapsed < 1800 ? [] : sessions);
-		const results = details.results.map((result, index) => ({ ...result, runId: childRuns[index], ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
-		const snapshot = { ...details, results, preflight: { version: 1, coverage: "complete", lanes }, workflowGraph: { phases: [{ title: eight ? "Reviewing" : "Implementing", nodeIds: [] }] },
+		const results = details.results.map((result, index) => ({ ...result, index: 0, runId: childRuns[index], artifactPaths: { inputPath: join(artifacts, `${childRuns[index]}_${children[index]!.agent}_input.md`), outputPath: join(artifacts, `${childRuns[index]}_${children[index]!.agent}_output.md`) }, ...(finished && (eight ? index === 6 : index === 2) ? { exitCode: 1, error: "Scripted review failed: missing expired-token coverage." } : {}), ...(finished && eight && index === 7 ? { timedOut: true, exitCode: 1, error: "Scripted timeout" } : {}) }));
+		const snapshot = { ...details, runId: id, results, preflight: { version: 1, coverage: "complete", lanes }, workflowGraph: { phases: [{ title: eight ? "Reviewing" : "Implementing", nodeIds: [] }] },
 			workflowChildren: { version: 1, workflowRunId: id, parentToolCallId: id, inventoryComplete: true, workflowState: finished ? "completed" : queued && elapsed < 1800 ? "queued" : "running", children: children.map((child, index) => {
 				const progress = details.progress[index]!;
 				return { childId: child.label, runId: childRuns[index], agent: child.agent, model: "scripted", state: elapsed < 1800 ? "pending" : finished ? (results[index]!.exitCode ? "failed" : "completed") : progress.status,
 					activity: { currentTool: progress.currentTool, toolCount: progress.toolCount, tokens: progress.tokens, durationMs: progress.durationMs } };
-			}) }, parallelHandoff: { version: 1, path: manifestPath } };
+			}) }, mission: { workflowChildren: children.map((child, index) => ({ workflowRunId: id, key: child.label, runId: childRuns[index], agent: child.agent, status: finished ? "completed" : "running", artifactPaths: [runDirs[index]!] })) } };
 		// A usage limit cuts the fan-out short once one child has finished: the others stop where they are.
 		if (limited && !finished && details.progress.some((progress) => progress.status === "completed")) {
 			return { content: [{ type: "text" as const, text: "usage_limit_reached: You've hit your ChatGPT usage limit." }], details: snapshot, isError: true };
 		}
 		const content = [{ type: "text" as const, text: finished ? "Scripted fan-out finished." : "(running...)" }];
-		if (finished) { await writeFile(manifestPath, JSON.stringify(manifest)); return { content, details: snapshot }; }
+		if (finished) {
+			for (const { path, value } of manifests) await writeFile(path, JSON.stringify(value));
+			return { content, details: snapshot };
+		}
 		update?.({ content, details: snapshot });
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}

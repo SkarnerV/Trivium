@@ -71,13 +71,14 @@ import { activeBuiltIns, dropClashingBuiltIns } from "./builtin-packages.ts";
 import { onlyReads, permissionGate } from "./permission-gate.ts";
 import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
-import { AgentCountWatch, agentsOf, BackgroundRuns, markBackground } from "./background-runs.ts";
+import { AgentCountWatch, agentsOf, BackgroundRuns, hasLiveAgents, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
 import { HandoffCache } from "./handoffs.ts";
 import { agentSteps } from "../shared/agent-counts.ts";
-import { requestBackgroundStop, sessionUsage, stopTarget, subagentRpc } from "./subagents.ts";
+import { requestBackgroundStop, sessionUsage, stopTarget, subagentRpc, SUPERVISOR_TOOL } from "./subagents.ts";
 import { handoffRoots } from "./extension-paths.ts";
 import { WorkModeIndex, workModeExtension } from "./work-modes.ts";
+import { writerLock, writerOf } from "./writer-lock.ts";
 import { isWorkMode, type WorkModeId } from "../shared/work-modes.ts";
 import { packageName } from "../shared/packages.ts";
 import { ChangeTracker } from "./changes.ts";
@@ -996,6 +997,11 @@ export class SessionHost {
 		if (!live.path.startsWith("memory:") && !existsSync(live.path)) this.unsaved.set(live.path, { app: live.app, cwd: live.cwd, workMode: this.workModes.unsaved(live.session.sessionId, live.app) });
 	}
 
+	/** A child at work, some of which live in this process and would be killed with the session. */
+	private hasLiveAgents(live: Live): boolean {
+		return hasLiveAgents(live.tracker.all(), live.background);
+	}
+
 	private unloadIdle(): void {
 		const minutes = this.settings.get().idleMinutes;
 		if (!minutes) return;
@@ -1004,7 +1010,7 @@ export class SessionHost {
 		for (const live of this.live.values()) {
 			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
 			if (this.services.hasBackground(live.path)) continue;
-			if (this.attentionOf(live).agents.running) continue;
+			if (this.hasLiveAgents(live)) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -1015,7 +1021,7 @@ export class SessionHost {
 	reloadApp(app: AppId): string[] {
 		const paths: string[] = [];
 		for (const live of [...this.live.values()]) {
-			if (live.app !== app || live.running || live.path.startsWith("memory:") || this.attentionOf(live).agents.running) continue;
+			if (live.app !== app || live.running || live.path.startsWith("memory:") || this.hasLiveAgents(live)) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -1346,6 +1352,8 @@ export class SessionHost {
 			closeWindow: async () => {
 				if (await changes.afterSubagents()) await emitChanges().catch(() => {});
 			},
+			openWindow: () => changes.beforeSubagents(),
+			writerOf: (input) => writerOf("subagent", input, cwd),
 			onChange: () => {
 				const live = this.live.get(sessionPath);
 				if (!live) return;
@@ -1358,6 +1366,19 @@ export class SessionHost {
 			events,
 			sessionPath: () => sessionPath,
 			factories: [
+				...(app === "code" && !isChat(cwd)
+					? [
+							{
+								name: "writer-lock",
+								factory: writerLock({
+									orchestrator: () => this.workModes.get(sessionManager.getSessionId()) === "orchestrator",
+									permission: () => this.permissionMode(),
+									background,
+									changing,
+								}),
+							},
+						]
+					: []),
 				(pi) => {
 					// Record each file before the agent first changes it, for the Changes panel.
 					pi.on("tool_call", async (event) => {
@@ -1469,8 +1490,14 @@ export class SessionHost {
 	private backgroundEnded(path: string, end: BackgroundEnd): void {
 		const live = this.live.get(path);
 		if (!live) return;
-		// It may have changed files, committed or switched branches.
+		// It may have changed files, committed or switched branches. The user may have edited some of them meanwhile.
 		this.scheduleGit(live);
+		if (!onlyReads(end.command)) {
+			void live.changes
+				.afterBackground()
+				.then((changed) => (changed ? this.emitChanges(live) : undefined))
+				.catch(() => {});
+		}
 		const { message, options } = endedMessage(end);
 		void live.session.sendCustomMessage(message, options).catch((error: unknown) => {
 			this.notice(error instanceof Error ? error.message : String(error), "error");
@@ -1482,7 +1509,7 @@ export class SessionHost {
 		// Before the tracker, so the finished reply it shows carries its first token's time.
 		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
-		if ((event.type === "tool_execution_start" || event.type === "tool_execution_update" || event.type === "tool_execution_end") && event.toolName === "subagent") {
+		if ((event.type === "tool_execution_start" || event.type === "tool_execution_update" || event.type === "tool_execution_end") && (event.toolName === "subagent" || event.toolName === SUPERVISOR_TOOL)) {
 			this.noteAgents(live);
 		}
 		if (event.type === "tool_execution_update" && event.toolName === "subagent") {

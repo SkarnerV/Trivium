@@ -20,7 +20,7 @@ extensions and model, so the agent fixing your code is not the one citing your s
 
 [Features](#features) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Extensions](#extensions) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
-<img src="docs/screenshots/hero.png" alt="Trivium's Code mode: a finished bug fix with its steps, the agent's answer, and a reviewable diff" width="100%">
+<img src="docs/screenshots/hero.png" alt="Trivium's Code mode: a finished bug fix with its steps, the agent's answer, and the Source Control panel with a reviewable diff" width="100%">
 
 </div>
 
@@ -41,7 +41,7 @@ skill and provider works here.
 
 | | Mode | Built for | Default setup |
 |---|---|---|---|
-| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a panel with Changes, Git, Preview and Services |
+| <img src="https://img.shields.io/badge/-%20-5457E8?style=flat-square" alt=""> | **Code** | Fixing and building software | `read` `bash` `edit` `write`, plus a tabbed panel with Source Control, Files, Preview and Services |
 | <img src="https://img.shields.io/badge/-%20-0B7A6E?style=flat-square" alt=""> | **Research** | Reading sources and writing notes | No shell; `read` `write` `grep` `find` `ls` and any `web_*` tools; told to cite every claim |
 | <img src="https://img.shields.io/badge/-%20-A65A08?style=flat-square" alt=""> | **Write** | Documents in your project | Edit tools; told to keep your voice and make small, reviewable edits |
 
@@ -50,20 +50,22 @@ you which mode is still busy.
 
 ### See the work, not just the answer
 
-- **Steps, folded or detailed.** "Worked for 6.4s · 8 steps · 1 failed" stays out of the way; open it to see each read, search, edit and command with its result and duration.
+- **Steps, folded or detailed.** Progress notes stay in the conversation while the agent works; after the final answer, notes and intermediate steps fold under "Worked for 6.4s · 8 steps · 1 failed". Open it to see each read, search, edit and command with its result and duration.
 - **What it's doing now.** One quiet line under "Working" names the current step, with a command's latest line of output.
 - **Subagents as agents at work.** A `pi-subagents` call shows who it delegated to and what each child is doing, a row per child in parallel, with its task, result, model and tokens when you open it. Background results arrive as a run of their own.
-- **Orchestrator work mode in Code.** Choose it in a project session's message box, or set the default for new sessions in Settings → Code. The agent scouts large tasks, uses one writer by default, and gives independent parallel writers separate managed worktrees before applying their patches and checking the result in the project. Default keeps today's guidance. The thread shows the plan and every child; open any child to read its session beside the thread or in its own window, and stop one that runs in a workflow or in the background. Child edits in the project appear in Changes, and children run behind Code's permission gate without asking approval questions of their own. Forks inherit the work mode.
-- **Queue or steer mid-run.** Type while the agent works: `↵` queues a follow-up for after the run, `⌥↵` steers the current run, `esc` stops.
+- **Orchestrator work mode in Code.** Choose it in a project session's message box, or set the default for new sessions in Settings → Code. The agent scouts large tasks, uses one writer by default, and gives independent parallel writers separate managed worktrees before applying their patches and checking the result in the project. Default keeps today's guidance. The thread shows the plan and every child; open any child to read its session beside the thread or in its own window, and stop one that runs in a workflow or in the background. Child edits in the project appear in Source Control, and children run behind Code's permission gate without asking approval questions of their own. Forks inherit the work mode.
+- **Diagrams in replies.** Fenced Mermaid and PlantUML blocks in agent replies draw as interactive diagrams right in the thread: zoom and pan, expand full-screen, open in Preview or download as SVG or PNG.
+- **Queue or steer mid-run.** Type while the agent works: `↵` adds a follow-up to the visible message queue above the message box (where each queued message can be steered, edited or deleted), `⌥↵` steers the current run, `esc` stops.
 - **Context at a glance.** A small ring shows how full the context window is; hover it for the breakdown and when compaction kicks in.
 - **Reply timing.** Point at a reply to see when it was answered, how long it took, its time to first token and tokens a second.
 - **Limits in plain words.** When a provider's usage limit or balance runs out, Trivium says what happened, when it resets and where to top up, with the provider's own message a click away.
 
 ### Conversations
 
+- **Split view.** Open two sessions side by side from the sidebar menu, by `⌘`-clicking a session, dragging it onto either half of the window, or pressing `⌘⇧\`. Resize the split, and each mode remembers it across restarts; narrow windows switch to tabs for both.
 - **Edit, fork or copy any message.** Edit opens a message in place and starts over from it when you send; pi keeps the old replies on their own branch. Fork copies the conversation up to a message into a new session. Copy takes a message or a reply's Markdown as written.
 - **Chats without a project.** Pick **No project** in New session for a conversation that needs no folder. Chats sit under "Chats" in the sidebar.
-- **Pin and organize.** Right-click a project or session to pin it to the top, start a new session, export the messages as Markdown, copy the session ID, archive it or delete it. Archived sessions leave the sidebar and search for **Archived**, where they are listed by workspace to restore or delete.
+- **Pin and organize.** Right-click a project or session to pin it to the top, start a new session, export the messages as Markdown, copy the session ID, archive it or delete it. Projects with more than eight sessions fold older ones behind **Show more**. Archived sessions leave the sidebar and search for **Archived**, where they are listed by workspace to restore or delete.
 - **One button for model and effort.** The composer's model button opens a menu with the thinking effort as a slider and a searchable model list.
 
 <p align="center">
@@ -92,16 +94,12 @@ needs you, you get a notification.
 
 ### Review every change
 
-Code mode's side panel shows one view at a time, picked from its **Show in panel** menu.
+Code mode's side panel holds its views as tabs—like browser tabs—opened from the header's **summary cards** button, which drops one list over the thread summarizing Services, Source Control and Files.
 
-- **Changes.** Code mode records each file before the agent first changes it, by an edit or by a command such as a formatter, `sed` or `rm`, so this view lists the net diff of the whole session, per file, under **This session**. For commands it snapshots the project before each one and compares after, in a git repository or not, without writing to your `.git`. That leaves out files git ignores, files over 10 MB, files outside the project, and what a command still running in the background writes later. Each file has a revert button that puts that one back, or deletes it, along with any folders made for it, if the agent created it. A file leaves this list once it is committed, so reverting never undoes committed work. In a git repository the view also shows the branch, commits to push or pull, and under **Other uncommitted changes** whatever else git reports: your own edits and files changed before the session. Staged and conflicted files are tagged. Git's side refreshes after a run, after an edit or command, and when the window regains focus, without polling. Open any file in VS Code, at the first changed line for the session's files.
-- **History.** The **History** card beside the conversation draws every branch, remote branch and tag as a commit graph. Click a commit to see who wrote it, its message and the files it changed, and click a file to read its diff in that commit. A merge shows its changes against its first parent. Outside a git repository the tab says so instead.
-- **Preview.** Open project files as tabs: HTML pages in a sandboxed frame with their own styles and images (scripts off until you ask, network blocked), Markdown with Mermaid and PlantUML diagrams (PlantUML needs a local install), CSV tables, text with line numbers, and images. Files reload when they change on disk. Open one from a step's eye icon, a file path in a reply, or the Changes view. A diagram in a reply opens here too, or large over the app: the wheel zooms, dragging moves it, and it downloads as SVG or PNG.
-- **Services.** Dev servers, watchers, databases and any other process a command leaves running, such as `npm run dev &`. Each shows its command, processes, the port it listens on and its latest output, with **Stop**, which ends it and everything it started. Open its address in Preview or the browser. A green dot in the header and the sidebar says a session has some running. Services keep running when a session is unloaded, and stop when the session is deleted or Trivium quits, which asks first. If Trivium crashes, they show again at the next start.
-
-The header shows the session's branch, how many files changed, and a dot when there are commits to
-push or pull. Click it for a summary in words: the upstream and when it was last fetched, commits
-not pushed and on the remote, what is staged or changed, and a button to ask the agent to push.
+- **Source Control.** One tab for git status, commits and history: the branch with push and pull, a commit message box the session's model can draft (with an option to link the session in a `Trivium-Session` trailer), staged and unstaged files with stage, unstage and discard, merge conflicts, and every branch's commit graph. Click a commit to see its author, message, changed files and diffs—a merge diffs against its first parent—and jump back to any linked session. Trivium also records each file before the agent first changes it, by `edit`/`write` or by a shell command (via private git snapshots without touching your `.git`, skipping gitignored files, files over 10 MB, files outside the project and background writes), so you can revert individual session edits; outside a git repository, Source Control lists this session's edits with per-file revert and offers to initialize one. Picking a file opens its diff—or the full file with changed lines marked—below the list in the same tab, and any file opens in VS Code.
+- **Files.** Browse the whole project as a tree with git status indicators, a name filter and git-ignored folders on request. Mention a file in the message box with `@`, open it in VS Code, or click it to read the full file—or its diff when modified—below the tree in the same tab.
+- **Preview.** Open project files as tabs: HTML pages in a sandboxed frame with their own styles and images (scripts off until you ask, network blocked), Markdown with Mermaid and PlantUML diagrams (PlantUML needs a local install), CSV tables, text with line numbers, and images. Files reload when they change on disk and can be revealed in Finder or File Explorer. Open one from a step's eye icon or a file path in a reply. Diagrams in replies open here too, or large over the app: the wheel zooms, dragging moves them, and they download as SVG or PNG.
+- **Services.** Dev servers, watchers, databases and any other process a command leaves running, such as `npm run dev &`. Commands still running after 10 minutes also move to the background here (controlled by the `long-commands` extension in **Settings → Code → Extensions**) and report back to the session when they end. Each shows its command, processes, the port it listens on and its latest output, with **Stop**, which ends it and everything it started. Open its address in Preview or the browser. A green dot in the header and the sidebar says a session has some running. Services keep running when a session is unloaded, and stop when the session is deleted or Trivium quits, which asks first. If Trivium crashes, they show again at the next start.
 
 ### Notes and tracked changes
 
@@ -140,15 +138,17 @@ computer only unless you allow your network, which is plain HTTP and for network
 ### Make each mode yours
 
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Research mode settings: extensions with on/off switches, the tool list and the mode's system prompt addition" width="85%">
+  <img src="docs/screenshots/settings.png" alt="Research mode settings: extensions with on/off switches, built-in packages and the Skills section" width="85%">
 </p>
 
 - **Per-mode extensions.** Drop files into `~/.trivium/apps/<app>/extensions/`, add one from anywhere, or switch off anything pi would load for that mode. The Add extension dialog recommends pi packages for each mode.
-- **Packages built in.** Each mode ships with pi packages you can remove: memory and subagents everywhere, plus `/plan` in Code, document parsing in Research, and PDF export in Write.
+- **Per-mode skills.** Each mode's Settings page lists loaded skills with where each comes from and its `/skill:` command. Switch any skill off for that mode, create or edit `SKILL.md`, upload a folder, `.md` file or `.zip`/`.skill` archive, or customize a built-in skill into `~/.trivium/apps/<app>/skills/`.
+- **Packages built in.** Each mode ships with pi packages you can remove: memory everywhere, subagents in Code and Research, plus `/plan` (and `long-commands`) in Code, document parsing in Research, and PDF export in Write.
 - **Permission modes in Code.** Trivium's own gate, with no rules beyond what each mode says: **Always ask** (every edit and command, except ones that only read), **Accept edits** (edits in the project run; commands ask), **Approve for me** (the default: asks only before `rm -r`, `sudo`, `git push` and changing files outside the project) or **Bypass permissions**. A change applies to running sessions from their next step, and `.env` files stay blocked in every mode.
 - **Per-mode model.** Research on a fast model, Code on your strongest one.
 - **Logins built in.** Connect providers with pi's own login flows: API keys, browser sign-in, device codes. Each provider shows its logo.
 - **Custom endpoints.** Add Ollama, LM Studio, vLLM, a proxy or any OpenAI, Anthropic or Gemini-compatible server. Trivium fetches its models with their context window, output limit, image and thinking support where the server says, and you can set each one yourself. Built-in providers get the same model list, for a proxy base URL, per-model overrides or models added by ID. It all goes to pi's `models.json`, so the pi CLI offers them too.
+- **Appearance and updates.** Set conversation width (Standard, Wide, Extra wide or Full width) and text size in **Settings → General**, and update packaged builds from inside the app with SHA-256 verification in **Settings → About**.
 - **Sessions that manage themselves.** Idle sessions unload after a while and reload from disk when you open them.
 - **Your language.** The interface comes in English, 简体中文 and 日本語. It follows your computer's language unless you pick one in **Settings → General**.
 
@@ -202,6 +202,7 @@ windows before restarting so the old taskbar group can exit.
 | `⌘N` | New session |
 | `⌘K` | Search sessions in every mode |
 | `⌘\` | Fold or unfold the sidebar |
+| `⌘⇧\` | Open or close split view |
 | `⌘,` | Settings |
 | `↵` / `⌥↵` | Send (queues while a run is going) / steer the run |
 | `/` | Commands, with suggestions; `tab` completes |
@@ -214,13 +215,13 @@ On Windows, `⌘` is `Ctrl` and `⌥` is `Alt`.
 ```mermaid
 flowchart LR
   subgraph Window["Renderer (React)"]
-    UI["Sidebar · Transcript · Composer<br/>Changes · Git · Preview · Services<br/>Memory · Settings"]
+    UI["Sidebar · Transcript · Composer<br/>Source Control · Files · Preview · Services<br/>Memory · Settings"]
   end
   subgraph Main["Main process (Node)"]
     Host["Session host<br/>one AgentSession per open session"]
     Tracker["Run tracker<br/>events → steps"]
     Changes["Change tracker<br/>baselines → diffs"]
-    Git["Git reader<br/>status → branch, files"]
+    Git["Git reader<br/>status · commits · history"]
     Dialogs["Dialog bridge"]
   end
   subgraph Pi["pi SDK"]
@@ -238,17 +239,19 @@ flowchart LR
 ```
 
 - **pi runs in-process.** The main process creates `AgentSession`s with the pi SDK, with no CLI subprocess and no RPC framing.
-- **Each mode is an agent profile:** a tool allowlist, an addition to the system prompt, and an extension folder, applied when a session loads.
+- **Each mode is an agent profile:** a tool allowlist, an addition to the system prompt, and extension and skill folders, applied when a session loads.
 - **Your data stays where pi keeps it.** Sessions live in `~/.pi/agent/sessions` and logins in `~/.pi/agent/auth.json`. Trivium adds only its own preferences in `~/.trivium`.
 
 | Path | What it holds |
 |---|---|
 | `~/.pi/agent/` | pi's settings, logins, models and sessions, shared with the pi CLI |
 | `~/.trivium/apps/<app>/extensions/` | Extensions loaded only for that mode |
-| `~/.trivium/settings.json` | Language, text size, idle unloading, notifications, per-mode models and extension switches |
+| `~/.trivium/apps/<app>/skills/` | Skills loaded only for that mode, overriding pi's skill of the same name |
+| `~/.trivium/settings.json` | Language, text size, conversation width, idle unloading, notifications, per-mode models and extension/skill switches |
 | `~/.trivium/session-apps.json` | Which mode each session belongs to; sessions from elsewhere show under Code |
-| `~/.trivium/changes/` | File contents from before the agent's changes, until you accept, revert or commit them, and each session's snapshot of its project, kept until the session is deleted |
+| `~/.trivium/changes/` | File contents from before the agent's changes, until you revert or commit them, and each session's snapshot of its project, kept until the session is deleted |
 | `~/.trivium/chats/` | The working folder for sessions started with No project |
+| `~/.trivium/proxy.json` | Local API proxy configuration, model aliases and SHA-256 key digests |
 | `~/.trivium/usage-cache.json` | Each session's usage totals, counted again only when its file changes |
 | `~/.pi/agent/memory/`, `.pi/memory/MEMORY.md` | Global and per-project memory, kept by `@pify/memory` |
 
@@ -323,19 +326,21 @@ with `t("English text")`, and `npm test` checks that every text has a translatio
 
 ## Roadmap
 
-- [x] Code, Research and Write modes with live steps, steering and the context ring
+- [x] Code, Research and Write modes with live steps, steering, message queue and the context ring
 - [x] Inline extension dialogs and system notifications
-- [x] Changes panel with keep and revert
-- [x] Settings: logins, custom endpoints, default and per-mode models, per-mode extensions
+- [x] Settings: logins, custom endpoints, default and per-mode models, per-mode extensions and skills
 - [x] Research: note preview panel with sources
 - [x] Write: document panel with tracked changes to accept or reject
 - [x] Memory in every mode, with a Memory page to review it
 - [x] Usage page with tokens, cost and reply speed
 - [x] Connectors page for MCP servers
-- [x] Code: Git view, branch summary and file Preview
-- [x] Edit, fork and copy messages; chats without a project; pinned projects and sessions
+- [x] Code: Source Control tab (stage, commit with AI drafting, push/pull, conflicts, commit graph), Files tree, Preview and Services
+- [x] Track changes made through `bash` with git snapshots, and move long-running commands to Services
+- [x] Orchestrator work mode with subagent session drawer, separate windows and managed worktrees
+- [x] Local OpenAI and Anthropic API proxy
+- [x] Split view; edit, fork and copy messages; chats without a project; archived, pinned projects and sessions
+- [x] Interactive Mermaid and PlantUML diagrams in replies and Markdown preview
 - [x] English, Simplified Chinese and Japanese interface
-- [x] Track changes made through `bash` with git snapshots
 - [ ] Install extensions from npm by name, and first-party plugins under `@coresmos`
 - [ ] Dark theme
 - [ ] Signed builds for macOS, Windows and Linux

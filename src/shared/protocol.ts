@@ -891,7 +891,7 @@ export type MemoryTarget = { kind: "global" } | { kind: "project"; cwd: string }
 export interface MemoryEntry {
 	/** 0-based line in the file. */
 	line: number;
-	/** The line as it was read, so a change made on a stale page is refused. */
+	/** The line as it was read, without its line ending, so a change made on a stale page is refused. */
 	raw: string;
 	category?: MemoryCategory;
 	text: string;

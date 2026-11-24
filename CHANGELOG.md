@@ -2,6 +2,12 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A memory file saved with Windows line endings (CRLF) showed no entries on the Memory page. Its entries now show, and adding, editing, moving, deleting and undoing keep the file's line endings.
+
 ## [0.14.0] - 2026-11-23
 
 ### Added

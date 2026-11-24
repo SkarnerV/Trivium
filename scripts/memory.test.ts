@@ -145,3 +145,222 @@ test("the load switch answers pify's consent question and keeps its other answer
 		cleanup();
 	}
 });
+
+/** The same text as a Windows editor saves it. */
+const crlf = (text: string) => text.replaceAll("\n", "\r\n");
+const STAMP_LINE = "<!-- 2026-10-26 12:23:09 [01a17672] -->";
+
+test("a file saved with CRLF has the same entries as with LF", () => {
+	const content = `# Long-term memory\n\n${STAMP_LINE}\n- [failure] npm ci fails\n* 14:05 [tool-quirk] seed with --reset\n- [unknown] kept as text\n-   \nprose\n- last`;
+	const lf = parseEntries(content, Infinity).entries;
+	assert.equal(lf.length, 4);
+	// Lines too, without the "\r", so a page that read one finds its entries in the other.
+	assert.deepEqual(parseEntries(crlf(content), Infinity).entries, lf);
+	assert.deepEqual(parseEntries(crlf(`${content}\n`), Infinity).entries, lf);
+	// Both endings in one file, as when pify appends to one that Notepad saved.
+	assert.deepEqual(parseEntries(`${crlf("# Memory\n\n- One\n")}- Two\n- Three\r\n`, Infinity).entries.map(({ line, raw, text }) => ({ line, raw, text })), [
+		{ line: 2, raw: "- One", text: "One" },
+		{ line: 3, raw: "- Two", text: "Two" },
+		{ line: 4, raw: "- Three", text: "Three" },
+	]);
+});
+
+test("the cut counts each \\r, as pify does, but not an entry's own line ending", () => {
+	const content = crlf("\n# M\n\n- One\n- Two\n- Three\n");
+	const trimmed = content.trim();
+	const loaded = (limit: number) => parseEntries(content, limit).entries.map((entry) => entry.loaded);
+	assert.equal(parseEntries(content, 100).chars, trimmed.length);
+	for (const [i, text] of ["- One", "- Two", "- Three"].entries()) {
+		const end = trimmed.indexOf(text) + text.length;
+		assert.equal(loaded(end)[i], true, `${text} at ${end}`);
+		assert.equal(loaded(end - 1)[i], false, `${text} at ${end - 1}`);
+	}
+	// Endings of both kinds are counted as they are.
+	const mixed = "# M\r\n\n- One\r\n- Two\n- Three";
+	const end = mixed.indexOf("- Three") + "- Three".length;
+	assert.deepEqual([end, end - 1].map((limit) => parseEntries(mixed, limit).entries[2]!.loaded), [true, false]);
+});
+
+test("the Memory page counts and opens CRLF files of every kind", async () => {
+	const { store, agentDir, project, projectFile, globalFile, cleanup } = setup();
+	try {
+		writeFileSync(globalFile, crlf("# Long-term memory\n\n- One\n- Two\n"));
+		writeFileSync(projectFile, crlf("# Project memory\n\n- One\n"));
+		writeFileSync(join(agentDir, "memory", "daily", "2026-10-20.md"), crlf("# Daily log\n\n- 10:00 [failure] Older\n- 11:00 Plain\n"));
+		const overview = await store.overview();
+		assert.deepEqual([overview.global.entries, overview.workspaces[0]?.entries, overview.days], [2, 1, 1]);
+		assert.deepEqual((await store.file({ kind: "global" })).entries.map((entry) => [entry.text, entry.loaded]), [["One", true], ["Two", true]]);
+		assert.deepEqual((await store.file({ kind: "project", cwd: project })).entries.map((entry) => entry.text), ["One"]);
+		const [day] = store.days(new Date(2026, 9, 26, 12));
+		assert.deepEqual(day!.file.entries.map(({ time, category, text, recalled }) => [time, category, text, recalled]), [
+			["10:00", "failure", "Older", true],
+			["11:00", undefined, "Plain", undefined],
+		]);
+	} finally {
+		cleanup();
+	}
+});
+
+test("adding to a CRLF file ends the entry with CRLF and takes line breaks out of the text", async () => {
+	const { store, globalFile, cleanup } = setup();
+	try {
+		const add = async (before: string, text = "New") => {
+			writeFileSync(globalFile, before);
+			assert.deepEqual(await store.add({ kind: "global" }, undefined, text), {});
+			return readFileSync(globalFile, "utf8");
+		};
+		assert.equal(await add("# M\r\n\r\n- One\r\n"), "# M\r\n\r\n- One\r\n- New\r\n");
+		assert.equal(await add("# M\r\n\r\n- One"), "# M\r\n\r\n- One\r\n- New\r\n");
+		// What pify appended keeps its ending.
+		assert.equal(await add("# M\r\n\r\n- One\n"), "# M\r\n\r\n- One\n- New\r\n");
+		// Half a line ending, left by pify's forget, is completed.
+		assert.equal(await add("# M\r\n\r\n- One\r"), "# M\r\n\r\n- One\r\n- New\r\n");
+		assert.equal(await add("# M\n\n- One\n"), "# M\n\n- One\n- New\n");
+		assert.equal(await add("\r\n\r\n"), "# Long-term memory\n\n- New\n");
+		assert.equal(await add("- One\r\n", "a\r\nb \r\n\r\n c\rd\r\n"), "- One\r\n- a b c d\r\n");
+	} finally {
+		cleanup();
+	}
+});
+
+test("editing a CRLF file changes only the entry's text", async () => {
+	const { store, agentDir, globalFile, cleanup } = setup();
+	try {
+		const target = { kind: "daily", date: "2026-10-20" } as const;
+		const file = join(agentDir, "memory", "daily", "2026-10-20.md");
+		// The last two lines are as pify appends them.
+		writeFileSync(file, "# Daily log 2026-10-20\r\n\r\n- 09:15 [insight] Old\r\n- 10:00 Two\n- 11:00 Three\n");
+		const [first, second] = (await store.file(target)).entries;
+		assert.deepEqual(await store.edit(target, first!, "correction", "New\r\ntext"), {});
+		assert.deepEqual(await store.edit(target, second!, undefined, "Second"), {});
+		assert.equal(readFileSync(file, "utf8"), "# Daily log 2026-10-20\r\n\r\n- 09:15 [correction] New text\r\n- 10:00 Second\n- 11:00 Three\n");
+		await assert.rejects(store.edit(target, first!, undefined, "Again"), /changed since the page loaded/);
+		// The last line, without an ending.
+		writeFileSync(globalFile, "- One\r\n- Two");
+		await store.edit({ kind: "global" }, (await store.file({ kind: "global" })).entries[1]!, undefined, "Last");
+		assert.equal(readFileSync(globalFile, "utf8"), "- One\r\n- Last");
+	} finally {
+		cleanup();
+	}
+});
+
+test("an entry is still found after an editor changes the file's line endings", async () => {
+	const { store, globalFile, cleanup } = setup();
+	try {
+		const target = { kind: "global" } as const;
+		const content = "# M\n\n- One\n- Two\n- Three\n";
+		for (const [before, after] of [[content, crlf(content)], [crlf(content), content]] as const) {
+			writeFileSync(globalFile, before);
+			const entries = (await store.file(target)).entries;
+			writeFileSync(globalFile, after);
+			await store.edit(target, entries[0]!, undefined, "Changed");
+			await store.delete(target, entries[1]!);
+			await store.moveToTop(target, entries[2]!);
+			const expected = "# M\n\n- Three\n- Changed\n";
+			assert.equal(readFileSync(globalFile, "utf8"), after === content ? expected : crlf(expected));
+		}
+	} finally {
+		cleanup();
+	}
+});
+
+test("moving to the top of a CRLF file takes the stamp along and keeps line endings whole", async () => {
+	const { store, globalFile, cleanup } = setup();
+	try {
+		const move = async (before: string) => {
+			writeFileSync(globalFile, before);
+			await store.moveToTop({ kind: "global" }, (await store.file({ kind: "global" })).entries.at(-1)!);
+			return readFileSync(globalFile, "utf8");
+		};
+		assert.equal(await move(crlf("# M\n\n- One\n- Two\n- Three\n")), crlf("# M\n\n- Three\n- One\n- Two\n"));
+		assert.equal(await move(crlf(`# M\n\n<!-- a -->\n- One\n${STAMP_LINE}\n- Two\n`)), crlf(`# M\n\n${STAMP_LINE}\n- Two\n<!-- a -->\n- One\n`));
+		// The last line has no ending; the new last line has none either.
+		assert.equal(await move(crlf("# M\n\n- One\n- Two")), crlf("# M\n\n- Two\n- One"));
+		// Each line keeps its own ending.
+		assert.equal(await move("# M\r\n\r\n- One\r\n- Two\n"), "# M\r\n\r\n- Two\n- One\r\n");
+		assert.equal(await move(crlf("# M\n\n- One\n")), crlf("# M\n\n- One\n"));
+	} finally {
+		cleanup();
+	}
+});
+
+test("deleting from a CRLF file records lines without \\r, and Undo puts back the file as it was", async () => {
+	const { store, globalFile, agentDir, cleanup } = setup();
+	try {
+		const content = crlf(`# Memory\n\n${STAMP_LINE}\n- First\n- [failure] Second\n- Third`);
+		writeFileSync(globalFile, content);
+		const [first, , third] = (await store.file({ kind: "global" })).entries;
+		const id = await store.delete({ kind: "global" }, first!);
+		assert.equal(readFileSync(globalFile, "utf8"), crlf("# Memory\n\n- [failure] Second\n- Third"));
+		const record = JSON.parse(readFileSync(join(agentDir, "memory", "recovery", `${id}.json`), "utf8"));
+		assert.deepEqual(record.removals, [
+			{ file: globalFile, text: STAMP_LINE },
+			{ file: globalFile, text: "- First" },
+		]);
+		assert.deepEqual(store.deleted().map((deletion) => deletion.items), [[{ where: "Everywhere", category: undefined, text: "First" }]]);
+		store.restore(id);
+		assert.equal(readFileSync(globalFile, "utf8"), content);
+		// The last line, without an ending, leaves no lone "\r" behind.
+		const last = await store.delete({ kind: "global" }, third!);
+		assert.equal(readFileSync(globalFile, "utf8"), crlf(`# Memory\n\n${STAMP_LINE}\n- First\n- [failure] Second`));
+		store.restore(last);
+		assert.equal(readFileSync(globalFile, "utf8"), content);
+		// Undo follows a file saved with LF in between.
+		const again = await store.delete({ kind: "global" }, first!);
+		writeFileSync(globalFile, "# Memory\n\n- [failure] Second\n- Third\n");
+		store.restore(again);
+		assert.equal(readFileSync(globalFile, "utf8"), `# Memory\n\n${STAMP_LINE}\n- First\n- [failure] Second\n- Third\n`);
+	} finally {
+		cleanup();
+	}
+});
+
+test("what pify's forget takes out of a CRLF file, with its \\r, is listed and restored", async () => {
+	const { store, globalFile, projectFile, agentDir, cleanup } = setup();
+	try {
+		mkdirSync(join(agentDir, "memory", "recovery"), { recursive: true });
+		const id = "0b7f5a52-6f0e-4d38-9a43-3d1f6a2c9e10";
+		const forget = (removals: { file: string; text: string }[]) =>
+			writeFileSync(join(agentDir, "memory", "recovery", `${id}.json`), JSON.stringify({ id, timestamp: 1, removals }));
+		forget([
+			{ file: globalFile, text: "- [insight] Forgotten\r" },
+			{ file: projectFile, text: "- Also\r" },
+		]);
+		assert.deepEqual(store.deleted()[0]!.items, [
+			{ where: "Everywhere", category: "insight", text: "Forgotten" },
+			{ where: "acme", category: undefined, text: "Also" },
+		]);
+		writeFileSync(globalFile, "# M\r\n\r\n- One\r\n");
+		writeFileSync(projectFile, "# P\n\n- One\n");
+		store.restore(id);
+		assert.equal(readFileSync(globalFile, "utf8"), "# M\r\n\r\n- One\r\n- [insight] Forgotten\r\n");
+		assert.equal(readFileSync(projectFile, "utf8"), "# P\n\n- One\n- Also\n");
+		// Forgetting the last line leaves half of the ending before it; the entry there still shows and can be changed.
+		writeFileSync(globalFile, "# M\r\n\r\n- One\r\n- Two\r");
+		const { entries } = await store.file({ kind: "global" });
+		assert.deepEqual(entries.map((entry) => entry.raw), ["- One", "- Two"]);
+		await store.moveToTop({ kind: "global" }, entries[1]!);
+		assert.equal(readFileSync(globalFile, "utf8"), "# M\r\n\r\n- Two\r\n- One\r\n");
+		writeFileSync(globalFile, "# M\r\n\r\n- One\r");
+		forget([{ file: globalFile, text: "- Two" }]);
+		store.restore(id);
+		assert.equal(readFileSync(globalFile, "utf8"), "# M\r\n\r\n- One\r\n- Two\r\n");
+	} finally {
+		cleanup();
+	}
+});
+
+test("restoring a whole-file snapshot writes its line endings as they were", () => {
+	const { store, globalFile, agentDir, cleanup } = setup();
+	try {
+		mkdirSync(join(agentDir, "memory", "recovery"), { recursive: true });
+		const id = "0b7f5a52-6f0e-4d38-9a43-3d1f6a2c9e11";
+		const content = "# M\r\n\r\n- One\r\n- Two\n";
+		writeFileSync(join(agentDir, "memory", "recovery", `${id}.json`), JSON.stringify({ id, timestamp: 1, removals: [], replacements: [{ file: globalFile, content }] }));
+		writeFileSync(globalFile, "# M\n\n- Tidied\n");
+		store.restore(id);
+		assert.equal(readFileSync(globalFile, "utf8"), content);
+	} finally {
+		cleanup();
+	}
+});

@@ -67,14 +67,47 @@ const pad = (n: number) => String(n).padStart(2, "0");
 export const localDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayBefore = (d = new Date()) => localDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1));
 
+/** A line and how it ends: "\n" or "\r\n", or "" for the last. */
+interface Line {
+	text: string;
+	eol: string;
+}
+
+/**
+ * Windows editors save "\r\n" and pify appends "\n", so one file can have both. A lone "\r" at the very end is half of a
+ * line ending, which pify's forget leaves when it removes the last line, so it isn't part of the text either.
+ */
+function splitLines(content: string): Line[] {
+	const parts = content.split(/(\r?\n|\r$)/);
+	const lines: Line[] = [];
+	for (let i = 0; i < parts.length; i += 2) lines.push({ text: parts[i]!, eol: parts[i + 1] ?? "" });
+	return lines;
+}
+
+/** The ending for lines Trivium adds: the first one in the file, which its editor wrote. Later ones may be pify's. */
+const eolOf = (content: string) => /\r?\n/.exec(content)?.[0] ?? "\n";
+
+/** Lines keep their own endings. One without, because it was the last or is new, gets the file's. */
+function joinLines(lines: Line[], eol: string): string {
+	return lines.map((line, i) => line.text + (i === lines.length - 1 ? "" : line.eol.endsWith("\n") ? line.eol : eol)).join("");
+}
+
+/** Appends a line, ending as the file's others do, without rewriting what another session may be adding to. */
+function appendLine(file: string, existing: string, text: string): void {
+	const eol = eolOf(existing);
+	const gap = existing === "" || existing.endsWith("\n") ? "" : existing.endsWith("\r") ? "\n" : eol;
+	appendFileSync(file, `${gap}${text}${eol}`);
+}
+
 /** One entry per bullet. Other lines, such as headings, stay in the file but aren't entries. */
 export function parseEntries(content: string, limit: number): { chars: number; entries: MemoryEntry[] } {
 	const lead = content.length - content.trimStart().length;
 	const entries: MemoryEntry[] = [];
 	let offset = 0;
-	content.split("\n").forEach((raw, line) => {
+	splitLines(content).forEach(({ text: raw, eol }, line) => {
+		// pify cuts the file as it is, so each "\r" counts, but an entry is whole without its line ending.
 		const end = offset + raw.length;
-		offset = end + 1;
+		offset = end + eol.length;
 		const bullet = BULLET.exec(raw);
 		if (!bullet) return;
 		const tagged = TAGGED.exec(bullet[2]!);
@@ -92,7 +125,7 @@ export function formatEntry(category: MemoryCategory | undefined, text: string, 
 }
 
 /** Memory is one line per entry; line breaks in what was typed become spaces. */
-const oneLine = (text: string) => text.replace(/\s*\n+\s*/g, " ").trim();
+const oneLine = (text: string) => text.replace(/\s*[\r\n]+\s*/g, " ").trim();
 
 const normalizeCwd = (cwd: string) => cwd.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
 
@@ -218,7 +251,7 @@ export class MemoryStore {
 		const existing = readText(file);
 		// The header pify writes on a new file. Appending, as pify does, keeps an entry another session saves meanwhile.
 		if (!existing?.trim()) writeFileSync(file, `${target.kind === "project" ? "# Project memory" : "# Long-term memory"}\n\n${entry}\n`);
-		else appendFileSync(file, `${existing.endsWith("\n") ? "" : "\n"}${entry}\n`);
+		else appendLine(file, existing, entry);
 		return {};
 	}
 
@@ -227,44 +260,44 @@ export class MemoryStore {
 		const error = this.check(clean);
 		if (error) return { error };
 		const file = await this.fileOf(target);
-		const lines = this.lines(file);
+		const { lines, eol } = this.lines(file);
 		const line = locate(lines, at);
-		lines[line] = formatEntry(category, clean, BULLET.exec(at.raw)?.[1]);
-		writeFileSync(file, lines.join("\n"));
+		lines[line]!.text = formatEntry(category, clean, BULLET.exec(at.raw)?.[1]);
+		writeFileSync(file, joinLines(lines, eol));
 		return {};
 	}
 
 	/** Moves an entry above the others. pify loads each file from the top, so what comes first is cut last. */
 	async moveToTop(target: MemoryTarget, at: Pick<MemoryEntry, "line" | "raw">): Promise<void> {
 		const file = await this.fileOf(target);
-		const lines = this.lines(file);
+		const { lines, eol } = this.lines(file);
 		const line = locate(lines, at);
-		const first = lines.findIndex((text) => BULLET.exec(text) || STAMP.test(text));
+		const first = lines.findIndex(({ text }) => BULLET.test(text) || STAMP.test(text));
 		if (first < 0 || first >= line) return;
-		const start = line > 0 && STAMP.test(lines[line - 1]!) ? line - 1 : line;
+		const start = line > 0 && STAMP.test(lines[line - 1]!.text) ? line - 1 : line;
 		const moved = lines.splice(start, line - start + 1);
 		lines.splice(first, 0, ...moved);
-		writeFileSync(file, lines.join("\n"));
+		writeFileSync(file, joinLines(lines, eol));
 	}
 
 	/** Deletes an entry, and pi-memory's stamp above it, after writing pify's recovery record. Resolves with its id. */
 	async delete(target: MemoryTarget, at: Pick<MemoryEntry, "line" | "raw">): Promise<string> {
 		const file = await this.fileOf(target);
-		const lines = this.lines(file);
+		const { lines, eol } = this.lines(file);
 		const line = locate(lines, at);
-		const start = line > 0 && STAMP.test(lines[line - 1]!) ? line - 1 : line;
+		const start = line > 0 && STAMP.test(lines[line - 1]!.text) ? line - 1 : line;
 		const removed = lines.slice(start, line + 1);
 		const record: RecoveryRecord = {
 			id: randomUUID(),
 			timestamp: Date.now(),
-			removals: removed.map((text) => ({ file, text })),
+			removals: removed.map(({ text }) => ({ file, text })),
 			trivium: { line: start },
 		};
 		// As pify does: the record first, so a failed rewrite never loses the entry.
 		mkdirSync(this.recoveryDir, { recursive: true });
 		writeFileSync(join(this.recoveryDir, `${record.id}.json`), JSON.stringify(record, null, 2));
 		lines.splice(start, removed.length);
-		writeFileSync(file, lines.join("\n"));
+		writeFileSync(file, joinLines(lines, eol));
 		return record.id;
 	}
 
@@ -277,15 +310,13 @@ export class MemoryStore {
 		const files = new Set(record.removals.map((removal) => removal.file));
 		const [only] = files;
 		if (record.trivium && files.size === 1 && only) {
-			const lines = (readText(only) ?? "").split("\n");
-			lines.splice(Math.min(record.trivium.line, lines.length), 0, ...record.removals.map((removal) => removal.text));
-			writeFileSync(only, lines.join("\n"));
+			const content = readText(only) ?? "";
+			const lines = splitLines(content);
+			lines.splice(Math.min(record.trivium.line, lines.length), 0, ...record.removals.map(({ text }) => ({ text, eol: "" })));
+			writeFileSync(only, joinLines(lines, eolOf(content)));
 		} else {
-			// pify's own forget removes matches from several files; it restores them by appending.
-			for (const { file, text } of record.removals) {
-				const existing = readText(file) ?? "";
-				appendFileSync(file, `${existing === "" || existing.endsWith("\n") ? "" : "\n"}${text}\n`);
-			}
+			// pify's own forget removes matches from several files, along with any "\r" they end in; it restores them by appending.
+			for (const { file, text } of record.removals) appendLine(file, readText(file) ?? "", text.replace(/\r$/, ""));
 		}
 		unlinkSync(path);
 	}
@@ -332,10 +363,10 @@ export class MemoryStore {
 		return day ?? basename(dirname(dirname(dirname(resolve(file)))));
 	}
 
-	private lines(file: string): string[] {
+	private lines(file: string): { lines: Line[]; eol: string } {
 		const content = readText(file);
 		if (content === undefined) throw new Error("That memory file is gone.");
-		return content.split("\n");
+		return { lines: splitLines(content), eol: eolOf(content) };
 	}
 
 	private readConsent(): Record<string, Record<string, boolean>> {
@@ -372,9 +403,9 @@ export class MemoryStore {
 const projectFile = (cwd: string) => join(cwd, ".pi", "memory", "MEMORY.md");
 
 /** The entry's line now: where it was, or where the same line moved to. Refuses one that changed. */
-function locate(lines: string[], at: Pick<MemoryEntry, "line" | "raw">): number {
-	if (lines[at.line] === at.raw) return at.line;
-	const moved = lines.indexOf(at.raw);
+function locate(lines: Line[], at: Pick<MemoryEntry, "line" | "raw">): number {
+	if (lines[at.line]?.text === at.raw) return at.line;
+	const moved = lines.findIndex(({ text }) => text === at.raw);
 	if (moved < 0) throw new Error("This memory changed since the page loaded. Showing it as it is now.");
 	return moved;
 }

@@ -13,6 +13,7 @@ import {
 	estimateTokens,
 	fromAnthropic,
 	fromOpenAI,
+	modelEntry,
 	openAIResponse,
 	openAIStream,
 	ProxyError,
@@ -501,22 +502,13 @@ export class ProxyService {
 	private async listing(): Promise<Json> {
 		const models = await this.backend.models();
 		const byKey = new Map(models.map((model) => [keyOf(model), model]));
-		const entry = (id: string, model: Model<Api>) => ({
-			id,
-			object: "model",
-			type: "model",
-			display_name: model.name || model.id,
-			created: 0,
-			created_at: "1970-01-01T00:00:00Z",
-			owned_by: model.provider,
-		});
 		const data = [
 			// A name that stands for a model Trivium no longer offers isn't listed; asking for it says why.
 			...this.saved.aliases.flatMap((alias) => {
 				const model = byKey.get(alias.model);
-				return model ? [entry(alias.alias, model)] : [];
+				return model ? [modelEntry(alias.alias, model)] : [];
 			}),
-			...models.map((model) => entry(keyOf(model), model)),
+			...models.map((model) => modelEntry(keyOf(model), model)),
 		];
 		return { object: "list", data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
 	}

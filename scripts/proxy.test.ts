@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import type { Api, AssistantMessage, AssistantMessageEvent, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import { parseListing } from "../src/main/custom-models.ts";
 import { lanAddresses, ProxyService, resolveModel } from "../src/main/proxy.ts";
-import { ProxyError, seal, unseal } from "../src/main/proxy-protocol.ts";
+import { modelEntry, ProxyError, seal, unseal } from "../src/main/proxy-protocol.ts";
 
 type Json = Record<string, any>;
 
@@ -172,7 +173,8 @@ test("models are offered as provider/id, and by the other names given to them", 
 		listing.data.map((entry: Json) => entry.id),
 		["gpt-4o", "acme/small", "acme/big", "other/small"],
 	);
-	assert.deepEqual(listing.data[0], { id: "gpt-4o", object: "model", type: "model", display_name: "BIG", created: 0, created_at: "1970-01-01T00:00:00Z", owned_by: "acme" });
+	// The other name is described as the model it stands for.
+	assert.deepEqual(listing.data[0], { ...listing.data[2], id: "gpt-4o" });
 
 	const aliases = [{ alias: "gpt-4o", model: "acme/big" }];
 	assert.equal(resolveModel("gpt-4o", MODELS, aliases).id, "big");
@@ -182,6 +184,86 @@ test("models are offered as provider/id, and by the other names given to them", 
 	assert.throws(() => resolveModel("nope", MODELS, aliases), (error: ProxyError) => error.status === 404);
 	await assert.rejects(proxy.saveAliases([{ alias: "a b", model: "acme/big" }]), /without spaces/);
 	await assert.rejects(proxy.saveAliases([...aliases, ...aliases]), /twice/);
+});
+
+test("the model listing has OpenAI's and Anthropic's fields, with each model's limits and capabilities", async (t) => {
+	const { call } = await start(t);
+	const response = await call("/v1/models");
+	assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+	const listing = (await response.json()) as Json;
+	const { data, ...page } = listing;
+	assert.deepEqual(page, { object: "list", has_more: false, first_id: "acme/small", last_id: "other/small" });
+	const no = { supported: false };
+	const yes = { supported: true };
+	const unsupported = {
+		batch: no,
+		citations: no,
+		code_execution: no,
+		context_management: { supported: false, clear_thinking_20251015: null, clear_tool_uses_20250919: null, compact_20260112: null },
+		pdf_input: no,
+		structured_outputs: no,
+	};
+	const common = {
+		object: "model",
+		type: "model",
+		created: 0,
+		created_at: "1970-01-01T00:00:00Z",
+		owned_by: "acme",
+		context_window: 100_000,
+		max_output_tokens: 4096,
+		max_input_tokens: 100_000,
+		max_tokens: 4096,
+		output_modalities: ["text"],
+	};
+	assert.deepEqual(data[0], {
+		...common,
+		id: "acme/small",
+		display_name: "SMALL",
+		input_modalities: ["text"],
+		capabilities: {
+			...unsupported,
+			effort: { supported: false, low: no, medium: no, high: no, xhigh: no, max: no },
+			image_input: no,
+			thinking: { supported: false, types: { adaptive: no, enabled: no } },
+		},
+	});
+	assert.deepEqual(data[1], {
+		...common,
+		id: "acme/big",
+		display_name: "BIG",
+		input_modalities: ["text", "image"],
+		capabilities: {
+			...unsupported,
+			effort: { supported: true, low: yes, medium: yes, high: yes, xhigh: no, max: no },
+			image_input: yes,
+			thinking: { supported: true, types: { adaptive: yes, enabled: yes } },
+		},
+	});
+	// Clients that leave out /v1 get the same listing.
+	assert.deepEqual(await (await call("/models")).json(), listing);
+
+	// Trivium itself, adding this proxy as a custom endpoint in either format, reads everything back.
+	for (const api of ["openai-completions", "anthropic-messages"] as const) {
+		assert.deepEqual(parseListing(api, listing), [
+			{ id: "acme/big", name: "BIG", contextWindow: 100_000, maxTokens: 4096, images: true, reasoning: true },
+			{ id: "acme/small", name: "SMALL", contextWindow: 100_000, maxTokens: 4096, images: false, reasoning: false },
+			{ id: "other/small", name: "SMALL", contextWindow: 100_000, maxTokens: 4096, images: false, reasoning: false },
+		]);
+	}
+});
+
+test("a listed model keeps its own limits and effort levels, and a limit that isn't known is null", () => {
+	const entry = modelEntry("a/b", model("a", "b", { contextWindow: 1_000_000, maxTokens: 0, reasoning: true, thinkingLevelMap: { low: null, max: "max" } }));
+	assert.deepEqual([entry.context_window, entry.max_input_tokens], [1_000_000, 1_000_000]);
+	assert.deepEqual([entry.max_output_tokens, entry.max_tokens], [null, null]);
+	const { supported, ...levels } = entry.capabilities.effort;
+	assert.equal(supported, true);
+	assert.deepEqual(
+		Object.entries(levels).flatMap(([level, value]) => (value.supported ? [level] : [])),
+		["medium", "high", "max"],
+	);
+	const unnamed = modelEntry("a/b", model("a", "b", { name: "", contextWindow: Number.NaN }));
+	assert.deepEqual([unnamed.display_name, unnamed.context_window, unnamed.max_input_tokens], ["b", null, null]);
 });
 
 test("OpenAI: a chat completion becomes a pi request, and the reply an OpenAI response", async (t) => {

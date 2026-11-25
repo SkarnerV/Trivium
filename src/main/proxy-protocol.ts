@@ -5,6 +5,7 @@ import {
 	type AssistantMessageEvent,
 	clampThinkingLevel,
 	type Context,
+	getSupportedThinkingLevels,
 	type ImageContent,
 	type Message,
 	type Model,
@@ -151,6 +152,58 @@ function finish(model: Model<Api>, body: Json, context: Context, extra: Pick<Pro
 		stream: body.stream === true,
 		temperature: typeof body.temperature === "number" ? body.temperature : undefined,
 		...extra,
+	};
+}
+
+/* Model listing */
+
+/**
+ * A model as `/v1/models` lists it under `id`: the fields of OpenAI's Model and Anthropic's ModelInfo in one
+ * entry, with the limits and inputs many OpenAI-compatible servers add. A limit pi doesn't know is null.
+ * Capabilities are what a request through the proxy gets, so features it doesn't pass on are unsupported
+ * even where the model has them.
+ */
+export function modelEntry(id: string, model: Model<Api>) {
+	const contextWindow = positive(model.contextWindow) ?? null;
+	const maxTokens = positive(model.maxTokens) ?? null;
+	const levels: readonly string[] = getSupportedThinkingLevels(model).filter((level) => level !== "off");
+	const support = (supported: boolean) => ({ supported });
+	const effort = (level: string) => support(levels.includes(level));
+	const thinking = support(levels.length > 0);
+	return {
+		id,
+		object: "model",
+		type: "model",
+		display_name: model.name || model.id,
+		// pi doesn't know when a model came out. Both formats take the epoch for that.
+		created: 0,
+		created_at: "1970-01-01T00:00:00Z",
+		owned_by: model.provider,
+		context_window: contextWindow,
+		max_output_tokens: maxTokens,
+		// Anthropic's names for the same two limits.
+		max_input_tokens: contextWindow,
+		max_tokens: maxTokens,
+		input_modalities: [...model.input],
+		output_modalities: ["text"],
+		capabilities: {
+			batch: support(false),
+			citations: support(false),
+			code_execution: support(false),
+			context_management: { supported: false, clear_thinking_20251015: null, clear_tool_uses_20250919: null, compact_20260112: null },
+			effort: {
+				supported: ["low", "medium", "high", "xhigh", "max"].some((level) => levels.includes(level)),
+				low: effort("low"),
+				medium: effort("medium"),
+				high: effort("high"),
+				xhigh: effort("xhigh"),
+				max: effort("max"),
+			},
+			image_input: support(model.input.includes("image")),
+			pdf_input: support(false),
+			structured_outputs: support(false),
+			thinking: { ...thinking, types: { adaptive: thinking, enabled: thinking } },
+		},
 	};
 }
 

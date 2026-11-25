@@ -22,6 +22,7 @@ All notable changes to Trivium are listed here. Versions follow [Semantic Versio
 - A subagent that asked the main agent something showed as failed, stopped counting as running, and could be ended when its session went idle or its settings changed. It now stays running until it reports back, and its question and the agent's answer show in the thread.
 - A background subagent whose status was late showed as gone for good. It is looked at again.
 - Edits you make while a subagent or a background command works are no longer undone with the session's: such files are marked "may include your edits", reverting everything leaves them, and reverting one asks first.
+- The API proxy's `/v1/models` listed models without their limits. Each one now has `context_window` and `max_output_tokens`, Anthropic's `max_input_tokens`, `max_tokens` and `capabilities`, and its input and output modalities.
 - A memory file saved with Windows line endings (CRLF) showed no entries on the Memory page. Its entries now show, and adding, editing, moving, deleting and undoing keep the file's line endings.
 
 ## [0.14.0] - 2026-11-23

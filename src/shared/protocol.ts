@@ -809,7 +809,12 @@ export interface ProxyOptions {
 	anthropic: boolean;
 	/** Listen to other devices on the network too, rather than this computer only. */
 	lan: boolean;
+	/** Answer only requests that carry one of the proxy's keys. Off, any client that reaches it may call it. */
+	requireKey: boolean;
 }
+
+/** What a key is added for: to require one of every request, or to start a proxy that requires one. */
+export type ProxyKeyPurpose = "require" | "start";
 
 /** The API proxy: a local server through which other apps use the models set up in Trivium. */
 export interface ProxyStatus extends ProxyOptions {
@@ -1266,13 +1271,14 @@ export interface TriviumApi {
 	proxyStatus(): Promise<ProxyStatus>;
 	/** Turns the API proxy on or off. On stays on across restarts. */
 	setProxyEnabled(on: boolean): Promise<ProxyStatus>;
-	/** Changes how the proxy listens, restarting it when it runs. */
-	saveProxyOptions(options: ProxyOptions): Promise<ProxyStatus>;
+	/** Changes the options given and keeps the rest. A new port or reach restarts the proxy when it runs. */
+	saveProxyOptions(patch: Partial<ProxyOptions>): Promise<ProxyStatus>;
 	/**
 	 * Adds a key, or renames `id`. A new key takes `value`, or a generated one when empty; an existing key keeps
-	 * its value unless `value` replaces it. `key` is the full key, which is shown this once.
+	 * its value unless `value` replaces it. `key` is the full key, which is shown this once. `purpose` takes effect
+	 * together with the key.
 	 */
-	saveProxyKey(id: string | undefined, name: string, value: string): Promise<{ status: ProxyStatus; key?: string }>;
+	saveProxyKey(id: string | undefined, name: string, value: string, purpose?: ProxyKeyPurpose): Promise<{ status: ProxyStatus; key?: string }>;
 	setProxyKeyEnabled(id: string, enabled: boolean): Promise<ProxyStatus>;
 	removeProxyKey(id: string): Promise<ProxyStatus>;
 	saveProxyAliases(aliases: ProxyAlias[]): Promise<ProxyStatus>;

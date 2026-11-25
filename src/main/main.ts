@@ -24,6 +24,7 @@ import type {
 	NewSessionInput,
 	PresetProviderChanges,
 	ProxyAlias,
+	ProxyKeyPurpose,
 	ProxyOptions,
 	SkillDraft,
 	TriviumSettings,
@@ -515,8 +516,8 @@ function registerIpc(): void {
 	handle("trivium:usage", async () => usage.report(await host.listSessions(), (provider) => host.runtime.isUsingOAuth(provider)));
 	handle("trivium:proxyStatus", () => proxy.status());
 	handle("trivium:setProxyEnabled", (on: boolean) => proxy.setEnabled(Boolean(on)));
-	handle("trivium:saveProxyOptions", (options: ProxyOptions) => proxy.saveOptions(options));
-	handle("trivium:saveProxyKey", (id: string | undefined, name: string, value: string) => proxy.saveKey(id || undefined, String(name), String(value ?? "")));
+	handle("trivium:saveProxyOptions", (patch: Partial<ProxyOptions>) => proxy.saveOptions(patch));
+	handle("trivium:saveProxyKey", (id: string | undefined, name: string, value: string, purpose?: ProxyKeyPurpose) => proxy.saveKey(id || undefined, String(name), String(value ?? ""), purpose));
 	handle("trivium:setProxyKeyEnabled", (id: string, enabled: boolean) => proxy.setKeyEnabled(id, enabled));
 	handle("trivium:removeProxyKey", (id: string) => proxy.removeKey(id));
 	handle("trivium:saveProxyAliases", (aliases: ProxyAlias[]) => proxy.saveAliases(aliases));

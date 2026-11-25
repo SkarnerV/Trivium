@@ -1,11 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { rename, writeFile } from "node:fs/promises";
+import { readFileSync, renameSync } from "node:fs";
+import { unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Api, AssistantMessage, AssistantMessageEvent, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import type { ProxyAlias, ProxyKeyInfo, ProxyOptions, ProxyStatus } from "../shared/protocol.ts";
+import type { ProxyAlias, ProxyKeyInfo, ProxyKeyPurpose, ProxyOptions, ProxyStatus } from "../shared/protocol.ts";
 import { t } from "../shared/i18n.ts";
 import {
 	anthropicResponse,
@@ -40,16 +42,113 @@ interface Saved extends ProxyOptions {
 	aliases: ProxyAlias[];
 }
 
-const DEFAULTS: Saved = { enabled: false, port: 8787, openai: true, anthropic: true, lan: false, keys: [], aliases: [] };
+const DEFAULTS: Saved = { enabled: false, port: 8787, openai: true, anthropic: true, lan: false, requireKey: false, keys: [], aliases: [] };
 
 const MAX_BODY = 32_000_000;
 const MAX_KEYS = 100;
+/** How long a request's headers may be altogether. Node's own default, whatever it was started with. */
+const MAX_HEADER = 16 * 1024;
 /** A quiet stream gets a line this often, so nothing between the client and the proxy gives up on it. */
 const PING_MS = 15_000;
 /** How long after a request a key's last use is written down, so a busy client doesn't write the file per request. */
 const USED_FLUSH_MS = 3000;
+/** How long a change waits for another Trivium to finish its own. */
+const LOCK_WAIT_MS = 5000;
+/** How long it waits on Windows for something that only still has the file open. */
+const EPERM_WAIT_MS = 2000;
 
 const obj = (value: unknown): Json => (value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {});
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/* The file */
+
+/** What the file holds, or undefined when there is none. Throws when it can't be read. */
+function readText(file: string): string | undefined {
+	try {
+		return readFileSync(file, "utf8");
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw error;
+	}
+}
+
+/** The settings in what the file holds, or undefined when there is no file or it is damaged. */
+function parseSaved(text: string | undefined): Saved | undefined {
+	if (text === undefined) return undefined;
+	let saved: Partial<Saved>;
+	try {
+		saved = JSON.parse(text) as Partial<Saved>;
+	} catch {
+		return undefined;
+	}
+	if (!saved || typeof saved !== "object" || Array.isArray(saved)) return undefined;
+	return {
+		...DEFAULTS,
+		...saved,
+		// Files from before this option come from proxies that always required a key. One that was set up goes on
+		// requiring it, so an update doesn't open it to everyone.
+		requireKey: typeof saved.requireKey === "boolean" ? saved.requireKey : saved.enabled === true || (Array.isArray(saved.keys) && saved.keys.length > 0),
+		keys: Array.isArray(saved.keys) ? saved.keys.filter((key) => key && typeof key.digest === "string" && typeof key.id === "string") : [],
+		aliases: Array.isArray(saved.aliases) ? saved.aliases.filter((entry) => entry && typeof entry.alias === "string" && typeof entry.model === "string") : [],
+	};
+}
+
+/**
+ * Puts a new version, written to a file of its own, in the file's place. Checks that it may each time it tries, in the
+ * same go as trying.
+ */
+async function replace(from: string, file: string, check: () => void): Promise<void> {
+	const started = Date.now();
+	for (;;) {
+		check();
+		try {
+			return renameSync(from, file);
+		} catch (error) {
+			if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM" || Date.now() - started >= EPERM_WAIT_MS) throw error;
+			await sleep(20);
+		}
+	}
+}
+
+const conflict = () => new Error(t("Another Trivium is changing the proxy's settings. Try again."));
+
+/** SQLite's code for a lock that another connection has. */
+const SQLITE_BUSY = 5;
+
+/**
+ * Takes the lock that Trivium processes with the same profile change the file under, until the connection returned is
+ * closed. It is SQLite's write lock on a database that stays empty, which the operating system holds for the process.
+ * So a process that has it keeps it however long it is held up, rather than going on without it, and one that ends in
+ * any way gives it up. Nothing is cleaned up by name: the database file is left where it is, since a lock on one that
+ * was deleted and made again would be another lock. Only SQLite may open it: on POSIX systems a process that closes a
+ * file loses its locks on it, which SQLite sees to among its own connections.
+ */
+async function acquire(file: string): Promise<DatabaseSync> {
+	const started = Date.now();
+	const lock = new DatabaseSync(`${file}.lock.sqlite`);
+	try {
+		// Nothing is ever committed, so it needs no journal file either.
+		lock.exec("PRAGMA journal_mode = MEMORY");
+		for (;;) {
+			try {
+				lock.exec("BEGIN IMMEDIATE");
+				return lock;
+			} catch (error) {
+				// The low byte of an extended code is the code it extends.
+				if (((error as { errcode?: number }).errcode ?? 0) % 256 !== SQLITE_BUSY) throw error;
+				if (Date.now() - started >= LOCK_WAIT_MS) throw conflict();
+			}
+			await sleep(20 + Math.random() * 30);
+		}
+	} catch (error) {
+		lock.close();
+		throw error;
+	}
+}
+
+/** What came of looking for settings another Trivium saved. When it failed there may be some that aren't known here. */
+type Refresh = "unchanged" | "updated" | "failed";
 
 /* Keys */
 
@@ -123,6 +222,9 @@ function isPrivateAddress(host: string): boolean {
 	return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
+/** This computer, by the addresses and names reserved for loopback. */
+const isLoopback = (host: string): boolean => host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost");
+
 /** A web page may call the proxy when it is served from this computer or, with the network allowed, from that network. */
 function originAllowed(origin: string, lan: boolean): boolean {
 	let url: URL;
@@ -133,7 +235,46 @@ function originAllowed(origin: string, lan: boolean): boolean {
 	}
 	if (url.protocol !== "http:" && url.protocol !== "https:") return false;
 	const host = url.hostname.replace(/^\[|\]$/g, "");
-	return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost") || (lan && isPrivateAddress(host));
+	return isLoopback(host) || (lan && isPrivateAddress(host));
+}
+
+/** What Docker calls the computer it runs on. A container reaches that computer's loopback by it. */
+const DOCKER_HOST = "host.docker.internal";
+
+/** A Host header: a name or an IPv4 address, or an IPv6 address in brackets, and a port if not the usual one. */
+const HOST = /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*\.?|\[[0-9a-f:.]+\])(?::(\d{1,5}))?$/i;
+
+/** The name or address in a Host header, or undefined when it isn't a valid one. */
+function hostName(host: string): string | undefined {
+	const match = HOST.exec(host);
+	if (!match) return undefined;
+	const port = match[1];
+	if (port !== undefined && (Number(port) < 1 || Number(port) > 65535)) return undefined;
+	try {
+		// Settles how addresses are written. The check above leaves nothing but the host and port to take apart.
+		return new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Whether a request with no key may be addressed to this Host. A page whose own domain was pointed at this computer
+ * (DNS rebinding) is same-origin to the browser, which then may send no Origin, so only its domain in Host gives it
+ * away. Names that others on the network can claim, such as ones under .local, are no better than a public domain.
+ *
+ * This computer only: loopback, and Docker's name for this computer. With the network allowed: also private IPv4
+ * addresses, and whichever others this computer has, since Settings gives those out as the base URL. A request with
+ * any other Host, with none, or with several needs a key.
+ *
+ * This keeps web pages from being turned on the proxy. It says nothing of who is calling: a reverse proxy may rewrite
+ * Host, and any other client may send what it likes. Only requiring a key decides that.
+ */
+function hostAllowed(hosts: string[] | undefined, lan: boolean, addresses: () => string[]): boolean {
+	const name = hosts?.length === 1 ? hostName(hosts[0]!) : undefined;
+	if (!name) return false;
+	if (isLoopback(name) || name === DOCKER_HOST) return true;
+	return lan && (isPrivateAddress(name) || addresses().includes(name));
 }
 
 /* HTTP */
@@ -145,6 +286,14 @@ const ERROR_KINDS: Record<number, string> = {
 	413: "request_too_large",
 	429: "rate_limit_error",
 };
+
+/** Closes a socket. Requests in flight end here; a client sees its stream cut. */
+function stop(server: Server): Promise<void> {
+	return new Promise((resolve) => {
+		server.close(() => resolve());
+		server.closeAllConnections();
+	});
+}
 
 function readBody(request: IncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -166,14 +315,24 @@ function readBody(request: IncomingMessage): Promise<string> {
 
 /**
  * A local server that answers OpenAI Chat Completions and Anthropic Messages requests with the models set up in
- * Trivium, so other apps can use them. It listens on this computer only unless the network is allowed, and
- * every request needs one of its own keys: the providers' credentials stay with pi.
+ * Trivium, so other apps can use them. It listens on this computer only unless the network is allowed, and can
+ * require one of its own keys of every request. The providers' credentials stay with pi either way.
  */
 export class ProxyService {
 	private saved: Saved;
+	/** What the file held when its settings were last taken up or saved, which `saved` goes with. */
+	private text: string | undefined;
+	/** Whether that has no settings in it, being damaged or gone: `saved` is from before, and may be out of date. */
+	private damaged = false;
+	/** Why the file can't be read, when it can't. */
+	private unreadable: string | undefined;
+	/** Whether the last request was refused since the settings couldn't be read. */
+	private refusing = false;
 	private server: Server | undefined;
 	private error: string | undefined;
-	private saving = Promise.resolve();
+	private disposed = false;
+	/** The last change asked for. Each waits for the one before, so the settings and the socket move together. */
+	private queue: Promise<unknown> = Promise.resolve();
 	private usedTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly file: string;
 	private readonly backend: ProxyBackend;
@@ -185,29 +344,22 @@ export class ProxyService {
 		this.backend = options.backend;
 		this.emit = options.emit ?? (() => {});
 		this.addresses = options.addresses ?? lanAddresses;
+		// A damaged file starts over turned off, which lets nobody in.
 		this.saved = structuredClone(DEFAULTS);
-		if (!existsSync(this.file)) return;
 		try {
-			const saved = obj(JSON.parse(readFileSync(this.file, "utf8"))) as Partial<Saved>;
-			this.saved = {
-				...this.saved,
-				...saved,
-				keys: Array.isArray(saved.keys) ? saved.keys.filter((key) => key && typeof key.digest === "string" && typeof key.id === "string") : [],
-				aliases: Array.isArray(saved.aliases) ? saved.aliases.filter((entry) => entry && typeof entry.alias === "string" && typeof entry.model === "string") : [],
-			};
+			this.text = this.read();
+			this.saved = parseSaved(this.text) ?? this.saved;
 		} catch {
-			// A damaged file starts over with no keys, which lets nobody in.
+			// One that can't be read right now is tried again before the proxy starts or changes.
 		}
 	}
 
 	/** Starts the proxy if it was on when Trivium last ran. */
 	async init(): Promise<void> {
-		if (!this.saved.enabled) return;
-		try {
-			await this.listen();
-		} catch (error) {
-			this.error = error instanceof Error ? error.message : String(error);
-		}
+		await this.serialize(async () => {
+			await this.adopt();
+			await this.startIfOn();
+		});
 	}
 
 	/** The port it listens on now, which differs from the saved one only when that is 0. */
@@ -217,134 +369,313 @@ export class ProxyService {
 	}
 
 	async status(): Promise<ProxyStatus> {
-		const { keys, ...rest } = this.saved;
+		const failed = (await this.sync()) === "failed";
 		let models = 0;
 		try {
 			models = (await this.backend.models()).length;
 		} catch {
 			// The page still shows the rest.
 		}
+		// Read in one go, so the settings are the ones that go with the socket.
+		const { keys, ...rest } = this.saved;
 		return {
 			...rest,
 			aliases: rest.aliases.map((entry) => ({ ...entry })),
 			running: Boolean(this.server),
-			error: this.error,
+			// Until the settings can be read, that comes first: what else went wrong can't be put right before then.
+			error: this.unreadError(failed) ?? this.error,
 			keys: keys.map(({ digest: _digest, ...key }) => key),
 			addresses: this.saved.lan ? this.addresses() : [],
 			models,
 		};
 	}
 
-	async setEnabled(on: boolean): Promise<ProxyStatus> {
-		if (on && !this.server) {
-			if (!this.saved.keys.some((key) => key.enabled)) throw new Error(t("Add an API key first. Clients need one to connect."));
-			this.error = undefined;
-			await this.listen();
-		} else if (!on) {
-			await this.close();
-			this.error = undefined;
-		}
-		this.saved.enabled = on;
-		return this.changed();
+	/** Says that what is saved isn't known. Damaged settings a change replaces; ones that can't be read it leaves. */
+	private unreadError(failed: boolean): string | undefined {
+		if (!failed) return undefined;
+		if (this.unreadable) return t("The proxy's saved settings can't be read, so it refuses every request and nothing here can be changed: {error}", { error: this.unreadable });
+		return this.server ? t("The proxy's saved settings can't be read, so it refuses every request. If that goes on, change any option here to save them again.") : undefined;
 	}
 
-	async saveOptions(options: ProxyOptions): Promise<ProxyStatus> {
-		const port = Number(options.port);
-		if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(t("Choose a port from 1024 to 65535."));
-		if (!options.openai && !options.anthropic) throw new Error(t("Keep at least one format on."));
-		const previous: ProxyOptions = { port: this.saved.port, openai: this.saved.openai, anthropic: this.saved.anthropic, lan: this.saved.lan };
-		const next: ProxyOptions = { port, openai: Boolean(options.openai), anthropic: Boolean(options.anthropic), lan: Boolean(options.lan) };
-		Object.assign(this.saved, next);
-		// Formats apply to the next request; a new port or reach needs a new socket.
-		if (this.server && (previous.port !== next.port || previous.lan !== next.lan)) {
+	setEnabled(on: boolean): Promise<ProxyStatus> {
+		return this.change(async () => {
+			if (!on) {
+				await this.commit({ enabled: false });
+				this.error = undefined;
+				await this.close();
+			} else if (this.server) {
+				await this.commit({ enabled: true });
+			} else {
+				this.assertCanStart();
+				await this.commit({ enabled: true }, await this.listen(this.saved));
+				this.error = undefined;
+			}
+		});
+	}
+
+	/** Changes the options given, leaving the others as they are by the time it is this change's turn. */
+	saveOptions(patch: Partial<ProxyOptions>): Promise<ProxyStatus> {
+		return this.change(async () => {
+			const previous = this.saved;
+			const flag = (value: unknown, current: boolean) => (typeof value === "boolean" ? value : current);
+			const next: ProxyOptions = {
+				port: patch.port === undefined ? previous.port : Number(patch.port),
+				openai: flag(patch.openai, previous.openai),
+				anthropic: flag(patch.anthropic, previous.anthropic),
+				lan: flag(patch.lan, previous.lan),
+				requireKey: flag(patch.requireKey, previous.requireKey),
+			};
+			if (!Number.isInteger(next.port) || next.port < 1024 || next.port > 65535) throw new Error(t("Choose a port from 1024 to 65535."));
+			if (!next.openai && !next.anthropic) throw new Error(t("Keep at least one format on."));
+			// Requiring a key when there is none would shut every client out.
+			if (next.requireKey && !previous.requireKey) this.assertKey();
+			// Formats and the key apply to the next request; a new port or reach needs a new socket.
+			if (!this.server || (previous.port === next.port && previous.lan === next.lan)) {
+				await this.commit(next);
+				await this.startIfOn();
+				return;
+			}
 			await this.close();
 			try {
-				await this.listen();
-			} catch (error) {
-				Object.assign(this.saved, previous);
-				// The proxy goes back to where it listened, so clients set up for it keep working.
-				await this.listen().catch((restoreError: unknown) => {
-					this.error = restoreError instanceof Error ? restoreError.message : String(restoreError);
-				});
-				await this.changed();
-				throw error;
-			}
-		} else if (this.saved.enabled && !this.server) {
-			// It was on but couldn't start, such as on a port in use. The new settings may let it.
-			try {
-				await this.listen();
+				await this.commit(next, await this.listen(next));
 				this.error = undefined;
 			} catch (error) {
-				this.error = error instanceof Error ? error.message : String(error);
+				// The proxy goes back to where it listened, so clients set up for it keep working.
+				try {
+					this.install(await this.listen(previous));
+				} catch (restoreError) {
+					this.error = messageOf(restoreError);
+				}
+				throw error;
 			}
-		}
-		return this.changed();
+		});
 	}
 
-	async saveKey(id: string | undefined, name: string, value: string): Promise<{ status: ProxyStatus; key?: string }> {
-		const existing = id ? this.saved.keys.find((key) => key.id === id) : undefined;
-		if (id && !existing) throw new Error(t("That key is gone."));
-		if (!existing && this.saved.keys.length >= MAX_KEYS) throw new Error(t("The proxy keeps up to {n} keys. Remove one first.", { n: MAX_KEYS }));
-		const label = validateName(name);
+	/**
+	 * Adds a key, or changes one. What the key was added for, requiring one or starting the proxy, is saved along with
+	 * it: a proxy that is on but couldn't listen may try again here, and must not answer anyone without the key first.
+	 * Starting one is for a proxy that requires a key, as it did when the key was asked for. If it no longer does, it
+	 * isn't opened to everyone instead.
+	 */
+	async saveKey(id: string | undefined, name: string, value: string, purpose?: ProxyKeyPurpose): Promise<{ status: ProxyStatus; key?: string }> {
 		// A new key always has a value; an existing one changes only when given a new value.
-		const fresh = value.trim() ? validateKey(value.trim()) : existing ? undefined : generateKey();
-		const digest = fresh ? digestOf(fresh) : existing!.digest;
-		const others = this.saved.keys.filter((key) => key !== existing);
-		if (others.some((key) => key.name === label)) throw new Error(t("Another key is called “{name}” already.", { name: label }));
-		if (others.some((key) => key.digest === digest)) throw new Error(t("Another key has this value already."));
-		const hint = fresh ? `…${fresh.slice(-4)}` : existing!.hint;
-		if (existing) Object.assign(existing, { name: label, digest, hint });
-		else this.saved.keys.push({ id: randomUUID(), name: label, digest, hint, enabled: true, createdAt: Date.now() });
-		return { status: await this.changed(), key: fresh };
+		const fresh = value.trim() ? validateKey(value.trim()) : id ? undefined : generateKey();
+		const status = await this.change(async () => {
+			const { keys, requireKey } = this.saved;
+			if (purpose === "start" && !requireKey) {
+				throw new Error(t("The proxy no longer requires an API key, so nothing was saved and it wasn't started. Close this and turn it on again to run it without one."));
+			}
+			const existing = id ? keys.find((key) => key.id === id) : undefined;
+			if (id && !existing) throw new Error(t("That key is gone."));
+			if (!existing && keys.length >= MAX_KEYS) throw new Error(t("The proxy keeps up to {n} keys. Remove one first.", { n: MAX_KEYS }));
+			const label = validateName(name);
+			const digest = fresh ? digestOf(fresh) : existing!.digest;
+			const others = keys.filter((key) => key !== existing);
+			if (others.some((key) => key.name === label)) throw new Error(t("Another key is called “{name}” already.", { name: label }));
+			if (others.some((key) => key.digest === digest)) throw new Error(t("Another key has this value already."));
+			const changed = { name: label, digest, hint: fresh ? `…${fresh.slice(-4)}` : existing!.hint };
+			const next = existing
+				? keys.map((key) => (key === existing ? { ...key, ...changed } : key))
+				: [...keys, { id: randomUUID(), ...changed, enabled: true, createdAt: Date.now() }];
+			const change: Partial<Saved> = { keys: next };
+			if (purpose === "start") change.enabled = true;
+			if (purpose === "require") {
+				this.assertKey(next);
+				change.requireKey = true;
+			}
+			await this.commit(change);
+			await this.startForKey();
+		});
+		return { status, key: fresh };
 	}
 
-	async setKeyEnabled(id: string, enabled: boolean): Promise<ProxyStatus> {
-		const key = this.saved.keys.find((entry) => entry.id === id);
-		if (!key) throw new Error(t("That key is gone."));
-		key.enabled = Boolean(enabled);
-		return this.changed();
+	setKeyEnabled(id: string, enabled: boolean): Promise<ProxyStatus> {
+		return this.change(async () => {
+			const { keys } = this.saved;
+			if (!keys.some((key) => key.id === id)) throw new Error(t("That key is gone."));
+			await this.commit({ keys: keys.map((key) => (key.id === id ? { ...key, enabled: Boolean(enabled) } : key)) });
+			await this.startForKey();
+		});
 	}
 
-	async removeKey(id: string): Promise<ProxyStatus> {
-		this.saved.keys = this.saved.keys.filter((key) => key.id !== id);
-		return this.changed();
+	removeKey(id: string): Promise<ProxyStatus> {
+		return this.change(() => this.commit({ keys: this.saved.keys.filter((key) => key.id !== id) }));
 	}
 
-	async saveAliases(aliases: ProxyAlias[]): Promise<ProxyStatus> {
-		this.saved.aliases = validateAliases(Array.isArray(aliases) ? aliases : []);
-		return this.changed();
+	saveAliases(aliases: ProxyAlias[]): Promise<ProxyStatus> {
+		return this.change(() => this.commit({ aliases: validateAliases(Array.isArray(aliases) ? aliases : []) }));
+	}
+
+	private assertKey(keys: StoredKey[] = this.saved.keys): void {
+		if (keys.some((key) => key.enabled)) return;
+		throw new Error(t(keys.length ? "Every API key is off. Turn one on or add another first. Clients need one to connect." : "Add an API key first. Clients need one to connect."));
+	}
+
+	/**
+	 * Every way of starting checks this, so a proxy nobody could connect to says so instead of running. One that is
+	 * running already goes on when its last key goes: its clients are told why, and the next key lets them in.
+	 */
+	private assertCanStart(): void {
+		if (this.saved.requireKey) this.assertKey();
+	}
+
+	/** Starts the proxy if it is on but isn't listening, such as once a change made that possible. Notes why it can't. */
+	private async startIfOn(): Promise<void> {
+		if (!this.saved.enabled || this.server) return;
+		try {
+			this.assertCanStart();
+			this.install(await this.listen(this.saved));
+			this.error = undefined;
+		} catch (error) {
+			this.error = messageOf(error);
+		}
+	}
+
+	/**
+	 * Starts the proxy if a key is what it lacked. Where none is required, a key has no bearing on why it isn't
+	 * listening, and may be there to be required next: it doesn't open in between.
+	 */
+	private async startForKey(): Promise<void> {
+		if (this.saved.requireKey) await this.startIfOn();
 	}
 
 	/** Stops listening and drops open connections. Synchronous, for use while quitting. */
 	dispose(): void {
+		this.disposed = true;
 		clearTimeout(this.usedTimer);
-		this.server?.close();
-		this.server?.closeAllConnections();
-		this.server = undefined;
+		void this.close();
 	}
 
-	private async changed(): Promise<ProxyStatus> {
-		await this.save();
+	private serialize<T>(task: () => Promise<T>): Promise<T> {
+		const run = this.queue.then(task);
+		this.queue = run.catch(() => {});
+		return run;
+	}
+
+	/**
+	 * Reads the file, noting why when it can't. Every look at it does, since only reading it tells whether it may still
+	 * be read: losing that changes neither its size nor its modification time, and Windows checks it on opening.
+	 */
+	private read(): string | undefined {
+		try {
+			const text = readText(this.file);
+			this.unreadable = undefined;
+			return text;
+		} catch (error) {
+			this.unreadable = messageOf(error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Takes up what another Trivium with this profile saved since, moving the socket along if there is one. Runs in the
+	 * queue. Throws when the file can't be read; one that is gone or damaged leaves the settings as they are.
+	 */
+	private async adopt(): Promise<Refresh> {
+		const text = this.read();
+		if (text === this.text) return this.damaged ? "failed" : "unchanged";
+		const next = parseSaved(text);
+		if (!next) {
+			this.text = text;
+			this.damaged = true;
+			return "failed";
+		}
+		const { enabled, port, lan } = this.saved;
+		const moved = next.enabled !== enabled || next.port !== port || next.lan !== lan;
+		const listening = Boolean(this.server);
+		// Closed first: what may be open to this computer needn't be open to where it listened until now.
+		if (moved) {
+			this.error = undefined;
+			await this.close();
+		}
+		for (const key of next.keys) {
+			const used = this.saved.keys.find((entry) => entry.id === key.id)?.lastUsedAt;
+			if (used && used > (key.lastUsedAt ?? 0)) key.lastUsedAt = used;
+		}
+		this.saved = next;
+		this.text = text;
+		this.damaged = false;
+		if (moved && listening) await this.startIfOn();
+		return "updated";
+	}
+
+	/** Adopts what another Trivium saved, outside of a change. */
+	private async sync(): Promise<Refresh> {
+		try {
+			if (this.read() === this.text) return this.damaged ? "failed" : "unchanged";
+			return await this.serialize(() => this.adopt());
+		} catch {
+			return "failed";
+		}
+	}
+
+	/**
+	 * Makes a change once those before it are done, and reports where that left the proxy, also when it failed. It is
+	 * made to the latest settings, with other Triviums kept from changing them, so none undoes what another saved.
+	 */
+	private async change(task: () => Promise<void>): Promise<ProxyStatus> {
+		try {
+			await this.serialize(async () => {
+				const lock = await acquire(this.file);
+				try {
+					await this.adopt();
+					await task();
+				} finally {
+					lock.close();
+				}
+			});
+		} catch (error) {
+			void this.status()
+				.then((status) => this.emit(status))
+				.catch(() => {});
+			throw error;
+		}
+		// Not part of the turn: listing the models can be slow, and the next change needn't wait for it.
 		const status = await this.status();
 		this.emit(status);
 		return status;
 	}
 
-	private save(): Promise<void> {
-		const contents = JSON.stringify(this.saved, null, 2);
-		this.saving = this.saving
-			.catch(() => {})
-			.then(async () => {
-				await writeFile(`${this.file}.tmp`, contents, { mode: 0o600 });
-				await rename(`${this.file}.tmp`, this.file);
+	/**
+	 * Writes a change down, then applies it, along with the socket that goes with it if that is new. When the write
+	 * fails nothing is applied and the new socket closes, so what is enforced is always what was saved. Only a change
+	 * does this, under its lock.
+	 */
+	private async commit(change: Partial<Saved>, server?: Server): Promise<void> {
+		const next: Saved = { ...this.saved, ...change };
+		const text = JSON.stringify(next, null, 2);
+		// A crash may leave it behind, so each has a name of its own.
+		const draft = `${this.file}.${process.pid}.${randomUUID()}.tmp`;
+		try {
+			await writeFile(draft, text, { mode: 0o600, flag: "wx" });
+			await replace(draft, this.file, () => {
+				// Other Triviums are kept out by the lock. This is for whatever else changes the file, or who may read it.
+				if (this.read() !== this.text) throw conflict();
 			});
-		return this.saving;
+		} catch (error) {
+			await unlink(draft).catch(() => {});
+			if (server) await stop(server);
+			throw error;
+		}
+		// A request may have used a key in the meantime.
+		for (const key of next.keys) key.lastUsedAt = this.saved.keys.find((entry) => entry.id === key.id)?.lastUsedAt ?? key.lastUsedAt;
+		this.saved = next;
+		this.text = text;
+		this.damaged = false;
+		if (server) this.install(server);
 	}
 
-	private listen(): Promise<void> {
-		const { port, lan } = this.saved;
+	private install(server: Server): void {
+		if (this.disposed) void stop(server);
+		else this.server = server;
+	}
+
+	/** Opens a socket, which serves nobody until it is installed. */
+	private listen({ port, lan }: ProxyOptions): Promise<Server> {
 		return new Promise((resolve, reject) => {
-			const server = createServer((request, response) => void this.handle(request, response));
+			const server = createServer({ maxHeaderSize: MAX_HEADER }, (request, response) => void this.receive(server, request, response));
+			// Past a number of headers Node drops the rest, unseen by the checks on them. Their size is limit enough.
+			server.maxHeadersCount = 0;
 			server.once("error", (error: NodeJS.ErrnoException) => {
 				reject(
 					new Error(
@@ -355,22 +686,37 @@ export class ProxyService {
 				);
 			});
 			// 0.0.0.0 is every IPv4 network this computer is on; clients still reach it by one of its addresses.
-			server.listen(port, lan ? "0.0.0.0" : "127.0.0.1", () => {
-				this.server = server;
-				resolve();
-			});
+			server.listen(port, lan ? "0.0.0.0" : "127.0.0.1", () => resolve(server));
 		});
 	}
 
-	private close(): Promise<void> {
+	/**
+	 * Answers a request by the latest settings, also when it was another Trivium that saved them. When those can't be
+	 * read it answers none: they may be what requires a key, or took one away.
+	 */
+	private async receive(server: Server, request: IncomingMessage, response: ServerResponse): Promise<void> {
+		response.on("error", () => {});
+		let refresh: Refresh | undefined;
+		if (this.server === server) {
+			refresh = await this.sync();
+			const refusing = refresh === "failed";
+			if (refresh === "updated" || refusing !== this.refusing) {
+				this.refusing = refusing;
+				void this.status()
+					.then((status) => this.emit(status))
+					.catch(() => {});
+			}
+		}
+		if (this.server === server && refresh !== "failed") return this.handle(request, response);
+		// The settings that go with this socket aren't in force yet, or no longer are.
+		response.writeHead(503, { "Retry-After": "1", "Content-Length": 0, Connection: "close" });
+		response.end();
+	}
+
+	private async close(): Promise<void> {
 		const server = this.server;
 		this.server = undefined;
-		if (!server) return Promise.resolve();
-		return new Promise((resolve) => {
-			server.close(() => resolve());
-			// Requests in flight end here; a client sees its stream cut.
-			server.closeAllConnections();
-		});
+		if (server) await stop(server);
 	}
 
 	/** Whether the request carries one of the keys that are on. Notes when the key was used. */
@@ -390,17 +736,41 @@ export class ProxyService {
 		match.lastUsedAt = Date.now();
 		this.usedTimer ??= setTimeout(() => {
 			this.usedTimer = undefined;
-			void this.changed().catch(() => {});
+			// Where the file is damaged, writing it would put settings back in force that may be out of date. Only a change does.
+			void this.change(async () => {
+				if (!this.damaged) await this.commit({});
+			}).catch(() => {});
 		}, USED_FLUSH_MS);
 		this.usedTimer.unref?.();
 		return true;
 	}
 
+	/**
+	 * Refuses a request that may not use the proxy. With no key required, whatever a client sends as one is fine,
+	 * since many SDKs insist on sending something. Web pages are the exception: a browser lets any site post to
+	 * this computer, so without a key only local ones are answered.
+	 *
+	 * A key admits a request whatever its Origin, for clients that send one but aren't bound by CORS, such as
+	 * extensions and desktop apps. It doesn't open the proxy to other sites' pages: they get no CORS headers (see
+	 * handle), so a browser stops at the preflight that sending a key takes.
+	 */
+	private admit(request: IncomingMessage): void {
+		if (this.authorized(request)) return;
+		if (this.saved.requireKey) throw new ProxyError(401, "Invalid API key. Create one in Trivium under Settings, API proxy.", "authentication_error");
+		const { origin } = request.headers;
+		if (origin && !originAllowed(origin, this.saved.lan)) {
+			throw new ProxyError(403, "Web pages from this origin can't call the proxy. A client that isn't a web page can with an API key, created in Trivium under Settings, API proxy.", "permission_error");
+		}
+		if (!hostAllowed(request.headersDistinct.host, this.saved.lan, this.addresses)) {
+			throw new ProxyError(403, "Requests to this address need an API key. Create one in Trivium under Settings, API proxy.", "permission_error");
+		}
+	}
+
 	private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-		response.on("error", () => {});
 		const path = new URL(request.url ?? "/", "http://localhost").pathname.replace(/\/+$/, "") || "/";
 		const anthropic = /\/messages(\/count_tokens)?$/.test(path) || "anthropic-version" in request.headers;
 		const origin = request.headers.origin;
+		// By origin alone, on answers as on preflights, which never carry a key.
 		if (origin && originAllowed(origin, this.saved.lan)) {
 			response.setHeader("Access-Control-Allow-Origin", origin);
 			response.setHeader("Vary", "Origin");
@@ -427,7 +797,7 @@ export class ProxyService {
 				response.end();
 				return;
 			}
-			if (!this.authorized(request)) throw new ProxyError(401, "Invalid API key. Create one in Trivium under Settings, API proxy.", "authentication_error");
+			this.admit(request);
 			if (request.method === "GET") {
 				if (path === "/") return json(200, { name: "Trivium", status: "running" });
 				if (path === "/v1/models" || path === "/models") return json(200, await this.listing());

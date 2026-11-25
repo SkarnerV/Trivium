@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ProxyKeyInfo, ProxyStatus } from "../../shared/protocol.ts";
+import type { ProxyKeyInfo, ProxyKeyPurpose, ProxyStatus } from "../../shared/protocol.ts";
 import { CloseIcon, CopyIcon, TrashIcon } from "../icons.tsx";
 import { askConfirm, attempt, notify, trivium } from "../store.ts";
 import { messageOf } from "./ModelList.tsx";
@@ -11,14 +11,19 @@ import { t } from "../i18n.tsx";
  */
 export function ProxyKeyDialog({
 	item,
+	required,
+	purpose,
 	onClose,
 	onChanged,
 }: {
 	/** The key to edit; a new one when unset. */
 	item?: ProxyKeyInfo;
+	/** Whether the proxy requires a key, so removing one shuts its clients out. */
+	required: boolean;
+	/** What was switched on that needs the new key. Done along with adding it. */
+	purpose?: ProxyKeyPurpose;
 	onClose: () => void;
-	/** `created` is set when a key was added or given a new value. */
-	onChanged: (status: ProxyStatus, created: boolean) => void;
+	onChanged: (status: ProxyStatus) => void;
 }) {
 	const [name, setName] = useState(item?.name ?? "");
 	const [value, setValue] = useState("");
@@ -33,8 +38,8 @@ export function ProxyKeyDialog({
 		setError(undefined);
 		setSaving(true);
 		try {
-			const result = await trivium.saveProxyKey(item?.id, name, value);
-			onChanged(result.status, Boolean(result.key));
+			const result = await trivium.saveProxyKey(item?.id, name, value, purpose);
+			onChanged(result.status);
 			if (result.key) setCreated(result.key);
 			else onClose();
 		} catch (thrown) {
@@ -48,12 +53,16 @@ export function ProxyKeyDialog({
 		if (!item) return;
 		const ok = await askConfirm({
 			title: t("Remove {name}?", { name: item.name }),
-			message: t("Clients that use this key can no longer connect. Requests already under way finish."),
+			message: t(
+				required
+					? "Clients that use this key can no longer connect. Requests already under way finish."
+					: "No key is required right now, so removing this one may not keep its clients out: any whose requests arrive with localhost or this computer's IP address as their Host can still connect, including through a reverse proxy that rewrites it. To decide who can connect, turn on Require an API key.",
+			),
 			confirmLabel: t("Remove"),
 		});
 		if (!ok) return;
 		try {
-			onChanged(await trivium.removeProxyKey(item.id), false);
+			onChanged(await trivium.removeProxyKey(item.id));
 			onClose();
 		} catch (thrown) {
 			setError(messageOf(thrown));

@@ -14,6 +14,7 @@ import type {
 	PermissionSettings,
 	ProviderInfo,
 	ProxyKeyInfo,
+	ProxyKeyPurpose,
 	ProxyOptions,
 	ProxyStatus,
 	SessionUsage,
@@ -44,6 +45,7 @@ import { providerLogo } from "../provider-logos.ts";
 import { AppIcon, BackIcon, ChartIcon, Chevron, CopyIcon, FolderIcon, InfoIcon, KeyboardIcon, KeyIcon, PlugIcon, PlusIcon, SearchIcon, ServerIcon, SlidersIcon, TriviumIcon, UploadIcon } from "../icons.tsx";
 import {
 	askConfirm,
+	getState,
 	attempt,
 	closeSettings,
 	installUpdate,
@@ -848,8 +850,8 @@ function ApiProxy() {
 	const [port, setPort] = useState("");
 	/** The key being edited: a key, or null for a new one. */
 	const [editing, setEditing] = useState<ProxyKeyInfo | null>();
-	/** The switch was turned on with no key to let anyone in; it turns on once there is one. */
-	const [startAfterKey, setStartAfterKey] = useState(false);
+	/** What was switched on with no key to let anyone in; it turns on along with a new one. */
+	const [purpose, setPurpose] = useState<ProxyKeyPurpose>();
 	const [alias, setAlias] = useState("");
 	const [aliasModel, setAliasModel] = useState("");
 	const savedPort = status?.port;
@@ -861,24 +863,37 @@ function ApiProxy() {
 	}, [savedPort]);
 	if (!status) return null;
 
+	const hasKey = status.keys.some((key) => key.enabled);
 	const apply = async (fn: () => Promise<ProxyStatus>) => {
 		const next = await attempt(fn);
 		if (next) setState({ proxy: next });
 		return next;
 	};
 	const saveOptions = async (patch: Partial<ProxyOptions>) => {
-		const { port: current, openai, anthropic, lan } = status;
-		const next = await apply(() => trivium.saveProxyOptions({ port: current, openai, anthropic, lan, ...patch }));
+		const next = await apply(() => trivium.saveProxyOptions(patch));
 		// A port that didn't take goes back to the one in use.
-		if (!next) setPort(String(status.port));
+		if (!next && patch.port !== undefined) setPort(String(getState().proxy?.port ?? status.port));
+	};
+	/** Asks for the key that what was switched on needs. Keys that are only off can be turned on instead. */
+	const askForKey = async (then: ProxyKeyPurpose) => {
+		if (status.keys.length) {
+			const add = await askConfirm({
+				title: t("Every API key is off"),
+				message: t("Apps need a key that is on to connect. Turn on one of the keys below and try again, or add a new one now."),
+				confirmLabel: t("Add a key"),
+			});
+			if (!add) return;
+		}
+		setPurpose(then);
+		setEditing(null);
 	};
 	const toggle = (on: boolean) => {
-		if (on && !status.keys.some((key) => key.enabled)) {
-			setStartAfterKey(true);
-			setEditing(null);
-			return;
-		}
+		if (on && status.requireKey && !hasKey) return void askForKey("start");
 		void apply(() => trivium.setProxyEnabled(on));
+	};
+	const toggleRequireKey = (on: boolean) => {
+		if (on && !hasKey) return void askForKey("require");
+		void saveOptions({ requireKey: on });
 	};
 	const commitPort = () => {
 		const value = Number(port);
@@ -911,7 +926,15 @@ function ApiProxy() {
 
 			{status.error && <pre className="s-error mono">{status.error}</pre>}
 
-			<Group title={t("Server")} description={t("Each provider's login and key stay in Trivium. Apps connect with a key you create below.")}>
+			<Group
+				title={t("Server")}
+				description={t(
+					status.requireKey
+						? "Each provider's login and key stay in Trivium. Apps connect with a key you create below."
+						: "Each provider's login and key stay in Trivium. Apps connect without a key unless you require one.",
+				)}
+				footer={status.lan && !status.requireKey && t("Any device on your network can use your models, at your cost. Require an API key to choose which apps can.")}
+			>
 				<Item label={t("Run the proxy")} hint={state}>
 					<Switch on={status.enabled} label={t("Run the proxy")} onChange={toggle} />
 				</Item>
@@ -938,11 +961,25 @@ function ApiProxy() {
 				>
 					<Switch on={status.lan} label={t("Allow other devices on your network")} onChange={(on) => void saveOptions({ lan: on })} />
 				</Item>
+				<Item
+					label={t("Require an API key")}
+					hint={t(
+						status.requireKey
+							? "Only apps with one of the keys below can connect."
+							: "Off: requests need no key if they arrive with localhost or this computer's IP address as their Host, which a reverse proxy may rewrite it to. Those with another Host, or from other sites' web pages, are refused without one.",
+					)}
+				>
+					<Switch on={status.requireKey} label={t("Require an API key")} onChange={toggleRequireKey} />
+				</Item>
 			</Group>
 
 			<Group
 				title={t("Connect")}
-				description={t("Give an app the base URL for the format it speaks, one of the keys below, and a model name.")}
+				description={t(
+					status.requireKey
+						? "Give an app the base URL for the format it speaks, one of the keys below, and a model name."
+						: "Give an app the base URL for the format it speaks and a model name. If it insists on a key, any text will do.",
+				)}
 				footer={
 					status.lan &&
 					(status.addresses.length
@@ -956,15 +993,20 @@ function ApiProxy() {
 
 			<Group
 				title={`${t("API keys")}${status.keys.length ? ` · ${status.keys.length}` : ""}`}
-				description={t("A key is shown in full only when it is made. Turn one off or remove it, and its app can't connect.")}
+				description={t(
+					status.requireKey
+						? "A key is shown in full only when it is made. Turn one off or remove it, and its app can't connect."
+						: "No key is required right now. These let in requests that arrive with another Host, and decide who can connect once you require one.",
+				)}
 				aside={
 					<button type="button" className="s-btn accent" onClick={() => setEditing(null)}>
 						<PlusIcon size={12} width={2.6} />
 						{t("Add")}
 					</button>
 				}
+				footer={status.requireKey && status.keys.length > 0 && !hasKey && t("Every key is off, so no app can connect. Turn one on or add another.")}
 			>
-				{!status.keys.length && <div className="s-empty">{t("No keys yet. Apps need one to connect.")}</div>}
+				{!status.keys.length && <div className="s-empty">{t(status.requireKey ? "No keys yet. Apps need one to connect." : "No keys yet. Apps can connect without one.")}</div>}
 				{status.keys.map((key) => (
 					<div key={key.id} className={`s-row s-ext${key.enabled ? "" : " off"}`}>
 						<div className="s-row-text">
@@ -1045,14 +1087,13 @@ function ApiProxy() {
 			{editing !== undefined && (
 				<ProxyKeyDialog
 					item={editing ?? undefined}
+					required={status.requireKey}
+					purpose={purpose}
 					onClose={() => {
 						setEditing(undefined);
-						setStartAfterKey(false);
+						setPurpose(undefined);
 					}}
-					onChanged={(next, created) => {
-						setState({ proxy: next });
-						if (created && startAfterKey && !next.enabled) void apply(() => trivium.setProxyEnabled(true));
-					}}
+					onChanged={(next) => setState({ proxy: next })}
 				/>
 			)}
 		</>

@@ -130,10 +130,18 @@ login show "Plan" instead of a cost.
 **Settings → API proxy** runs a local server that lets other apps use the models you set up in
 Trivium. It answers OpenAI Chat Completions requests at `http://127.0.0.1:8787/v1` and Anthropic
 Messages requests at `http://127.0.0.1:8787`, streaming or not, with tool calls, images and
-thinking. Apps connect with a key you create there, shown once; each provider's own login and key
+thinking. Apps connect without a key, or with any placeholder one, unless you turn on **Require an
+API key**, which lets in only those with a key you create there, shown once. While it is off, the
+proxy goes only by the `Host` and `Origin` a request arrives with: it refuses one without a valid key
+if its `Host` is anything but `localhost`, `host.docker.internal` or, with your network allowed, a
+local IP address, or if its `Origin` is another site's. That guards against web pages, not other
+clients, and a reverse proxy that rewrites `Host` to `localhost` lets everyone it serves in without a
+key. Turn on **Require an API key** to control who can connect; it applies whatever the `Host`.
+Browsers keep other sites' web pages out, with or without a key. Each provider's own login and key
 stay in Trivium. Ask for a model as `provider/id`, as `/v1/models` lists them, or give it another
-name for an app that asks for one of its own, such as `gpt-4o`. The proxy listens on this
-computer only unless you allow your network, which is plain HTTP and for networks you trust.
+name for an app that asks for one of its own, such as `gpt-4o`. The proxy listens on this computer
+only unless you allow your network, which is plain HTTP and for networks you trust; require a key
+there, or any device on it can use your models.
 
 ### Make each mode yours
 

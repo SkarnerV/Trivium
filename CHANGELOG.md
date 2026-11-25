@@ -2,6 +2,13 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **The API proxy no longer needs a key by default.** Apps can connect without a key or with any placeholder one. Settings → API proxy → **Require an API key** brings back the check, and a proxy already set up keeps requiring one after the update until you turn it off. While no key is required, requests addressed by anything but `localhost`, `host.docker.internal` or, with the network allowed, a local IP address are refused unless they carry a valid key, as are requests with another site's `Origin`. A reverse proxy that rewrites `Host` gets past that, so require a key to control who can connect. Browsers still keep other sites' web pages out, with or without a key, since the proxy sends them no CORS headers.
+- **Two Triviums with the same profile no longer undo each other's API proxy settings.** Each change is made to the latest saved settings, and a running proxy applies what the other saved from its next request. While it can't read what was saved, it answers requests with 503.
+
 ## [0.14.1] - 2026-11-25
 
 ### Changed

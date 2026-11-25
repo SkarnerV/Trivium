@@ -3493,6 +3493,10 @@ body.resizing * {
 	color: var(--accent-text);
 }
 
+.tray-row .kind.held {
+	color: var(--muted);
+}
+
 .tray-row .text {
 	flex: 1;
 }

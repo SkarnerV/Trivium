@@ -9,9 +9,12 @@ import {
 	attempt,
 	deleteQueued,
 	holdQueue,
+	joinText,
+	keepUnsent,
+	placeDraft,
 	type QueuedMessage,
 	queueMessage,
-	resumeQueue,
+	sendMessage,
 	sendQueuedNow,
 	setState,
 	showPermissionMode,
@@ -138,12 +141,16 @@ function WorkModePicker({ view }: { view: SessionView }) {
 		onChange={(value) => isWorkMode(value) && void attempt(() => trivium.setWorkMode(view.path, value))} />;
 }
 
-function QueuedRow({ path, message, running, onEdit }: { path: string; message: QueuedMessage; running: boolean; onEdit: () => void }) {
+function QueuedRow({ view, message, held, onEdit }: { view: SessionView; message: QueuedMessage; held: boolean; onEdit: () => void }) {
 	const files = message.attachments.map((item) => item.name).join(", ");
+	const { path, running } = view;
+	const waits = held && !message.sending;
 	return (
 		<div className="tray-row">
 			<QueueIcon />
-			<span className="kind">{t("Queued")}</span>
+			<span className={`kind ${waits ? "held" : ""}`} title={waits ? t("Goes out after you send or queue another message") : undefined}>
+				{t(message.sending ? "Sending" : held ? "Held" : "Queued")}
+			</span>
 			<span className="text ellipsis" title={[message.text, files].filter(Boolean).join("\n")}>
 				{message.text || files}
 			</span>
@@ -152,29 +159,35 @@ function QueuedRow({ path, message, running, onEdit }: { path: string; message: 
 					<PaperclipIcon size={12} /> {message.attachments.length}
 				</span>
 			)}
-			<button
-				type="button"
-				className="tray-btn"
-				title={t(running ? "Send into the running turn now" : "Send now")}
-				onClick={() => void sendQueuedNow(path, message.id)}
-			>
-				<SteerIcon />
-				{t(running ? "Steer" : "Send")}
-			</button>
-			<button type="button" className="mini-btn" aria-label={t("Edit")} title={t("Edit")} onClick={onEdit}>
-				<PenIcon size={13} />
-			</button>
-			<button type="button" className="mini-btn" aria-label={t("Delete queued message")} title={t("Delete")} onClick={() => deleteQueued(path, message.id)}>
-				<TrashIcon size={13} />
-			</button>
+			{!message.sending && (
+				<>
+					<button
+						type="button"
+						className="tray-btn"
+						title={t(running ? "Send into the running turn now" : view.compacting ? "Send first, once compacting is done" : "Send now")}
+						onClick={() => void sendQueuedNow(path, message.id)}
+					>
+						<SteerIcon />
+						{t(running ? "Steer" : view.compacting ? "Send first" : "Send")}
+					</button>
+					<button type="button" className="mini-btn" aria-label={t("Edit")} title={t("Edit")} onClick={onEdit}>
+						<PenIcon size={13} />
+					</button>
+					<button type="button" className="mini-btn" aria-label={t("Delete queued message")} title={t("Delete")} onClick={() => deleteQueued(path, message.id)}>
+						<TrashIcon size={13} />
+					</button>
+				</>
+			)}
 		</div>
 	);
 }
 
 function Tray({ view, onEdit }: { view: SessionView; onEdit: (message: QueuedMessage) => void }) {
 	const queued = useStore((s) => s.queued[view.path]) ?? [];
-	// What pi holds itself: steers waiting for the current tool to finish, and follow-ups an extension queued.
-	const { steering, followUp } = view.running ? view.queue : { steering: [], followUp: [] };
+	const held = useStore((s) => s.held[view.path]) ?? false;
+	// What pi holds itself: steers waiting for the current tool to finish, and follow-ups an extension queued. Ones a
+	// stopped run left over go into the next.
+	const { steering, followUp } = view.queue;
 	if (!view.compacting && !steering.length && !followUp.length && !queued.length) return null;
 	const row = (kind: "steer" | "queue", text: string, index: number) => (
 		<div key={`${kind}-${index}`} className="tray-row">
@@ -183,7 +196,7 @@ function Tray({ view, onEdit }: { view: SessionView; onEdit: (message: QueuedMes
 			<span className="text ellipsis" title={text}>
 				{text}
 			</span>
-			<span className="when">{t(kind === "steer" ? "after this tool" : "after this run")}</span>
+			<span className="when">{t(!view.running ? "with your next message" : kind === "steer" ? "after this tool" : "after this run")}</span>
 		</div>
 	);
 	return (
@@ -196,7 +209,7 @@ function Tray({ view, onEdit }: { view: SessionView; onEdit: (message: QueuedMes
 			{steering.map((text, index) => row("steer", text, index))}
 			{followUp.map((text, index) => row("queue", text, index))}
 			{queued.map((message) => (
-				<QueuedRow key={message.id} path={view.path} message={message} running={view.running} onEdit={() => onEdit(message)} />
+				<QueuedRow key={message.id} view={view} message={message} held={held} onEdit={() => onEdit(message)} />
 			))}
 		</div>
 	);
@@ -206,7 +219,7 @@ function Tray({ view, onEdit }: { view: SessionView; onEdit: (message: QueuedMes
 export function Composer({ view, focus = true }: { view: SessionView; focus?: boolean }) {
 	// Takes a draft left for this session, such as from "Open in Write" or an earlier message taken back to edit.
 	const draft = useStore((s) => s.drafts[view.path]);
-	const [text, setText] = useState(() => draft?.text ?? "");
+	const [text, setText] = useState(() => (draft && !draft.place ? draft.text : ""));
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const running = view.running;
 	// Stopping a run also stops a compaction, including one started by /compact while nothing ran.
@@ -217,22 +230,24 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 	// Keeps an unsent message for when the user comes back to this session.
 	const files = useAttachments((attachments) => {
 		if (!unsent.current.trim() && !attachments.length) return;
-		setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: unsent.current, attachments } } }));
+		keepUnsent(view.path, { text: unsent.current, attachments });
 	});
 	useEffect(() => {
 		if (!draft) return;
-		if (draft.append) {
-			// A draft offered from elsewhere, such as a subagent's session, must not cost the user what they had typed.
-			setText((current) => (current.trim() ? `${current.trimEnd()}\n${draft.text}` : draft.text));
+		if (draft.place) {
+			// A draft offered from elsewhere, or a message that did not go out, must not cost the user what they have typed.
+			setText((current) => placeDraft({ text: current, attachments: [] }, draft).text);
+			files.restore((items) => placeDraft({ text: "", attachments: items }, draft).attachments);
 		} else {
 			setText(draft.text);
 			files.replace(draft.attachments);
 		}
+		// One that came back on its own leaves the keyboard where the user has it.
+		if (draft.place !== "before") ref.current?.focus();
 		setState((s) => {
 			const { [view.path]: _, ...rest } = s.drafts;
 			return { drafts: rest };
 		});
-		ref.current?.focus();
 	}, [draft]);
 	const [dragging, setDragging] = useState(false);
 	const models = useStore((s) => s.models);
@@ -258,22 +273,17 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 		const attached = files.items;
 		if (!message && !attached.length) return;
 		setText("");
-		const ids = files.takeIds();
+		files.take();
 		// A message written while the session is busy waits above the box for the run to end.
 		if (mode === "prompt" && stoppable) {
 			queueMessage(view.path, { text: message, attachments: attached });
 			return;
 		}
-		if (mode === "prompt") resumeQueue(view.path);
-		const result = await attempt(() => trivium.send(view.path, message, mode, ids).then(() => true));
-		if (!result) {
-			setText(message);
-			files.restore(attached);
-		}
+		await sendMessage(view.path, message, mode, attached);
 	};
 
 	const stop = () => {
-		// What the user queued waits for them instead of going out once the run stops.
+		// What the user queued so far waits for them instead of going out once the run stops.
 		holdQueue(view.path);
 		void attempt(() => trivium.abort(view.path));
 	};
@@ -281,8 +291,8 @@ export function Composer({ view, focus = true }: { view: SessionView; focus?: bo
 	/** Puts a queued message back in the box, in front of whatever is being written there. */
 	const edit = (message: QueuedMessage) => {
 		if (!unqueueMessage(view.path, message.id)) return;
-		setText((current) => (current.trim() ? `${message.text}\n\n${current}` : message.text));
-		files.restore([...message.attachments, ...files.items]);
+		setText((current) => joinText(message.text, current, "\n\n"));
+		files.restore((items) => [...message.attachments, ...items]);
 		ref.current?.focus();
 	};
 

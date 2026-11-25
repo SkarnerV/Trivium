@@ -294,11 +294,17 @@ function registerIpc(): void {
 	// A forked message comes back with its attachments stored again, so it can be sent as it was.
 	const draftOf = (rewound: Rewound | undefined) =>
 		rewound && { view: rewound.view, draft: { text: rewound.prompt, attachments: attachments.fromMessage(rewound.files) } };
-	handle("trivium:editMessage", (path: string, run: number, text: string) => host.editMessage(path, run, text));
+	handle("trivium:editMessage", async (path: string, run: number, text: string) => {
+		const result = await host.editMessage(path, run, text);
+		if (result?.outcome !== "returned") return result;
+		const { prompt, files, ...rest } = result;
+		return { ...rest, draft: { text: prompt, attachments: attachments.fromMessage(files) } };
+	});
 	handle("trivium:fork", async (path: string, run: number) => draftOf(await host.fork(path, run)));
 	handle("trivium:send", async (path: string, text: string, mode: "prompt" | "steer" | "followUp", ids?: string[]) => {
-		await host.send(path, text, mode, ids?.length ? attachments.build(ids) : undefined);
-		if (ids?.length) attachments.drop(ids);
+		const result = await host.send(path, text, mode, ids?.length ? attachments.build(ids) : undefined);
+		if (ids?.length && result.outcome !== "stopped") attachments.drop(ids);
+		return result;
 	});
 	handle("trivium:pickAttachments", async () => {
 		const result = await dialog.showOpenDialog(window!, { title: t("Attach files"), properties: ["openFile", "multiSelections"] });

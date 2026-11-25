@@ -144,7 +144,7 @@ export function FilesBody({ view, git }: { view: SessionView; git: GitStatus | n
 		setPicked(rel);
 		setMode("file");
 	};
-	const mention = (rel: string) => setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: `@${rel} `, attachments: [], append: true } } }));
+	const mention = (rel: string) => setState((s) => ({ drafts: { ...s.drafts, [view.path]: { text: `@${rel} `, attachments: [], place: "after" } } }));
 	const openInEditor = (rel: string) => void attempt(() => trivium.openInEditor(`${view.cwd}/${rel}`));
 
 	const fileRow = (rel: string, depth: number, dir?: string, dim?: boolean) => {

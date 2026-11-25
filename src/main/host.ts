@@ -52,6 +52,9 @@ import type {
 	ProjectFile,
 	ProjectTree,
 	QueueInfo,
+	SendOutcome,
+	SendResult,
+	SessionStatus,
 	SessionSummary,
 	SessionView,
 	SkillDraft,
@@ -73,6 +76,7 @@ import { DEFAULT_PERMISSION_MODE } from "../shared/permissions.ts";
 import { bindWithChildGate, CHILD_GATE_FILE } from "./session-binding.ts";
 import { AgentCountWatch, agentsOf, BackgroundRuns, hasLiveAgents, markBackground } from "./background-runs.ts";
 import { delegationHooks } from "./delegation-hooks.ts";
+import { Dispatcher } from "./dispatch.ts";
 import { HandoffCache } from "./handoffs.ts";
 import { agentSteps } from "../shared/agent-counts.ts";
 import { requestBackgroundStop, sessionUsage, stopTarget, subagentRpc, SUPERVISOR_TOOL } from "./subagents.ts";
@@ -122,9 +126,13 @@ interface Live {
 	session: AgentSession;
 	tracker: RunTracker;
 	changes: ChangeTracker;
+	/** From agent_start to agent_settled. pi is busy from before that, which isRunning counts in. */
 	running: boolean;
 	/** Between compaction_start and compaction_end, whether started by /compact or automatically. */
 	compacting: boolean;
+	/** What the host is doing with it that unloading it would cut off, such as starting it or sending an edit. */
+	holds: number;
+	dispatcher: Dispatcher;
 	unread: boolean;
 	unsubscribe: () => void;
 	flushTimer?: ReturnType<typeof setTimeout>;
@@ -144,6 +152,16 @@ export interface Rewound {
 	view: SessionView;
 	prompt: string;
 	files: MessageFile[];
+}
+
+/** An edited message that did not go out once the conversation had gone back for it. */
+export interface Unsent {
+	outcome: "returned";
+	status: SessionStatus;
+	prompt: string;
+	files: MessageFile[];
+	/** Unset when the user stopped it. */
+	error?: string;
 }
 
 type UserEntry = SessionMessageEntry & { message: Extract<AgentMessage, { role: "user" }> };
@@ -236,6 +254,11 @@ function titleOf(text: string | undefined): string {
  */
 export class SessionHost {
 	private live = new Map<string, Live>();
+	/** Sessions being loaded, so that opening one twice loads it once. */
+	private loading = new Map<string, Promise<Live>>();
+	private deleting = new Set<string>();
+	/** Never starts over, so what a session said before it was unloaded counts as older than what it says once reopened. */
+	private rev = 0;
 	private appIndex: Record<string, AppId> = {};
 	private workModes: WorkModeIndex;
 	/** Sessions unloaded before their first message was saved, so they can start again where they were. */
@@ -293,7 +316,8 @@ export class SessionHost {
 		const live = this.require(path);
 		if (live.app !== "code" || isChat(live.cwd) || !isWorkMode(mode)) return;
 		await this.workModes.set(live.session.sessionId, mode);
-		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
+		const now = this.live.get(path);
+		if (now) await this.emitView(now);
 	}
 
 	async init(): Promise<void> {
@@ -327,7 +351,7 @@ export class SessionHost {
 				app: this.appIndex[info.id] ?? "code",
 				modified: info.modified.getTime(),
 				messageCount: info.messageCount,
-				running: live?.running ?? false,
+				running: live ? this.isRunning(live) : false,
 				unread: live?.unread ?? false,
 				chat: isChat(info.cwd),
 				archived: archived.has(info.id),
@@ -344,7 +368,7 @@ export class SessionHost {
 				app: live.app,
 				modified: Date.now(),
 				messageCount: live.session.messages.length,
-				running: live.running,
+				running: this.isRunning(live),
 				unread: live.unread,
 				chat: isChat(live.cwd),
 				archived: archived.has(live.session.sessionId),
@@ -371,7 +395,7 @@ export class SessionHost {
 		if (live.app !== "code" || live.agentTimer) return;
 		live.agentTimer = setTimeout(() => {
 			live.agentTimer = undefined;
-			if (!this.live.has(live.path)) return;
+			if (!this.isCurrent(live)) return;
 			if (live.agentWatch.changed(this.attentionOf(live).agents)) this.scheduleList();
 		}, AGENTS_MS);
 	}
@@ -406,27 +430,44 @@ export class SessionHost {
 	}
 
 	async openSession(path: string): Promise<SessionView> {
-		let live = this.live.get(path);
-		if (live) live.lastActive = Date.now();
-		if (!live) {
-			const unsaved = this.unsaved.get(path);
-			// pi would start a new, empty session at a path that is gone, and it would show under Code.
-			if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
-			const manager = SessionManager.open(path, undefined, unsaved?.cwd);
-			const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
-			await this.workModes.reopened(manager.getSessionId(), unsaved?.workMode);
-			live = await this.start(app, manager.getCwd(), manager);
-			if (unsaved) {
-				this.unsaved.delete(path);
-				this.appIndex[manager.getSessionId()] = app;
-				await this.saveIndex();
+		for (;;) {
+			const live = await this.load(path);
+			live.lastActive = Date.now();
+			const changes = await live.changes.list();
+			// Unloaded meanwhile, it has nothing to show; another may be in its place already.
+			if (!this.isCurrent(live)) continue;
+			if (live.unread) {
+				live.unread = false;
+				this.scheduleList();
 			}
+			return this.view(live, changes);
 		}
-		if (live.unread) {
-			live.unread = false;
-			this.scheduleList();
+	}
+
+	private async load(path: string): Promise<Live> {
+		if (this.deleting.has(path)) throw new Error(t("This session no longer exists."));
+		const known = this.loading.get(path) ?? this.live.get(path);
+		if (known) return known;
+		const loading = this.startAgain(path).finally(() => this.loading.delete(path));
+		this.loading.set(path, loading);
+		return loading;
+	}
+
+	/** Starts a session from its file, or as it was when it has none yet. */
+	private async startAgain(path: string): Promise<Live> {
+		const unsaved = this.unsaved.get(path);
+		// pi would start a new, empty session at a path that is gone, and it would show under Code.
+		if (!unsaved && !existsSync(path)) throw new Error(t("This session no longer exists."));
+		const manager = SessionManager.open(path, undefined, unsaved?.cwd);
+		const app = unsaved?.app ?? this.appIndex[manager.getSessionId()] ?? "code";
+		await this.workModes.reopened(manager.getSessionId(), unsaved?.workMode);
+		const live = await this.start(app, manager.getCwd(), manager);
+		if (unsaved) {
+			this.unsaved.delete(path);
+			this.appIndex[manager.getSessionId()] = app;
+			await this.saveIndex();
 		}
-		return this.view(live, await live.changes.list());
+		return live;
 	}
 
 	async newSession(input: NewSessionInput): Promise<SessionView> {
@@ -435,62 +476,110 @@ export class SessionHost {
 		const manager = SessionManager.create(cwd);
 		await this.workModes.created(manager.getSessionId(), input.app, Boolean(input.cwd), this.settings.app(input.app).workMode);
 		const live = await this.start(input.app, cwd, manager, true);
-		this.appIndex[live.session.sessionId] = input.app;
-		await this.saveIndex();
-		if (input.message?.trim()) await this.send(live.path, input.message, "prompt");
-		this.scheduleList();
-		return this.view(live, []);
+		return this.holding(live, async () => {
+			this.appIndex[live.session.sessionId] = input.app;
+			await this.saveIndex();
+			this.requireCurrent(live);
+			// The session shows at once; its first message may wait for extensions and compaction.
+			if (input.message?.trim()) void this.sendFirst(live, input.message);
+			this.scheduleList();
+			return this.view(live, []);
+		});
 	}
 
+	/** A new session's first message. One that does not go out shows in the message box, where it can be sent again. */
+	private async sendFirst(live: Live, text: string): Promise<void> {
+		try {
+			const { outcome } = await this.sendTo(live, text, "prompt");
+			if (outcome !== "stopped") return;
+		} catch (error) {
+			this.failed(error);
+		}
+		if (this.isCurrent(live)) this.emit({ type: "returned", path: live.path, draft: { text, attachments: [] } });
+	}
+
+	/** Resolves once the message has an outcome; its run goes on by itself. Rejects when it reached none and will not. */
 	async send(
 		path: string,
 		text: string,
 		mode: "prompt" | "steer" | "followUp",
 		attachments?: { prefix: string; images: ImageContent[] },
-	): Promise<void> {
-		const live = this.require(path);
-		const { session } = live;
-		if (text.startsWith("/") && !attachments?.prefix) {
-			this.runCommand(live, text, mode);
-			return;
-		}
-		// Attached files go in front of the message as <file> tags, like pi's CLI sends them.
-		const message = (attachments?.prefix ?? "") + text;
-		const images = attachments?.images.length ? attachments.images : undefined;
-		if (mode === "steer") {
-			await session.steer(message, images);
-			return;
-		}
-		// A message sent while a run is going waits for the run to finish.
-		if (mode === "followUp" || live.running) {
-			await session.followUp(message, images);
-			return;
-		}
-		// prompt() resolves when the run finishes, so the run continues in the background.
-		void session.prompt(message, { images }).catch((error: unknown) => {
-			this.notice(error instanceof Error ? error.message : String(error), "error");
+	): Promise<SendResult> {
+		return this.sendTo(this.require(path), text, mode, attachments);
+	}
+
+	private sendTo(live: Live, text: string, mode: "prompt" | "steer" | "followUp", attachments?: { prefix: string; images: ImageContent[] }): Promise<SendResult> {
+		return this.holding(live, async () => {
+			try {
+				const outcome =
+					text.startsWith("/") && !attachments
+						? await this.runCommand(live, text, mode)
+						: // Attached files go in front of the message as <file> tags, like pi's CLI sends them.
+							await this.dispatch(live, (attachments?.prefix ?? "") + text, mode, attachments?.images.length ? attachments.images : undefined);
+				this.requireCurrent(live);
+				if (outcome === "stopped") this.emitStatus(live);
+				return { outcome, status: this.status(live) };
+			} catch (error) {
+				// A run that could not start may have shown as running while pi prepared it.
+				this.emitStatusOf(live);
+				throw error;
+			}
 		});
+	}
+
+	/** A message sent while a run is going steers it or waits for it to finish. */
+	private dispatch(live: Live, text: string, mode: "prompt" | "steer" | "followUp", images?: ImageContent[]): Promise<SendOutcome> {
+		return live.dispatcher.send(text, { mode: mode === "steer" ? "steer" : "followUp", images });
+	}
+
+	/** Keeps a session from being unloaded while the host works on it. */
+	private async holding<T>(live: Live, work: () => Promise<T>): Promise<T> {
+		live.holds++;
+		try {
+			return await work();
+		} finally {
+			live.holds--;
+		}
 	}
 
 	/**
 	 * Sends a new version of an earlier message: the conversation goes back to just before it, then the new
 	 * text goes out with the files and images the original carried. pi keeps the replies that followed on
-	 * their own branch of the session file. Files on disk stay as they are.
+	 * their own branch of the session file. Files on disk stay as they are. Undefined when an extension refused.
 	 */
-	async editMessage(path: string, index: number, text: string): Promise<void> {
+	async editMessage(path: string, index: number, text: string): Promise<SendResult | Unsent | undefined> {
 		const live = this.require(path);
-		if (live.running) throw new Error(t("Stop the run before editing an earlier message."));
-		const entry = this.userEntry(live, index);
-		const original = attachmentsOf(entry.message.content);
-		const attached = original.prefix || original.images.length ? original : undefined;
-		if (!text.trim() && !attached) throw new Error(t("Write a message to send."));
-		const result = await live.session.navigateTree(entry.id);
-		if (result.cancelled) return;
-		live.tracker = new RunTracker(branchMessages(live.session.sessionManager.getBranch()), this.thumbnail, live.session.sessionManager.getSessionFile() ?? path);
-		// The shorter transcript must reach the window before the new run's events do.
-		this.emit({ type: "view", view: this.view(live, await live.changes.list()) });
-		this.scheduleList();
-		await this.send(path, text, "prompt", attached);
+		return this.holding(live, async () => {
+			// Read first, so that nothing is waited for between going back and sending.
+			const changes = await live.changes.list();
+			this.requireCurrent(live);
+			if (this.isRunning(live)) throw new Error(t("Stop the run before editing an earlier message."));
+			const { content } = this.userEntry(live, index).message;
+			const original = attachmentsOf(content);
+			const attached = original.prefix || original.images.length ? original : undefined;
+			if (!text.trim() && !attached) throw new Error(t("Write a message to send."));
+			const result = await live.session.navigateTree(this.userEntry(live, index).id);
+			this.requireCurrent(live);
+			if (result.cancelled) return undefined;
+			live.tracker = new RunTracker(branchMessages(live.session.sessionManager.getBranch()), this.thumbnail, live.session.sessionManager.getSessionFile() ?? path);
+			// The shorter transcript must reach the window before the new run's events do.
+			this.emit({ type: "view", view: this.view(live, changes) });
+			this.scheduleList();
+			let failure: unknown;
+			try {
+				const sent = await this.sendTo(live, text, "prompt", attached);
+				if (sent.outcome !== "stopped") return sent;
+			} catch (error) {
+				this.requireCurrent(live);
+				failure = error;
+			}
+			// The message went with the conversation, so its files and images go back with the new text.
+			const { files } = messageFiles(content);
+			const tagged = files.filter((file) => file.image).length;
+			const untagged = original.images.slice(tagged).map((image): MessageFile => ({ label: "Image", image }));
+			const error = failure === undefined ? undefined : failure instanceof Error ? failure.message : String(failure);
+			return { outcome: "returned", status: this.status(live), prompt: text, files: [...files, ...untagged], error };
+		});
 	}
 
 	/**
@@ -517,10 +606,13 @@ export class SessionHost {
 		}
 		await this.workModes.forked(live.session.sessionId, manager.getSessionId());
 		const forked = await this.start(live.app, manager.getCwd(), manager);
-		this.appIndex[forked.session.sessionId] = live.app;
-		await this.saveIndex();
-		this.scheduleList();
-		return { view: this.view(forked, []), ...messageFiles(entry.message.content) };
+		return this.holding(forked, async () => {
+			this.appIndex[forked.session.sessionId] = live.app;
+			await this.saveIndex();
+			this.requireCurrent(forked);
+			this.scheduleList();
+			return { view: this.view(forked, []), ...messageFiles(entry.message.content) };
+		});
 	}
 
 	/** The user message a run began with, on the session's current branch. */
@@ -542,23 +634,21 @@ export class SessionHost {
 	 * which runs extension commands at once, even mid-run, and expands prompt templates and skills.
 	 * steer() would reject an extension command.
 	 */
-	private runCommand(live: Live, text: string, mode: "prompt" | "steer" | "followUp"): void {
+	private async runCommand(live: Live, text: string, mode: "prompt" | "steer" | "followUp"): Promise<SendOutcome> {
 		const { session } = live;
 		const [, name = "", args = ""] = /^\/(\S*)\s*([\s\S]*)$/.exec(text) ?? [];
-		const fail = (error: unknown) => this.notice(error instanceof Error ? error.message : String(error), "error");
 		if (name === "compact") {
-			if (live.running) throw new Error(t("Wait for the run to finish, or stop it, before compacting."));
+			if (this.isRunning(live)) throw new Error(t("Wait for the run to finish, or stop it, before compacting."));
 			// compaction_start and compaction_end show the progress and the outcome, as they do for automatic compaction.
-			void session.compact(args.trim() || undefined).catch(() => {});
-			return;
+			await session.compact(args.trim() || undefined).catch(() => {});
+			return "handled";
 		}
 		if (name === "name") {
 			if (!args.trim()) throw new Error(t("Give the session a name: /name <title>"));
 			session.setSessionName(args.trim());
-			return;
+			return "handled";
 		}
-		const options = live.running ? { streamingBehavior: mode === "steer" ? ("steer" as const) : ("followUp" as const) } : undefined;
-		void session.prompt(text, options).catch(fail);
+		return this.dispatch(live, text, mode);
 	}
 
 	commands(path: string): SlashCommand[] {
@@ -606,8 +696,11 @@ export class SessionHost {
 		}
 	}
 
+	/** Stops the run, and gives back messages that have not reached one yet. */
 	async abort(path: string): Promise<void> {
-		await this.require(path).session.abort();
+		const live = this.require(path);
+		live.dispatcher.stop();
+		await live.session.abort();
 	}
 
 	async setModel(path: string, modelKey: string, thinkingLevel: string): Promise<void> {
@@ -628,7 +721,7 @@ export class SessionHost {
 
 	async revertChanges(path: string, files?: string[]): Promise<FileChange[]> {
 		const live = this.require(path);
-		if (live.running) throw new Error(t("Stop the run before reverting its changes."));
+		if (this.isRunning(live)) throw new Error(t("Stop the run before reverting its changes."));
 		await live.changes.revert(files);
 		return this.emitChanges(live);
 	}
@@ -680,7 +773,7 @@ export class SessionHost {
 		expect: { del: string; ins: string },
 	): Promise<FileReview> {
 		const live = this.require(path);
-		if (live.running && action === "reject") throw new Error(t("Stop the run before rejecting changes."));
+		if (this.isRunning(live) && action === "reject") throw new Error(t("Stop the run before rejecting changes."));
 		const review = await live.changes.resolve(file, id, action, expect);
 		await this.emitChanges(live);
 		return review;
@@ -688,9 +781,16 @@ export class SessionHost {
 
 	private async emitChanges(live: Live): Promise<FileChange[]> {
 		const changes = await live.changes.list();
-		this.emit({ type: "changes", path: live.path, changes });
-		this.scheduleGit(live);
+		if (this.isCurrent(live)) {
+			this.emit({ type: "changes", path: live.path, rev: ++this.rev, changes });
+			this.scheduleGit(live);
+		}
 		return changes;
+	}
+
+	private async emitView(live: Live): Promise<void> {
+		const changes = await live.changes.list();
+		if (this.isCurrent(live)) this.emit({ type: "view", view: this.view(live, changes) });
 	}
 
 	/** Chats and the Research and Write apps have no repository to show. */
@@ -765,7 +865,7 @@ export class SessionHost {
 					await unstageFiles(git.root, listed(action.files).map((file) => file.rel));
 					break;
 				case "discard":
-					if (live.running) throw new Error(t("Stop the run before discarding changes."));
+					if (this.isRunning(live)) throw new Error(t("Stop the run before discarding changes."));
 					await discardFiles(git.root, listed(action.files));
 					break;
 				case "commit": {
@@ -841,7 +941,7 @@ export class SessionHost {
 
 	/** Takes files committed since the last look off the session's list. A run's commit waits for the run to end, when its edits have settled. */
 	private async dropCommitted(live: Live): Promise<void> {
-		if (!this.hasGit(live) || live.running) return;
+		if (!this.hasGit(live) || this.isRunning(live)) return;
 		if (await live.changes.dropCommitted()) await this.emitChanges(live);
 	}
 
@@ -850,12 +950,12 @@ export class SessionHost {
 		if (!this.hasGit(live) || live.gitTimer) return;
 		live.gitTimer = setTimeout(() => {
 			live.gitTimer = undefined;
-			if (!this.live.has(live.path)) return;
+			if (!this.isCurrent(live)) return;
 			this.dropCommitted(live)
 				.then(() => readGitStatus(live.cwd))
 				.then((git) => {
 					const text = JSON.stringify(git);
-					if (text === live.git) return;
+					if (text === live.git || !this.isCurrent(live)) return;
 					live.git = text;
 					this.emit({ type: "git", path: live.path, git });
 				})
@@ -935,7 +1035,7 @@ export class SessionHost {
 		const moved: string[] = [];
 		for (const path of paths) {
 			const live = this.live.get(path);
-			if (archived && live?.running) throw new Error(t("“{title}” is still running. Stop it before archiving.", { title: this.titleFor(live) }));
+			if (archived && live && this.isRunning(live)) throw new Error(t("“{title}” is still running. Stop it before archiving.", { title: this.titleFor(live) }));
 			const id = this.idOf(path);
 			if (!id) continue;
 			if (archived) ids.add(id);
@@ -954,28 +1054,42 @@ export class SessionHost {
 	async deleteSessions(paths: string[], trash: (path: string) => Promise<void>): Promise<string[]> {
 		for (const path of paths) {
 			const live = this.live.get(path);
-			if (live?.running) throw new Error(t("“{title}” is still running. Stop it before deleting.", { title: this.titleFor(live) }));
+			if (live && this.isRunning(live)) throw new Error(t("“{title}” is still running. Stop it before deleting.", { title: this.titleFor(live) }));
+		}
+		const idOf = new Map(paths.map((path) => [path, this.idOf(path)]));
+		const unloaded: string[] = [];
+		// All at once, before any of them can start a run, and none is opened again meanwhile.
+		for (const path of paths) {
+			this.deleting.add(path);
+			const live = this.live.get(path);
+			if (!live) continue;
+			this.unload(live);
+			unloaded.push(path);
 		}
 		const deleted: string[] = [];
 		const ids = new Set<string>();
-		for (const path of paths) {
-			const live = this.live.get(path);
-			const id = this.idOf(path);
-			if (live) this.unload(live);
-			await this.services.stopSession(path);
-			this.unsaved.delete(path);
-			this.viewing.delete(path);
-			// A new session has no file until its first message.
-			if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
-			if (id) {
-				ids.add(id);
-				delete this.appIndex[id];
-				await this.workModes.delete(id);
-				await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
-				// And what it kept to tell what the session's commands changed.
-				for (const kept of ["git", "blobs"]) await rm(join(triviumDir, "changes", `${id}.${kept}`), { recursive: true, force: true, maxRetries: 3 });
+		try {
+			for (const path of paths) {
+				const id = idOf.get(path);
+				await this.services.stopSession(path);
+				this.viewing.delete(path);
+				// A new session has no file until its first message.
+				if (!path.startsWith("memory:") && existsSync(path)) await trash(path);
+				this.unsaved.delete(path);
+				if (id) {
+					ids.add(id);
+					delete this.appIndex[id];
+					await this.workModes.delete(id);
+					await rm(join(triviumDir, "changes", `${id}.json`), { force: true });
+					// And what it kept to tell what the session's commands changed.
+					for (const kept of ["git", "blobs"]) await rm(join(triviumDir, "changes", `${id}.${kept}`), { recursive: true, force: true, maxRetries: 3 });
+				}
+				deleted.push(path);
 			}
-			deleted.push(path);
+		} finally {
+			for (const path of paths) this.deleting.delete(path);
+			const left = unloaded.filter((path) => !deleted.includes(path));
+			if (left.length) this.emit({ type: "unloaded", paths: left });
 		}
 		await this.saveIndex();
 		await this.settings.update({ archivedSessions: this.settings.get().archivedSessions.filter((id) => !ids.has(id)) });
@@ -985,7 +1099,9 @@ export class SessionHost {
 
 	/** Unloads a session from memory. Its file stays; opening it again reloads it. Its services keep running. */
 	private unload(live: Live): void {
+		live.dispatcher.close();
 		this.broker.cancelAll(live.path);
+		clearTimeout(live.flushTimer);
 		clearTimeout(live.gitTimer);
 		clearTimeout(live.agentTimer);
 		live.unsubscribe();
@@ -1002,26 +1118,31 @@ export class SessionHost {
 		return hasLiveAgents(live.tracker.all(), live.background);
 	}
 
+	/** Whether unloading a session would cut something off or lose it, such as messages a stopped run left with pi. */
+	private inUse(live: Live): boolean {
+		return this.isRunning(live) || live.holds > 0 || live.dispatcher.busy || live.session.agent.hasQueuedMessages() || this.hasLiveAgents(live);
+	}
+
 	private unloadIdle(): void {
 		const minutes = this.settings.get().idleMinutes;
 		if (!minutes) return;
 		const cutoff = Date.now() - minutes * 60_000;
 		const paths: string[] = [];
 		for (const live of this.live.values()) {
-			if (live.running || this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
+			if (this.viewing.has(live.path) || live.lastActive > cutoff || live.path.startsWith("memory:")) continue;
 			if (this.services.hasBackground(live.path)) continue;
-			if (this.hasLiveAgents(live)) continue;
+			if (this.inUse(live)) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
 		if (paths.length) this.emit({ type: "unloaded", paths });
 	}
 
-	/** Reloads an app's idle sessions so extension and model settings take effect. Running sessions keep their setup. */
+	/** Reloads an app's idle sessions so extension and model settings take effect. Those in use keep their setup. */
 	reloadApp(app: AppId): string[] {
 		const paths: string[] = [];
 		for (const live of [...this.live.values()]) {
-			if (live.app !== app || live.running || live.path.startsWith("memory:") || this.hasLiveAgents(live)) continue;
+			if (live.app !== app || live.path.startsWith("memory:") || this.inUse(live)) continue;
 			this.unload(live);
 			paths.push(live.path);
 		}
@@ -1185,7 +1306,7 @@ export class SessionHost {
 			skills,
 			prompts: loader.getPrompts().prompts.length,
 			systemPrompt: profileFor(app).appendSystemPrompt,
-			running: lives.filter((live) => live.running).length,
+			running: lives.filter((live) => this.isRunning(live)).length,
 			loaded: lives.length,
 			packages: new DefaultPackageManager({ cwd: projectDir, agentDir: this.agentDir, settingsManager })
 				.listConfiguredPackages()
@@ -1254,6 +1375,7 @@ export class SessionHost {
 		for (const pending of [...this.trustAnswers.values()]) pending.resolve(undefined);
 		this.broker.cancelAll();
 		for (const live of this.live.values()) {
+			live.dispatcher.close();
 			live.unsubscribe();
 			live.session.dispose();
 		}
@@ -1357,7 +1479,7 @@ export class SessionHost {
 			onChange: () => {
 				const live = this.live.get(sessionPath);
 				if (!live) return;
-				void live.changes.list().then((list) => this.emit({ type: "view", view: this.view(live, list) }), () => {});
+				void this.emitView(live).catch(() => {});
 				this.noteAgents(live);
 			},
 		});
@@ -1403,7 +1525,7 @@ export class SessionHost {
 						const live = this.live.get(sessionPath);
 						if (!live) return;
 						await this.emitChanges(live);
-						this.emit({ type: "view", view: this.view(live, await changes.list()) });
+						await this.emitView(live);
 						// The sidebar counts this session's agents too, also while it is not on screen.
 						this.noteAgents(live);
 					},
@@ -1452,6 +1574,12 @@ export class SessionHost {
 			changes,
 			running: false,
 			compacting: false,
+			// Until its extensions are ready.
+			holds: 1,
+			dispatcher: new Dispatcher(session, (error) => {
+				this.failed(error);
+				this.emitStatusOf(live);
+			}),
 			unread: false,
 			unsubscribe: () => {},
 			sentRuns: 0,
@@ -1459,7 +1587,14 @@ export class SessionHost {
 		};
 		live.sentRuns = live.tracker.length;
 		this.live.set(path, live);
-		const release = await bindWithChildGate({
+		// Before the extensions are bound: one can start a run as soon as its session starts.
+		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+		let release = () => {};
+		live.unsubscribe = () => {
+			unsubscribe();
+			release();
+		};
+		release = await bindWithChildGate({
 			app,
 			sessionId: session.sessionId,
 			gatePath: fileURLToPath(new URL(`./${CHILD_GATE_FILE}`, import.meta.url)),
@@ -1469,20 +1604,30 @@ export class SessionHost {
 				await session.bindExtensions({
 					uiContext: createUiContext(this.broker, () => path, (message, level) => this.extensionNotice(message, level)),
 					mode: "rpc",
-					onError: (error) => this.notice(`${error.extensionPath}: ${error.error}`, "error"),
+					onError: (error) => {
+						// What a closed session's extensions still try does not matter any more.
+						if (!this.isCurrent(live)) return;
+						this.notice(`${error.extensionPath}: ${error.error}`, "error");
+						// It may be a run the extension asked for that could not start.
+						this.emitStatusOf(live);
+					},
 				});
 			},
 			undo: () => {
+				if (!this.isCurrent(live)) return;
+				live.dispatcher.close();
+				unsubscribe();
 				background.dispose();
 				this.live.delete(path);
 				session.dispose();
 			},
 		});
-		const unsubscribe = session.subscribe((event) => this.onEvent(live, event));
-		live.unsubscribe = () => {
-			unsubscribe();
+		live.holds--;
+		if (!this.isCurrent(live)) {
+			// Deleted meanwhile.
 			release();
-		};
+			this.requireCurrent(live);
+		}
 		return live;
 	}
 
@@ -1500,12 +1645,17 @@ export class SessionHost {
 		}
 		const { message, options } = endedMessage(end);
 		void live.session.sendCustomMessage(message, options).catch((error: unknown) => {
-			this.notice(error instanceof Error ? error.message : String(error), "error");
+			this.failed(error);
+			this.emitStatusOf(live);
 		});
 	}
 
 	private onEvent(live: Live, event: AgentSessionEvent): void {
 		live.lastActive = Date.now();
+		if (event.type === "agent_settled") {
+			this.onSettled(live, event);
+			return;
+		}
 		// Before the tracker, so the finished reply it shows carries its first token's time.
 		this.timeFirstToken(live, event);
 		if (live.tracker.apply(event)) this.scheduleFlush(live, event.type === "message_start");
@@ -1526,15 +1676,6 @@ export class SessionHost {
 				live.running = true;
 				this.emitStatus(live);
 				this.scheduleList();
-				break;
-			case "agent_settled":
-				live.running = false;
-				live.unread = !this.viewing.has(live.path);
-				this.onDone(live.path, this.titleFor(live));
-				this.flush(live);
-				this.emitStatus(live);
-				this.scheduleList();
-				this.scheduleGit(live);
 				break;
 			case "tool_execution_end":
 				if (event.toolName === "edit" || event.toolName === "write") {
@@ -1566,6 +1707,26 @@ export class SessionHost {
 	}
 
 	/**
+	 * The window sends its next queued message once it hears the session is idle, so that goes out first and nothing
+	 * else here may stop it. An error thrown into pi would also strand what extensions asked for at the run's end.
+	 */
+	private onSettled(live: Live, event: AgentSessionEvent): void {
+		live.running = false;
+		live.unread = !this.viewing.has(live.path);
+		this.emitStatus(live);
+		const parts = [() => void live.tracker.apply(event), () => this.onDone(live.path, this.titleFor(live)), () => this.flush(live)];
+		for (const part of parts) {
+			try {
+				part();
+			} catch (error) {
+				this.failed(error);
+			}
+		}
+		this.scheduleList();
+		this.scheduleGit(live);
+	}
+
+	/**
 	 * pi saves how long each reply took but not when its first token came, so it is noted here on the reply before pi
 	 * saves it: listeners hear message_end before the session file is written. The usage page reads it back.
 	 */
@@ -1594,6 +1755,7 @@ export class SessionHost {
 	private flush(live: Live): void {
 		if (live.flushTimer) clearTimeout(live.flushTimer);
 		live.flushTimer = undefined;
+		if (!this.isCurrent(live)) return;
 		const current = live.tracker.current();
 		if (!current) return;
 		this.decorate(live, [current.run]);
@@ -1601,10 +1763,10 @@ export class SessionHost {
 		if (current.index > live.sentRuns) {
 			const all = this.decorate(live, live.tracker.all());
 			for (let index = live.sentRuns; index < all.length; index++) {
-				this.emit({ type: "run", path: live.path, index, run: all[index]! });
+				this.emit({ type: "run", path: live.path, rev: ++this.rev, index, run: all[index]! });
 			}
 		} else {
-			this.emit({ type: "run", path: live.path, index: current.index, run: current.run });
+			this.emit({ type: "run", path: live.path, rev: ++this.rev, index: current.index, run: current.run });
 		}
 		live.sentRuns = current.index;
 	}
@@ -1619,16 +1781,33 @@ export class SessionHost {
 		}, 150);
 	}
 
-	private emitStatus(live: Live): void {
-		this.emit({
-			type: "status",
+	/**
+	 * Whether a run is going, including while pi prepares one, which it compacts for and asks extensions about before
+	 * agent_start, and while extensions hear that one settled.
+	 */
+	private isRunning(live: Live): boolean {
+		return live.running || live.session.isStreaming;
+	}
+
+	private status(live: Live): SessionStatus {
+		return {
 			path: live.path,
-			running: live.running,
+			rev: ++this.rev,
+			running: this.isRunning(live),
 			compacting: live.compacting,
 			context: this.contextOf(live),
 			queue: this.queueOf(live),
 			title: this.titleFor(live),
-		});
+		};
+	}
+
+	private emitStatus(live: Live): void {
+		this.emit({ type: "status", ...this.status(live) });
+	}
+
+	/** After something that can fail long after it began, when the session may have been unloaded. */
+	private emitStatusOf(live: Live): void {
+		if (this.isCurrent(live)) this.emitStatus(live);
 	}
 
 	private view(live: Live, changes: FileChange[]): SessionView {
@@ -1642,7 +1821,8 @@ export class SessionHost {
 			app: live.app,
 			title: this.titleFor(live),
 			runs: this.decorate(live, live.tracker.all()),
-			running: live.running,
+			rev: ++this.rev,
+			running: this.isRunning(live),
 			compacting: live.compacting,
 			// pi uses an "unknown" placeholder when no model is configured; show that as no model.
 			model:
@@ -1698,6 +1878,10 @@ export class SessionHost {
 		};
 	}
 
+	private failed(error: unknown): void {
+		this.notice(error instanceof Error ? error.message : String(error), "error");
+	}
+
 	private notice(message: string, level: "info" | "warning" | "error"): void {
 		this.emit({ type: "notice", notice: { id: randomUUID(), message, level } });
 	}
@@ -1709,6 +1893,15 @@ export class SessionHost {
 			this.extensionNotices.add(message);
 		}
 		this.notice(message, level);
+	}
+
+	/** Whether this is the instance of its session that is loaded. Work on one unloaded meanwhile says nothing about the next. */
+	private isCurrent(live: Live): boolean {
+		return this.live.get(live.path) === live;
+	}
+
+	private requireCurrent(live: Live): void {
+		if (!this.isCurrent(live)) throw new Error(t("This session is not open."));
 	}
 
 	private require(path: string): Live {

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type {
 	AppId,
+	AttachmentInfo,
 	Draft,
 	TriviumApi,
 	TriviumSettings,
@@ -14,6 +15,7 @@ import type {
 	ServiceInfo,
 	TrustRequest,
 	Notice,
+	SessionStatus,
 	SessionSummary,
 	SessionView,
 	TranscriptImage,
@@ -88,6 +90,8 @@ export interface State {
 	drafts: Record<string, Draft>;
 	/** Messages written while a session ran, by session path, oldest first. They go out one by one as its runs end. */
 	queued: Record<string, QueuedMessage[]>;
+	/** Sessions whose queue waits for the user, after a stop or a failed send; only ever ones with messages queued. */
+	held: Record<string, boolean>;
 	/** Projects asking to load their .pi resources, oldest first. */
 	trust: TrustRequest[];
 	/** The transcript image open in the lightbox, and the session it belongs to. */
@@ -106,6 +110,8 @@ export interface State {
 
 export interface QueuedMessage extends Draft {
 	id: number;
+	/** The host has it and has not said what became of it. It keeps its place until then. */
+	sending?: boolean;
 }
 
 export interface ConfirmRequest {
@@ -161,6 +167,7 @@ let state: State = {
 	services: {},
 	drafts: {},
 	queued: {},
+	held: {},
 	trust: [],
 	page: "main",
 	settingsSection: "general",
@@ -269,48 +276,23 @@ function handleEvent(event: HostEvent): void {
 			setState({ sessions: event.sessions });
 			break;
 		case "view":
-			setState((s) => ({ views: { ...s.views, [event.view.path]: event.view } }));
+			putView(event.view);
 			break;
 		case "run":
-			setState((s) => {
-				const view = s.views[event.path];
-				if (!view) return {};
+			patchView(event.path, event.rev, `run ${event.index}`, (view) => {
 				const runs = view.runs.slice();
 				runs[event.index] = event.run;
-				return { views: { ...s.views, [event.path]: { ...view, runs } } };
+				return { ...view, runs };
 			});
 			break;
 		case "status":
-			setState((s) => {
-				const view = s.views[event.path];
-				const sessions = s.sessions.map((session) =>
-					session.path === event.path ? { ...session, running: event.running, title: event.title } : session,
-				);
-				if (!view) return { sessions };
-				return {
-					sessions,
-					views: {
-						...s.views,
-						[event.path]: {
-							...view,
-							running: event.running,
-							compacting: event.compacting,
-							context: event.context,
-							queue: event.queue,
-							title: event.title,
-						},
-					},
-				};
-			});
-			// A queued message goes out once the session is free; one that just went out is busy now.
-			if (event.running || event.compacting) sendingQueued.delete(event.path);
-			else void sendNextQueued(event.path);
+			showStatus(event);
 			break;
 		case "changes":
-			setState((s) => {
-				const view = s.views[event.path];
-				return view ? { views: { ...s.views, [event.path]: { ...view, changes: event.changes } } } : {};
-			});
+			patchView(event.path, event.rev, "changes", (view) => ({ ...view, changes: event.changes }));
+			break;
+		case "returned":
+			returnMessage(event.path, event.draft);
 			break;
 		case "git":
 			setState((s) => ({ git: { ...s.git, [event.path]: event.git } }));
@@ -357,6 +339,7 @@ function handleEvent(event: HostEvent): void {
 		case "unloaded": {
 			const gone = new Set(event.paths);
 			setState((s) => ({ views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))) }));
+			for (const path of gone) recent.delete(path);
 			// The sessions on screen reload at once with the new setup.
 			const { selected, split, app, page } = getState();
 			const current = selected[app];
@@ -366,6 +349,75 @@ function handleEvent(event: HostEvent): void {
 			break;
 		}
 	}
+}
+
+interface Patch {
+	rev: number;
+	apply: (view: SessionView) => SessionView;
+}
+
+/** How many views are being read from the host, or read and waiting for the transition that shows them. */
+let arriving = 0;
+/** What events said about sessions while views were arriving, the newest of each kind, for a view read before it. */
+const recent = new Map<string, Map<string, Patch>>();
+/** The newest status of each session, by its place in the host's count. A view's own place is the one it was read at. */
+const statusRevs = new Map<string, number>();
+
+/** Reads views from the host. Call the `arrived` it hands over once they are shown. */
+async function arrive<T>(read: () => Promise<T>): Promise<{ result: T | undefined; arrived: () => void }> {
+	arriving++;
+	const result = await attempt(read);
+	return {
+		result,
+		arrived: () => {
+			if (!--arriving) recent.clear();
+		},
+	};
+}
+
+/** Changes a session's view as an event says, unless the view was read later than that; or a view still arriving. */
+function patchView(path: string, rev: number, kind: string, apply: Patch["apply"]): void {
+	if (arriving) {
+		const patches = recent.get(path) ?? new Map<string, Patch>();
+		patches.set(kind, { rev, apply });
+		recent.set(path, patches);
+	}
+	setState((s) => {
+		const view = s.views[path];
+		return view && rev > view.rev ? { views: { ...s.views, [path]: apply(view) } } : {};
+	});
+}
+
+/** Shows a session's status, unless a newer one came first, and sends its next queued message if it is free. */
+function showStatus(status: SessionStatus): void {
+	const { path, rev, running, compacting, context, queue, title } = status;
+	if (rev <= Math.max(statusRevs.get(path) ?? 0, getState().views[path]?.rev ?? 0)) return;
+	statusRevs.set(path, rev);
+	setState((s) => ({ sessions: s.sessions.map((session) => (session.path === path ? { ...session, running, title } : session)) }));
+	patchView(path, rev, "status", (view) => ({ ...view, running, compacting, context, queue, title }));
+	void sendNextQueued(path);
+}
+
+/**
+ * The views with one read from the host put in, unless the one here was read later. Reading it and showing it take a
+ * while, and what events said meanwhile goes on top.
+ */
+function withView(s: State, view: SessionView): State["views"] {
+	const known = s.views[view.path];
+	if (known && known.rev >= view.rev) return s.views;
+	let next = view;
+	if (known && (statusRevs.get(view.path) ?? 0) > view.rev) {
+		const { running, compacting, context, queue, title } = known;
+		next = { ...next, running, compacting, context, queue, title };
+	}
+	for (const patch of recent.get(view.path)?.values() ?? []) if (patch.rev > view.rev) next = patch.apply(next);
+	return { ...s.views, [view.path]: next };
+}
+
+/** A session that turns out to be free, such as one opened again, goes on with its queue. */
+function putView(view: SessionView): void {
+	setState((s) => ({ views: withView(s, view) }));
+	void sendNextQueued(view.path);
 }
 
 /** Stops a service; it leaves the list once its processes are gone. */
@@ -582,14 +634,23 @@ export function openSession(path: string): Promise<void> {
 
 /** Loads a session and shows it if `ticket` is still the latest move; a reload passes the current one. */
 async function loadSession(path: string, ticket: number): Promise<void> {
-	const view = await attempt(() => trivium.openSession(path));
-	if (!view) return;
-	const keep = () => setState((s) => ({ views: { ...s.views, [path]: view } }));
-	if (ticket !== navigation) return keep();
+	const { result: view, arrived } = await arrive(() => trivium.openSession(path));
+	if (!view) return arrived();
+	if (ticket !== navigation) {
+		putView(view);
+		return arrived();
+	}
 	const before = getState();
-	const show = () =>
+	// Shown at once, so the screen does not stay as it was when the switch began. One whose place is on screen already
+	// waits for the transition, which would otherwise have nothing to show.
+	const placed = before.page === "main" && before.app === view.app && visibleSessions(before.split[view.app], before.selected[view.app]).includes(path);
+	if (!placed) {
+		putView(view);
+		arrived();
+	}
+	const show = () => {
 		setState((s) => ({
-			views: { ...s.views, [path]: view },
+			views: placed ? withView(s, view) : s.views,
 			selected: { ...s.selected, [view.app]: path },
 			split: withSplit(s.split, view.app, showInSplit(s.split[view.app], s.selected[view.app], path)),
 			app: view.app,
@@ -597,6 +658,11 @@ async function loadSession(path: string, ticket: number): Promise<void> {
 			overlay: null,
 			sessions: s.sessions.map((session) => (session.path === path ? { ...session, unread: false } : session)),
 		}));
+		if (placed) arrived();
+		void sendNextQueued(path);
+		// Unloaded again before it could show.
+		if (!getState().views[path]) void loadSession(path, ticket);
+	};
 	// Reloading the session already on screen is not a switch.
 	const shown = before.page === "main" && before.app === view.app && before.selected[view.app] === path && before.views[path];
 	if (shown) show();
@@ -611,8 +677,9 @@ function withSplit(split: State["split"], app: AppId, pair: Split | undefined): 
 
 /** Loads a session for the half of the split that is not focused, without moving focus to it. */
 async function loadBeside(path: string): Promise<void> {
-	const view = await attempt(() => trivium.openSession(path));
-	if (view) setState((s) => ({ views: { ...s.views, [path]: view } }));
+	const { result: view, arrived } = await arrive(() => trivium.openSession(path));
+	if (view) putView(view);
+	arrived();
 }
 
 /** Loads the half of the app's split that is not focused, when it is not loaded yet. */
@@ -632,22 +699,18 @@ export async function openInSplit(path: string, side?: 0 | 1): Promise<void> {
 	const pair = app === before.app && before.page === "main" ? placeInSplit(before.split[app], before.selected[app], path, side) : undefined;
 	if (!app || !pair) return openSession(path);
 	const ticket = ++navigation;
-	const view = before.views[path] ?? (await attempt(() => trivium.openSession(path)));
-	if (!view) return;
-	if (ticket !== navigation) {
-		setState((s) => ({ views: { ...s.views, [path]: view } }));
-		return;
-	}
-	transition("session", () =>
+	if (!before.views[path]) await loadBeside(path);
+	if (!getState().views[path] || ticket !== navigation) return;
+	transition("session", () => {
 		setState((s) => ({
-			views: { ...s.views, [path]: view },
 			selected: { ...s.selected, [app]: path },
 			split: withSplit(s.split, app, pair),
 			peek: false,
 			overlay: null,
 			sessions: s.sessions.map((session) => (session.path === path ? { ...session, unread: false } : session)),
-		})),
-	);
+		}));
+		if (!getState().views[path]) void loadSession(path, ticket);
+	});
 }
 
 /** Makes one half of the split the one the keyboard, the sidebar and the side panel act on. */
@@ -687,17 +750,21 @@ export async function refreshModels(): Promise<void> {
 /** Starts a session and shows it. `draft` goes into its message box, unsent. */
 export async function startSession(input: NewSessionInput, draft?: string): Promise<SessionView | undefined> {
 	const ticket = ++navigation;
-	const view = await attempt(() => trivium.newSession(input));
-	if (!view) return undefined;
+	const { result: view, arrived } = await arrive(() => trivium.newSession(input));
+	if (!view) {
+		arrived();
+		return undefined;
+	}
 	const keep = (s: State): Partial<State> => ({
 		drafts: draft ? { ...s.drafts, [view.path]: { text: draft, attachments: [] } } : s.drafts,
-		views: { ...s.views, [view.path]: view },
+		views: withView(s, view),
 	});
-	if (ticket !== navigation) setState(keep);
-	else
+	// Here from the start, so what its first message sets off before the switch is not missed.
+	setState(keep);
+	arrived();
+	if (ticket === navigation)
 		transition(getState().app === input.app ? "session" : "app", () =>
 			setState((s) => ({
-				...keep(s),
 				selected: { ...s.selected, [input.app]: view.path },
 				split: withSplit(s.split, input.app, showInSplit(s.split[input.app], s.selected[input.app], view.path)),
 				app: input.app,
@@ -710,16 +777,19 @@ export async function startSession(input: NewSessionInput, draft?: string): Prom
 }
 
 let queuedIds = 0;
-/** Sessions that were sent their next queued message and have not started its run yet. */
-const sendingQueued = new Set<string>();
-/** Sessions the user stopped: their queue waits until they send something again. */
-const heldQueues = new Set<string>();
+/** How many messages each session was sent that the host has not said the outcome of. Its queue waits for them. */
+const sending = new Map<string, number>();
+/** Sessions whose messages on their way have no box to come back to. */
+const deletedWhileSending = new Set<string>();
 
+/** A hold is on the messages that were queued, so it goes with the last of them. */
 function setQueue(path: string, update: (list: QueuedMessage[]) => QueuedMessage[]): void {
 	setState((s) => {
 		const { [path]: list = [], ...rest } = s.queued;
 		const next = update(list);
-		return { queued: next.length ? { ...rest, [path]: next } : rest };
+		if (next.length) return { queued: { ...rest, [path]: next } };
+		const { [path]: _, ...held } = s.held;
+		return { queued: rest, held };
 	});
 }
 
@@ -729,14 +799,19 @@ function busy(path: string): boolean {
 	return view ? view.running || view.compacting : (sessions.find((session) => session.path === path)?.running ?? false);
 }
 
-/** Keeps a message for when the session's run ends. Its attachments stay stored until it is sent or deleted. */
+/**
+ * Keeps a message for when the session's run ends, which may be just over. Its attachments stay stored until it is
+ * sent or deleted. Queueing another message counts as sending again, so it ends a hold.
+ */
 export function queueMessage(path: string, draft: Draft): void {
 	setQueue(path, (list) => [...list, { ...draft, id: ++queuedIds }]);
+	resumeQueue(path);
+	void sendNextQueued(path);
 }
 
-/** Takes a message out of the queue, such as to edit it; its attachments stay stored. */
+/** Takes a message out of the queue, such as to edit it; its attachments stay stored. Not one on its way out. */
 export function unqueueMessage(path: string, id: number): QueuedMessage | undefined {
-	const message = getState().queued[path]?.find((item) => item.id === id);
+	const message = getState().queued[path]?.find((item) => item.id === id && !item.sending);
 	if (message) setQueue(path, (list) => list.filter((item) => item.id !== id));
 	return message;
 }
@@ -746,69 +821,161 @@ export function deleteQueued(path: string, id: number): void {
 	if (message?.attachments.length) void trivium.dropAttachments(message.attachments.map((item) => item.id));
 }
 
-/** Stops the queue going out when the current run ends, as when the user stops the run. */
+/** Keeps what is queued now from going out when the current run ends, as when the user stops the run. */
 export function holdQueue(path: string): void {
-	heldQueues.add(path);
+	if (getState().queued[path]?.length) setState((s) => ({ held: { ...s.held, [path]: true } }));
 }
 
 /** Lets the queue go out again once the session is free. */
 export function resumeQueue(path: string): void {
-	heldQueues.delete(path);
+	if (!getState().held[path]) return;
+	setState((s) => {
+		const { [path]: _, ...held } = s.held;
+		return { held };
+	});
+}
+
+/**
+ * Keeps a session's queue from going out until a message on its way has an outcome. The status that comes with it
+ * shows before that, so that what the outcome means for the queue is settled first.
+ */
+async function whileSending<T extends { status: SessionStatus }>(path: string, send: () => Promise<T | undefined>): Promise<T | undefined> {
+	sending.set(path, (sending.get(path) ?? 0) + 1);
+	try {
+		const result = await attempt(send);
+		if (result) showStatus(result.status);
+		return result;
+	} finally {
+		const left = sending.get(path)! - 1;
+		if (left) sending.set(path, left);
+		else sending.delete(path);
+	}
+}
+
+/**
+ * Hands a message to the host. Until that has said what became of it, a steer too, the queue waits: the message may
+ * turn out to start a run. Resolves with "failed", and a notice, or with "stopped" when it is in no run.
+ */
+async function deliver(path: string, text: string, mode: "prompt" | "steer", attachments: AttachmentInfo[]): Promise<"sent" | "stopped" | "failed"> {
+	const ids = attachments.map((item) => item.id);
+	const result = await whileSending(path, () => trivium.send(path, text, mode, ids));
+	return !result ? "failed" : result.outcome === "stopped" ? "stopped" : "sent";
+}
+
+/**
+ * Sends what was in the message box, which ends a hold on the queue. Resolves false when it did not go out, and puts it
+ * back in that session's box, which by then may hold something else or not be on screen.
+ */
+export async function sendMessage(path: string, text: string, mode: "prompt" | "steer", attachments: AttachmentInfo[]): Promise<boolean> {
+	const held = getState().held[path];
+	// Before rather than after, so a stop meanwhile holds it again.
+	resumeQueue(path);
+	const outcome = await deliver(path, text, mode, attachments);
+	if (outcome !== "sent") {
+		// Stop has held it, and the user may have let it go again since.
+		if (held && outcome === "failed") holdQueue(path);
+		returnMessage(path, { text, attachments });
+	}
+	void sendNextQueued(path);
+	return outcome === "sent";
 }
 
 /** Sends a queued message now: into the running turn as a steer, or as the next prompt when nothing runs. */
 export async function sendQueuedNow(path: string, id: number): Promise<void> {
-	const index = getState().queued[path]?.findIndex((item) => item.id === id) ?? -1;
-	const message = unqueueMessage(path, id);
-	if (!message) return;
+	const message = getState().queued[path]?.find((item) => item.id === id);
+	if (!message || message.sending) return;
 	resumeQueue(path);
-	await sendQueued(path, message, busy(path) ? "steer" : "prompt", index);
+	const view = getState().views[path];
+	// Compacting with no run to steer, it goes first once that is done.
+	if (view?.compacting && !view.running) setQueue(path, (list) => [message, ...list.filter((item) => item.id !== id)]);
+	else await sendQueued(path, message, busy(path) ? "steer" : "prompt");
 }
 
+/** Sends the first queued message when the session is open and free. Called whenever that may have become so. */
 async function sendNextQueued(path: string): Promise<void> {
-	if (sendingQueued.has(path) || heldQueues.has(path) || busy(path)) return;
-	const next = getState().queued[path]?.[0];
-	if (!next) return;
-	unqueueMessage(path, next.id);
-	await sendQueued(path, next, "prompt", 0);
+	const { views, held, queued } = getState();
+	const next = queued[path]?.[0];
+	if (!next || next.sending || !views[path] || held[path] || sending.has(path) || busy(path)) return;
+	await sendQueued(path, next, "prompt");
 }
 
-/** A message that fails to send goes back where it was in the queue, and the queue waits for the user. */
-async function sendQueued(path: string, message: QueuedMessage, mode: "prompt" | "steer", index: number): Promise<void> {
-	if (mode === "prompt") sendingQueued.add(path);
-	const ids = message.attachments.map((item) => item.id);
-	const sent = await attempt(() => trivium.send(path, message.text, mode, ids).then(() => true));
-	if (!sent) {
-		sendingQueued.delete(path);
-		holdQueue(path);
-		setQueue(path, (list) => [...list.slice(0, index), message, ...list.slice(index)]);
-	} else if (mode === "prompt" && message.text.startsWith("/")) {
-		// A command such as /name starts no run, so no run's end would send the next message.
-		setTimeout(() => {
-			if (busy(path)) return;
-			sendingQueued.delete(path);
-			void sendNextQueued(path);
-		}, 1000);
+/**
+ * A message keeps its place in the queue until it has gone out. When it fails to, the queue waits for the user, or for
+ * the end of the run that got in first; when it was stopped, Stop has held the queue. One that started no run lets the
+ * next one go.
+ */
+async function sendQueued(path: string, message: QueuedMessage, mode: "prompt" | "steer"): Promise<void> {
+	const mark = (sending: boolean) => setQueue(path, (list) => list.map((item) => (item.id === message.id ? { ...message, sending } : item)));
+	mark(true);
+	const outcome = await deliver(path, message.text, mode, message.attachments);
+	if (outcome === "sent") setQueue(path, (list) => list.filter((item) => item.id !== message.id));
+	else {
+		mark(false);
+		if (outcome === "failed" && !busy(path)) holdQueue(path);
 	}
+	void sendNextQueued(path);
 }
 
-/** Sends a new version of an earlier message. Resolves false when it could not be sent. */
+/** A message's text and another's, the earlier first. */
+export function joinText(first: string, second: string, between: string): string {
+	return first.trim() && second.trim() ? `${first.trimEnd()}${between}${second}` : first.trim() ? first : second;
+}
+
+/** What a message box holds once a draft has been put in it. */
+export function placeDraft(box: Draft, draft: Draft): Draft {
+	if (draft.place === "after") return { text: joinText(box.text, draft.text, "\n"), attachments: [...box.attachments, ...draft.attachments] };
+	if (draft.place === "before") return { text: joinText(draft.text, box.text, "\n\n"), attachments: [...draft.attachments, ...box.attachments] };
+	return { text: draft.text, attachments: draft.attachments };
+}
+
+/** Keeps what a message box held when it went off screen, with any draft that came for it just then. */
+export function keepUnsent(path: string, box: Draft): void {
+	setState((s) => {
+		const draft = s.drafts[path];
+		return { drafts: { ...s.drafts, [path]: draft ? placeDraft(box, draft) : box } };
+	});
+}
+
+/** Puts a message that did not go out back in its session's box, in front of what the user has written since. */
+function returnMessage(path: string, { text, attachments }: Draft): void {
+	if (deletedWhileSending.has(path)) {
+		if (attachments.length) void trivium.dropAttachments(attachments.map((item) => item.id));
+		return;
+	}
+	const waiting = getState().drafts[path];
+	const message: Draft = { text, attachments, place: "before" };
+	// What waits for the box to show is put in with the message, as it would be put in the box itself.
+	const draft: Draft = waiting ? { ...placeDraft({ ...waiting, place: undefined }, message), place: waiting.place && "before" } : message;
+	setState((s) => ({ drafts: { ...s.drafts, [path]: draft } }));
+}
+
+/** Sends a new version of an earlier message, which ends a hold on the queue. Resolves false when it could not be sent. */
 export async function editMessage(path: string, run: number, text: string): Promise<boolean> {
-	return (await attempt(() => trivium.editMessage(path, run, text).then(() => true))) ?? false;
+	const held = getState().held[path];
+	// Before rather than after, so a stop meanwhile holds it again.
+	resumeQueue(path);
+	const result = await whileSending(path, () => trivium.editMessage(path, run, text));
+	if (result?.outcome === "returned") {
+		// The conversation went back before the send failed, and the message being edited went with it.
+		returnMessage(path, result.draft);
+		if (result.error) notify(result.error);
+		if (held && result.error) holdQueue(path);
+	} else if (!result && held) holdQueue(path);
+	void sendNextQueued(path);
+	return result !== undefined && result.outcome !== "returned";
 }
 
 /** Copies a session up to one of its runs into a new session and shows it, with that run's message to edit. */
 export async function forkFrom(path: string, run: number): Promise<void> {
 	const ticket = ++navigation;
-	const result = await attempt(() => trivium.fork(path, run));
-	if (!result) return;
+	const { result, arrived } = await arrive(() => trivium.fork(path, run));
+	if (!result) return arrived();
 	const { view, draft } = result;
-	const keep = (s: State): Partial<State> => ({ drafts: { ...s.drafts, [view.path]: draft }, views: { ...s.views, [view.path]: view } });
-	if (ticket !== navigation) setState(keep);
-	else
+	setState((s) => ({ drafts: { ...s.drafts, [view.path]: draft }, views: withView(s, view) }));
+	arrived();
+	if (ticket === navigation)
 		transition("session", () =>
 			setState((s) => ({
-				...keep(s),
 				selected: { ...s.selected, [view.app]: view.path },
 				split: withSplit(s.split, view.app, showInSplit(s.split[view.app], s.selected[view.app], view.path)),
 				app: view.app,
@@ -856,6 +1023,11 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 	const deleted = await attempt(() => trivium.deleteSessions(paths));
 	if (!deleted?.length) return;
 	const gone = new Set(deleted);
+	for (const path of gone) {
+		if (sending.has(path)) deletedWhileSending.add(path);
+		statusRevs.delete(path);
+		recent.delete(path);
+	}
 	const left = deleted.flatMap((path) => [
 		...(getState().drafts[path]?.attachments ?? []),
 		...(getState().queued[path] ?? []).flatMap((message) => message.attachments),
@@ -864,6 +1036,7 @@ export async function deleteSessions(paths: string[]): Promise<void> {
 	setState((s) => ({
 		drafts: Object.fromEntries(Object.entries(s.drafts).filter(([path]) => !gone.has(path))),
 		queued: Object.fromEntries(Object.entries(s.queued).filter(([path]) => !gone.has(path))),
+		held: Object.fromEntries(Object.entries(s.held).filter(([path]) => !gone.has(path))),
 		sessions: s.sessions.filter((session) => !gone.has(session.path)),
 		views: Object.fromEntries(Object.entries(s.views).filter(([path]) => !gone.has(path))),
 		...withoutSessions(s.split, s.selected, (path) => gone.has(path)),

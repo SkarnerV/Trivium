@@ -64,11 +64,7 @@ export function useAttachments(onLeave?: (items: AttachmentInfo[]) => void) {
 	};
 
 	/** Hands the attachments over for sending; they are cleared from the box. */
-	const takeIds = () => {
-		const ids = items.map((item) => item.id);
-		setItems([]);
-		return ids;
-	};
+	const take = () => setItems([]);
 
 	/** Puts these in the box in place of what it holds, such as an earlier message's attachments. */
 	const replace = (list: AttachmentInfo[]) => {
@@ -77,7 +73,7 @@ export function useAttachments(onLeave?: (items: AttachmentInfo[]) => void) {
 		setItems(list);
 	};
 
-	return { items, pending, pick: () => void add(() => trivium.pickAttachments()), addFiles, remove, takeIds, restore: setItems, replace };
+	return { items, pending, pick: () => void add(() => trivium.pickAttachments()), addFiles, remove, take, restore: setItems, replace };
 }
 
 export function AttachmentChips({

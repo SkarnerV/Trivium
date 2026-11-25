@@ -481,6 +481,8 @@ export interface SessionView {
 	app: AppId;
 	title: string;
 	runs: Run[];
+	/** Counts on over everything the host sends about sessions, so what is older never replaces what is newer. */
+	rev: number;
 	running: boolean;
 	/** pi is summarizing the conversation, after /compact or when the context ran full. */
 	compacting: boolean;
@@ -492,6 +494,27 @@ export interface SessionView {
 	/** Set in Code, whose sessions run behind the permission gate. */
 	permissions?: PermissionSettings;
 }
+
+/** The part of a session's view that changes as its runs come and go. */
+export type SessionStatus = Pick<SessionView, "path" | "rev" | "running" | "compacting" | "context" | "queue" | "title">;
+
+/**
+ * What became of a message: it started a run, it waits in pi's queue for the run that is going, or a command or an
+ * extension dealt with it and no run follows. "stopped" before any of that, it is still the sender's.
+ */
+export type SendOutcome = "started" | "queued" | "handled" | "stopped";
+
+export interface SendResult {
+	outcome: SendOutcome;
+	/** The session once the message was taken. Status events can reach the window after this reply does. */
+	status: SessionStatus;
+}
+
+/**
+ * What became of an edited message. When the conversation went back but the new message did not go out, it is
+ * "returned" with the files and images it would have carried, and the error unless the user stopped it.
+ */
+export type EditResult = SendResult | { outcome: "returned"; status: SessionStatus; draft: Draft; error?: string };
 
 export type DialogRequest =
 	| { id: string; sessionPath: string; kind: "select"; title: string; options: string[] }
@@ -510,9 +533,11 @@ export interface Notice {
 export type HostEvent =
 	| { type: "sessions"; sessions: SessionSummary[] }
 	| { type: "view"; view: SessionView }
-	| { type: "run"; path: string; index: number; run: Run }
-	| { type: "status"; path: string; running: boolean; compacting: boolean; context?: ContextInfo; queue: QueueInfo; title: string }
-	| { type: "changes"; path: string; changes: FileChange[] }
+	| { type: "run"; path: string; rev: number; index: number; run: Run }
+	| ({ type: "status" } & SessionStatus)
+	| { type: "changes"; path: string; rev: number; changes: FileChange[] }
+	/** A message the window did not send itself that did not go out, for the session's message box. */
+	| { type: "returned"; path: string; draft: Draft }
 	| { type: "git"; path: string; git: GitStatus | null }
 	| { type: "dialog"; request: DialogRequest }
 	| { type: "dialog_closed"; id: string }
@@ -576,8 +601,8 @@ export interface ServiceInfo {
 export interface Draft {
 	text: string;
 	attachments: AttachmentInfo[];
-	/** Goes after what is already in the message box, which keeps its text and attachments, instead of replacing it. */
-	append?: boolean;
+	/** Goes after, or before, what is already in the message box, which keeps its text and attachments, instead of replacing it. */
+	place?: "after" | "before";
 }
 
 export interface NewSessionInput {
@@ -1050,15 +1075,19 @@ export interface TriviumApi {
 	/** Says which sessions are on screen: one, or both halves of a split. */
 	setVisible(paths: string[]): Promise<void>;
 	newSession(input: NewSessionInput): Promise<SessionView>;
-	/** Sends a new version of a run's message, in place of it and the replies that followed. */
-	editMessage(path: string, run: number, text: string): Promise<void>;
+	/** Sends a new version of a run's message, in place of it and the replies that followed. Undefined when an extension refused. */
+	editMessage(path: string, run: number, text: string): Promise<EditResult | undefined>;
 	/** Copies the conversation before one of a session's runs into a new session, with that run's message to edit. */
 	fork(path: string, run: number): Promise<{ view: SessionView; draft: Draft } | undefined>;
 	/** Moves session files to the Trash. Returns the paths that were deleted. */
 	deleteSessions(paths: string[]): Promise<string[]>;
 	/** Moves sessions to the Archived panel, or back to the sidebar. Returns the paths that moved. */
 	archiveSessions(paths: string[], archived: boolean): Promise<string[]>;
-	send(path: string, text: string, mode: "prompt" | "steer" | "followUp", attachments?: string[]): Promise<void>;
+	/**
+	 * Resolves once the message has an outcome, not when its run ends. Rejects when pi refused it, and the message and
+	 * its attachments are still the caller's, as they are when it was stopped.
+	 */
+	send(path: string, text: string, mode: "prompt" | "steer" | "followUp", attachments?: string[]): Promise<SendResult>;
 	/** Shows the file picker and prepares what was chosen. */
 	pickAttachments(): Promise<AttachmentInfo[]>;
 	attachPaths(paths: string[]): Promise<AttachmentInfo[]>;

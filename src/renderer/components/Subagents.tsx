@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from "react";
 import type { LimitNotice, Step, SubagentChild, SubagentNotice } from "../../shared/protocol.ts";
-import { duration, tokens } from "../format.ts";
+import { duration, oneLine, tokens } from "../format.ts";
 import { BookIcon, BotIcon, BranchIcon, Chevron, CodeIcon, EyeIcon, PenIcon, SearchIcon } from "../icons.tsx";
 import type { SupervisorQuestion } from "../../shared/agent-counts.ts";
 import { AgentSession } from "../agent-context.ts";
@@ -100,14 +100,14 @@ function rowActivity(child: SubagentChild, claims?: string[]): { text: string; c
 	if (child.status === "error") return { text: firstLine(child.error) || firstLine(child.task) || t("Failed"), code: false };
 	if (child.status === "done") return { text: preview(child.output) || t("Done"), code: false };
 	if (child.status === "pending") return { text: t(child.queued ? "Queued · starts when a slot frees" : "Waiting to start"), code: false };
-	if (child.current) return { text: `${child.current.tool} ${child.current.target}`.trim(), code: true };
+	if (child.current) return { text: oneLine(`${child.current.tool} ${child.current.target}`), code: true };
 	return { text: t(child.tools ? "Thinking" : "Starting"), code: false };
 }
 
 /** What it is using now, how many tools it called and the tokens it spent, in one line. */
 function workLine(child: SubagentChild): string {
 	return [
-		child.status === "running" && child.current ? `${child.current.tool} ${child.current.target}`.trim() : "",
+		child.status === "running" && child.current ? oneLine(`${child.current.tool} ${child.current.target}`, 240) : "",
 		child.tools ? t(child.tools === 1 ? "{n} tool" : "{n} tools", { n: child.tools }) : "",
 		child.tokens ? t("{n} tokens", { n: tokens(child.tokens) }) : "",
 	]
@@ -219,7 +219,7 @@ export function SubagentRow({
 			<span className="agent-row-main">
 				<span className="agent-row-name">
 					<span className="agent-row-agent">{child.agent}</span>
-					{child.label ? <span className="agent-row-key">{child.label}</span> : <span className="agent-row-task ellipsis">{firstLine(child.task)}</span>}
+					{child.label ? <span className="agent-row-key">{child.label}</span> : <span className="agent-row-task ellipsis">{oneLine(firstLine(child.task))}</span>}
 				</span>
 				<span className={`agent-row-activity ellipsis${asCode ? " code" : ""}${child.status === "error" && child.error ? " error" : warn ? " warn" : ""}`}>{text}</span>
 			</span>
@@ -332,7 +332,7 @@ export function SubagentGroup({ step, now, limit }: { step: Step; now: number; l
 					<AgentAvatar agent="" status={running ? "running" : step.status === "error" ? "error" : "done"} />
 					<span className="agent-row-main">
 						<span className="agent-row-name">
-							<span className="agent-row-task ellipsis">{step.target}</span>
+							<span className="agent-row-task ellipsis">{oneLine(step.target)}</span>
 						</span>
 						<span className="agent-row-activity ellipsis">{t(running ? "Starting subagents…" : step.status === "error" ? "Failed" : "Done")}</span>
 					</span>
@@ -389,7 +389,7 @@ export function SubagentNoticeLine({ notice, question }: { notice: SubagentNotic
 	const word = noticeWord(notice);
 	const command = notice.command !== undefined;
 	// A command's verdict is what it printed last.
-	const line = command ? firstLine(notice.text.trim().split("\n").at(-1) ?? "") : preview(notice.text);
+	const line = oneLine(command ? firstLine(notice.text.trim().split("\n").at(-1) ?? "") : preview(notice.text));
 	return (
 		<div className={`agent-notice${open ? " open" : ""}`}>
 			<div className="agent-notice-head">
@@ -474,7 +474,7 @@ export function activity(child: SubagentChild): { text: string; tone: "" | "done
 	if (child.status === "error") return { text: child.error ? `${t("Failed")} · ${firstLine(child.error)}` : t("Failed"), tone: "error" };
 	if (child.status === "done") return { text: child.output ? `${t("Done")} · ${firstLine(child.output)}` : t("Done"), tone: "done" };
 	if (child.status === "pending") return { text: t(child.queued ? "Queued · starts when a slot frees" : "Starting"), tone: "" };
-	if (child.current) return { text: `${child.current.tool} ${child.current.target}`.trim(), tone: "" };
+	if (child.current) return { text: oneLine(`${child.current.tool} ${child.current.target}`), tone: "" };
 	return { text: t(child.tools ? "Thinking" : "Starting"), tone: "" };
 }
 

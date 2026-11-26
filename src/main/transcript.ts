@@ -208,7 +208,7 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 			const matches = /no matches/i.test(result ?? "") ? 0 : countLines(result);
 			const where = str(args.path);
 			return {
-				target: `"${str(args.pattern)}"${where ? ` ${where}` : ""}`,
+				target: firstLine(`"${str(args.pattern)}"${where ? ` ${where}` : ""}`, 120),
 				meta: running ? "" : `${matches} ${matches === 1 ? "match" : "matches"}`,
 				tone: "plain",
 			};
@@ -217,7 +217,7 @@ function describeTool(tool: ToolState): Pick<Step, "target" | "meta" | "tone"> {
 		case "ls": {
 			const count = countLines(result);
 			return {
-				target: str(args.pattern) || path || ".",
+				target: firstLine(str(args.pattern) || path || ".", 120),
 				meta: running ? "" : `${count} ${count === 1 ? "entry" : "entries"}`,
 				tone: "plain",
 			};

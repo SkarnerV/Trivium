@@ -1382,9 +1382,12 @@ body.resizing * {
 	min-width: 0;
 }
 
+/* Only the tool and target columns give way, so the time and chevron always stay in the row. */
 .step-summary {
 	display: grid;
-	grid-template-columns: 12px var(--tool-w, 48px) minmax(0, 1fr) auto 40px 12px;
+	grid-template-columns: 12px minmax(0, min(var(--tool-w, 48px), 30%)) minmax(0, 1fr) auto 40px 12px;
+	min-width: 0;
+	max-width: 100%;
 	align-items: center;
 	column-gap: 10px;
 	min-height: 26px;
@@ -1492,6 +1495,11 @@ body.resizing * {
 	align-items: center;
 	justify-content: flex-end;
 	gap: 6px;
+	white-space: nowrap;
+}
+
+.step .time {
+	white-space: nowrap;
 }
 
 .step.running .meta {
@@ -1516,6 +1524,10 @@ body.resizing * {
 	border-radius: 10px;
 	background: var(--tray);
 	font-size: 12px;
+	/* One line each, never wider than the thread: whatever the arguments, nothing here scrolls sideways. */
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 }
 
 .live-cmd-head {
@@ -1525,13 +1537,15 @@ body.resizing * {
 	min-width: 0;
 }
 
+/* "Using <a long MCP tool name>" gives way too, but leaves the arguments most of the room. */
 .live-cmd-label {
-	flex: none;
+	flex: 0 1 auto;
+	max-width: 45%;
 	color: var(--ink-3);
 }
 
 .live-cmd-prose {
-	flex: 1;
+	flex: 1 1 0;
 	color: var(--ink-2);
 }
 
@@ -1542,7 +1556,7 @@ body.resizing * {
 }
 
 .live-cmd-head code {
-	flex: 1;
+	flex: 1 1 0;
 	font-family: var(--mono);
 	font-size: 11.5px;
 	color: var(--ink-2);
@@ -1560,7 +1574,7 @@ body.resizing * {
 	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--ink-4);
-	white-space: pre;
+	white-space: nowrap;
 }
 
 /* Subagents: the agent's name is the one tinted thing, so delegated work stands out among the steps. */
@@ -1744,7 +1758,13 @@ body.resizing * {
 	color: var(--ink-4);
 }
 
+/* What it is doing can be a whole command; a few lines of it are enough here. */
 .agent-card-line .mono {
+	min-width: 0;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow: hidden;
 	color: var(--ink-2);
 	overflow-wrap: anywhere;
 }

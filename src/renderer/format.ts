@@ -12,6 +12,17 @@ export function duration(ms: number | undefined): string {
 	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+/**
+ * Text for a one-line preview, such as a tool call's arguments: whitespace and line breaks run together into
+ * single spaces, and anything past `max` characters cut with an ellipsis. The line is clipped to its width by CSS
+ * anyway; the bound keeps a megabyte of arguments from being laid out on every tick. The full text stays in the
+ * step's own detail.
+ */
+export function oneLine(text: string | undefined, max = 400): string {
+	const line = (text ?? "").replace(/\s+/g, " ").trim();
+	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
 export function relativeTime(timestamp: number, now = Date.now()): string {
 	const minutes = Math.floor((now - timestamp) / 60_000);
 	if (minutes < 1) return t("now");

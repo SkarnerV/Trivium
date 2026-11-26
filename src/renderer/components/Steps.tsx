@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Run, Step } from "../../shared/protocol.ts";
-import { duration } from "../format.ts";
+import { duration, oneLine } from "../format.ts";
 import { useNow } from "../hooks.ts";
 import { Chevron, EyeIcon } from "../icons.tsx";
 import { usePreviewOpener } from "../preview.ts";
@@ -23,16 +23,21 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 	const running = step.status === "running";
 	const prose = step.tool === "think";
 	const time = running && step.startedAt ? duration(now - step.startedAt) : "";
+	const verb = liveVerb(step);
+	// One line however long or many-lined the arguments are; the step itself keeps them whole.
+	const target = oneLine(step.target);
 	return (
 		<div className={`live-cmd${running ? "" : " idle"}`}>
 			<div className="live-cmd-head">
 				<span className="live-dot" />
-				<span className="live-cmd-label">{liveVerb(step)}</span>
+				<span className="live-cmd-label ellipsis" title={verb}>
+					{verb}
+				</span>
 				{prose ? (
-					<span className="live-cmd-prose ellipsis">{step.target}</span>
+					<span className="live-cmd-prose ellipsis">{target}</span>
 				) : (
-					<code className="ellipsis" title={step.target}>
-						{step.target}
+					<code className="ellipsis" title={oneLine(step.target, 2000)}>
+						{target}
 					</code>
 				)}
 				<span className="live-cmd-time">{time}</span>
@@ -45,11 +50,16 @@ function LiveStep({ step, now }: { step: Step; now: number }) {
 }
 
 function lastLine(text: string | undefined): string {
-	return text?.split("\n").findLast((line) => line.trim())?.trim() ?? "";
+	// A progress bar redraws its line with carriage returns: the latest draw is what shows.
+	const line = text?.split("\n").findLast((part) => part.trim()) ?? "";
+	return oneLine(line.split("\r").findLast((part) => part.trim()) ?? "");
 }
 
 /** Steps whose target is a file the agent read or wrote. */
 const FILE_TOOLS = new Set(["read", "edit", "write"]);
+
+/** The widest the steps' tool column grows; a longer name ends in an ellipsis. */
+const TOOL_WIDTH_MAX = 140;
 
 
 const failedIn = (steps: Step[]) => steps.filter((step) => step.status === "error" || step.tone === "error").length;
@@ -61,10 +71,10 @@ function StepRow({ step, now, preview }: { step: Step; now: number; preview: Ret
 	return (
 		<li className={`step ${tone}`}>
 			<details>
-				<summary className="step-summary" title={step.target}>
+				<summary className="step-summary" title={oneLine(step.target, 2000)}>
 					<span className="mark" aria-hidden="true" />
-					<span className="tool">{step.tool}</span>
-					<span className={`target ellipsis${step.tool === "think" ? " prose" : ""}`}>{step.target}</span>
+					<span className="tool ellipsis">{step.tool}</span>
+					<span className={`target ellipsis${step.tool === "think" ? " prose" : ""}`}>{oneLine(step.target)}</span>
 					<span className="meta">
 						{preview && FILE_TOOLS.has(step.tool) && step.target && step.status !== "error" && (
 							<button
@@ -141,7 +151,8 @@ export function Steps({ run, live, tally = false }: { run: Run; live: boolean; t
 	// A failed command or tool would otherwise only show once the steps are open.
 	const failed = failedIn(steps);
 	// Size the tool column to the longest tool name so targets line up, in every group alike.
-	const toolWidth = Math.max(36, ...steps.map((step) => step.tool.length * 7.3 + 2));
+	// Capped, so a long MCP tool name can't take the row's width from its target, time and chevron.
+	const toolWidth = Math.min(TOOL_WIDTH_MAX, Math.max(36, ...steps.map((step) => step.tool.length * 7.3 + 2)));
 	// Once the answer is coming in, it shows what is happening on its own.
 	const current = live ? currentStep(run) : undefined;
 	// Among several groups, one step is shown as it is: "1 step" would hide it and take the same room.

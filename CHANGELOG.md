@@ -2,12 +2,20 @@
 
 All notable changes to Trivium are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.15.0] - 2026-11-28
+
+### Added
+
+- **Launch button.** A session with a project gets a Launch button that runs the shell tasks in the project's VS Code `.vscode/tasks.json`, starting any `docker-compose` task they depend on first. Each launch shows what will run and asks first, and the files are checked again before anything starts. Compose projects get a private name, are shared between sessions, and are stopped when the session is deleted or Trivium quits, without removing volumes. The Services panel lists infrastructure and launched apps together, and the Code agent knows which parts of `tasks.json` are supported. The button shows only when there is something to launch, a setup with a mistake, or something it launched still running.
 
 ### Changed
 
 - **The API proxy no longer needs a key by default.** Apps can connect without a key or with any placeholder one. Settings → API proxy → **Require an API key** brings back the check, and a proxy already set up keeps requiring one after the update until you turn it off. While no key is required, requests addressed by anything but `localhost`, `host.docker.internal` or, with the network allowed, a local IP address are refused unless they carry a valid key, as are requests with another site's `Origin`. A reverse proxy that rewrites `Host` gets past that, so require a key to control who can connect. Browsers still keep other sites' web pages out, with or without a key, since the proxy sends them no CORS headers.
 - **Two Triviums with the same profile no longer undo each other's API proxy settings.** Each change is made to the latest saved settings, and a running proxy applies what the other saved from its next request. While it can't read what was saved, it answers requests with 503.
+
+### Fixed
+
+- A tool call or subagent whose arguments ran long made the thread scroll sideways. Its preview now stays one line within the thread, and the full text stays in the step's details.
 
 ## [0.14.1] - 2026-11-25
 

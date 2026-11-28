@@ -32,8 +32,15 @@ export function LaunchButton({ view }: { view: SessionView }) {
 			setList({ file: ".vscode/tasks.json", tasks: [], hidden: 0, error: { message: errorText(error) } });
 		}
 	}, [view.path]);
+	// Load again whenever the agent finishes a turn, which is when it may have set launching up, and when the window
+	// comes back, after the file may have been edited elsewhere.
 	useEffect(() => {
-		void load();
+		if (!view.running) void load();
+	}, [load, view.running]);
+	useEffect(() => {
+		const onFocus = () => void load();
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
 	}, [load]);
 	useEffect(() => {
 		if (!open) return;
@@ -84,6 +91,10 @@ export function LaunchButton({ view }: { view: SessionView }) {
 		else label = t("Launch {name}", { name: current });
 	}
 	const tone = running ? " running" : failed ? " failed" : "";
+	// Nothing set up to launch: no button at all, unless something it launched is still around. A setup with a
+	// mistake keeps the button, so the mistake can be found.
+	const active = services.some((service) => service.launch) || apps.some((entry) => entry.sessionPath === view.path);
+	if (!list || (!list.error && !list.tasks.length && !active)) return null;
 	const fileOf = (line?: number) => () => {
 		setOpen(false);
 		void attempt(() => trivium.openInEditor(`${view.cwd}/${list?.file ?? ".vscode/tasks.json"}`, line));
@@ -120,13 +131,6 @@ export function LaunchButton({ view }: { view: SessionView }) {
 									{t("Reload")}
 								</button>
 							</div>
-						</div>
-					) : list.missing ? (
-						<div className="launch-state">
-							<span className="launch-state-title">{t("Nothing to launch yet")}</span>
-							<p className="launch-state-text">
-								{t("Ask in the chat to set up launching, such as “set up Launch for the app and its database”.")}
-							</p>
 						</div>
 					) : !list.tasks.length ? (
 						<div className="launch-state">

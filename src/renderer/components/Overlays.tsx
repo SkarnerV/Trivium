@@ -3,113 +3,14 @@ import type { SessionSummary, TrustChoice } from "../../shared/protocol.ts";
 import { baseName, relativeTime, shortPath } from "../format.ts";
 import { byWorkspace } from "../grouping.ts";
 import { AppIcon, ArchiveIcon, ChatIcon, CloseIcon, FolderIcon, TrashIcon, UndoIcon } from "../icons.tsx";
-import { archiveSessions, attempt, trivium, getState, openSession, setState, startSession, useStore } from "../store.ts";
+import { archiveSessions, attempt, trivium, openSession, setState, useStore } from "../store.ts";
 import { THEMES } from "../theme.ts";
-import { commandKey } from "../platform.ts";
 import { t } from "../i18n.tsx";
 import { AskCard, answer } from "./AskCard.tsx";
 import { serviceCount } from "./ServicesPanel.tsx";
 import { confirmDelete } from "./Sidebar.tsx";
 
 const close = () => setState({ overlay: null });
-
-export function NewSessionDialog() {
-	const app = useStore((s) => s.app);
-	const [projects, setProjects] = useState<string[]>([]);
-	// A project folder, or null for a chat without one.
-	const [cwd, setCwd] = useState<string | null | undefined>();
-	const [busy, setBusy] = useState(false);
-	// Focus the dialog itself so Esc and the ⌘ (Ctrl) shortcuts work right away.
-	const ref = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		ref.current?.focus();
-		void attempt(() => trivium.recentProjects()).then((list) => {
-			// Prefer projects this app has used, then the rest.
-			const own = [...new Set(getState().sessions.filter((s) => s.app === app && !s.chat).map((s) => s.cwd))];
-			const merged = [...new Set([...own, ...(list ?? [])])].filter(Boolean).slice(0, 6);
-			setProjects(merged);
-			setCwd((current) => (current !== undefined ? current : (merged[0] ?? null)));
-		});
-	}, [app]);
-
-	const pickFolder = async () => {
-		const folder = await attempt(() => trivium.pickFolder());
-		if (!folder) return;
-		setProjects((list) => [folder, ...list.filter((p) => p !== folder)].slice(0, 6));
-		setCwd(folder);
-	};
-
-	const start = async () => {
-		if (cwd === undefined || busy) return;
-		setBusy(true);
-		await startSession({ app, cwd: cwd ?? undefined });
-		setBusy(false);
-	};
-
-	const name = THEMES[app].name;
-	return (
-		<div
-			className="scrim"
-			onMouseDown={(event) => event.target === event.currentTarget && close()}
-			onKeyDown={(event) => {
-				if (event.key === "Escape") close();
-				else if (event.key === "Enter" && commandKey(event)) void start();
-				else if (commandKey(event) && /^[1-6]$/.test(event.key) && projects[Number(event.key) - 1]) setCwd(projects[Number(event.key) - 1]);
-				else return;
-				event.preventDefault();
-			}}
-		>
-			<div ref={ref} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-labelledby="new-session-title" style={{ outline: "none" }}>
-				<div className="modal-head">
-					<span className="app-badge">
-						<AppIcon app={app} />
-					</span>
-					<h2 id="new-session-title">{t("New {mode} session", { mode: t(name) })}</h2>
-					<button type="button" className="icon-btn" aria-label={t("Close")} onClick={close}>
-						<CloseIcon size={15} width={2} />
-					</button>
-				</div>
-				<div role="radiogroup" aria-label={t("Project")} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-					<span className="group-label">{t("Where")}</span>
-					<button type="button" role="radio" className="radio" aria-checked={cwd === null} onClick={() => setCwd(null)}>
-						<span className="ring" />
-						<span style={{ fontWeight: cwd === null ? 500 : 400 }}>{t("No project")}</span>
-						<span className="path ellipsis" style={{ fontFamily: "inherit" }}>
-							{t("Just chat. Any files go in Trivium's own folder.")}
-						</span>
-					</button>
-					{projects.map((path) => (
-						<button
-							key={path}
-							type="button"
-							role="radio"
-							className="radio"
-							aria-checked={path === cwd}
-							onClick={() => setCwd(path)}
-						>
-							<span className="ring" />
-							<span style={{ fontWeight: path === cwd ? 500 : 400 }}>{baseName(path)}</span>
-							<span className="path ellipsis">{shortPath(path)}</span>
-						</button>
-					))}
-					<button type="button" className="radio" onClick={() => void pickFolder()} style={{ color: "var(--ink-2)" }}>
-						<FolderIcon />
-						{t("Open another folder…")}
-					</button>
-				</div>
-				<div className="modal-foot">
-					<button type="button" className="btn ghost" onClick={close}>
-						{t("Cancel")}
-					</button>
-					<button type="button" className="btn primary" disabled={cwd === undefined || busy} onClick={() => void start()}>
-						{t(busy ? "Starting…" : "Start session")}
-					</button>
-				</div>
-			</div>
-		</div>
-	);
-}
 
 function matches(session: SessionSummary, query: string): boolean {
 	const q = query.toLowerCase();

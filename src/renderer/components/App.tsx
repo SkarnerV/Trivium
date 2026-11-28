@@ -3,7 +3,7 @@ import { appIconFilename } from "../../shared/branding.ts";
 import type { AppId, Notice } from "../../shared/protocol.ts";
 import { APP_IDS } from "../../shared/protocol.ts";
 import { AlertIcon, Chevron, CloseIcon, InfoIcon, MaximizeIcon, MinusIcon, RestoreIcon, TriviumIcon, WarnIcon } from "../icons.tsx";
-import { attempt, closeSettings, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, toggleSplit, trivium, useStore } from "../store.ts";
+import { attempt, closeSettings, openNewSession, dismissNotice, getState, holdNotice, notify, openSettings, setState, switchApp, toggleSplit, trivium, useStore } from "../store.ts";
 import { NEUTRAL, sectionTheme, themeVars } from "../theme.ts";
 import { panelFor, panelOpen } from "../panels.ts";
 import { commandKey, IS_WINDOWS } from "../platform.ts";
@@ -13,9 +13,9 @@ import { EmptyPanel } from "./EmptyPanel.tsx";
 import { ImageLightbox } from "./ImageTile.tsx";
 import { NotePanel } from "./NotePanel.tsx";
 import { LaunchConfirm } from "./Launch.tsx";
-import { ArchivedPanel, ConfirmDialog, NewSessionDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
+import { ArchivedPanel, ConfirmDialog, SearchOverlay, StartingSessionDialog, TrustDialog } from "./Overlays.tsx";
+import { NewSessionPane } from "./NewSession.tsx";
 import { Panes } from "./Panes.tsx";
-import { EmptyPane } from "./SessionPane.tsx";
 import { MemoryPage } from "./Memory.tsx";
 import { SettingsPage } from "./Settings.tsx";
 import { AppSwitcher, PeekPanel, Rail, Sidebar } from "./Sidebar.tsx";
@@ -136,7 +136,7 @@ function useShortcuts() {
 			} else if (/^[1-3]$/.test(event.key) && !state.overlay) {
 				switchApp(APP_IDS[Number(event.key) - 1]!);
 			} else if (event.key === "n") {
-				setState({ overlay: "new" });
+				openNewSession();
 			} else if (event.key === "k") {
 				setState({ overlay: state.overlay === "search" ? null : "search" });
 			} else if (event.key === "\\") {
@@ -236,15 +236,21 @@ export function App() {
 			<div className="workspace">
 				<div className="card">
 					{folded && peek && <PeekPanel />}
-					{view ? <Panes view={view} /> : <EmptyPane />}
-					{/* The tabbed panel has its own empty states: the repository's changes in Code, a file to pick in Write. */}
-					{view && open && app !== "research" && <ChangesPanel view={view} />}
-					{view && panel === "note" && <NotePanel view={view} />}
-					{view && open && !panel && app === "research" && <EmptyPanel view={view} kind="note" />}
+					{/* With no session to show, the card is where one starts. */}
+					{overlay === "new" || !view ? (
+						<NewSessionPane key={app} closable={Boolean(view)} />
+					) : (
+						<>
+							<Panes view={view} />
+							{/* The tabbed panel has its own empty states: the repository's changes in Code, a file to pick in Write. */}
+							{open && app !== "research" && <ChangesPanel view={view} />}
+							{panel === "note" && <NotePanel view={view} />}
+							{open && !panel && app === "research" && <EmptyPanel view={view} kind="note" />}
+						</>
+					)}
 					<Toasts />
 				</div>
 			</div>
-			{overlay === "new" && <NewSessionDialog />}
 			{overlay === "search" && <SearchOverlay />}
 			{overlay === "archived" && <ArchivedPanel />}
 			<LaunchConfirm />

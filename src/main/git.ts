@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { t } from "../shared/i18n.ts";
 import type {
 	DiffLine,
@@ -498,6 +499,47 @@ export async function pullBranch(root: string): Promise<void> {
 /** Reads what the remotes have, without changing any branch. */
 export async function fetchRemotes(root: string): Promise<void> {
 	await git(root, ["fetch", "--quiet", "--all"], undefined, { env: NO_PROMPT, timeout: NETWORK_TIMEOUT });
+}
+
+/** The branch checked out in the repository `cwd` is in, "" when HEAD is detached, or null when it is in none or git is missing. */
+export async function readBranch(cwd: string): Promise<string | null> {
+	if (!(await repoRoot(cwd))) return null;
+	try {
+		return (await git(cwd, ["branch", "--show-current"])).trim();
+	} catch {
+		return "";
+	}
+}
+
+/** What git said on stderr when it failed, else the error's own message. */
+function gitError(error: unknown): Error {
+	const stderr = (error as { stderr?: string }).stderr?.trim();
+	return new Error(stderr || (error instanceof Error ? error.message : String(error)));
+}
+
+/**
+ * Checks out `branch`, new from HEAD, in a worktree of its own beside the repository, in `<repo>.worktrees/`.
+ * Returns the folder in it that matches `cwd`, which may be below the repository's top folder.
+ */
+export async function addWorktree(cwd: string, branch: string): Promise<string> {
+	const root = await repoRoot(cwd);
+	if (!root) throw new Error(t("This folder is not in a git repository."));
+	let name: string;
+	try {
+		name = (await git(root, ["check-ref-format", "--branch", branch.trim()])).trim();
+	} catch {
+		throw new Error(t("“{branch}” is not a valid branch name.", { branch: branch.trim() }));
+	}
+	const parent = join(dirname(root), `${basename(root)}.worktrees`);
+	const slug = name.replace(/[^\w.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "worktree";
+	let target = join(parent, slug);
+	for (let n = 2; existsSync(target); n++) target = join(parent, `${slug}-${n}`);
+	try {
+		await git(root, ["worktree", "add", "--quiet", "-b", name, target, "HEAD"]);
+	} catch (error) {
+		throw gitError(error);
+	}
+	return join(target, relative(root, resolve(cwd)));
 }
 
 /** Makes `cwd` a repository. */

@@ -90,6 +90,8 @@ export interface State {
 	/** The task each session launched last, which the Launch button repeats. */
 	lastLaunch: Record<string, string>;
 	overlay: "new" | "search" | "archived" | null;
+	/** The project the new-session surface starts with picked: a folder, null for no project, undefined for the usual one. */
+	newIn?: string | null;
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
 	settings?: TriviumSettings;
@@ -807,6 +809,11 @@ export async function refreshModels(): Promise<void> {
 }
 
 /** Starts a session and shows it. `draft` goes into its message box, unsent. */
+/** Shows where a new session starts, with `cwd` picked when given. Nothing is made until the user starts it there. */
+export function openNewSession(cwd?: string | null): void {
+	setState({ overlay: "new", newIn: cwd, peek: false });
+}
+
 export async function startSession(input: NewSessionInput, draft?: string): Promise<SessionView | undefined> {
 	const ticket = ++navigation;
 	const { result: view, arrived } = await arrive(() => trivium.newSession(input));
@@ -1055,7 +1062,10 @@ export function switchApp(app: AppId): void {
 	const { app: current, page } = getState();
 	if (app === current && page === "main") return;
 	const ticket = ++navigation;
-	transition(page === "main" ? "app" : "page", () => setState({ app, peek: false, page: "main" }));
+	// Where a session starts belongs to the app it was opened in.
+	transition(page === "main" ? "app" : "page", () =>
+		setState((s) => ({ app, peek: false, page: "main", overlay: s.overlay === "new" ? null : s.overlay, newIn: undefined })),
+	);
 	const path = getState().selected[app];
 	if (path && !getState().views[path]) void loadSession(path, ticket);
 	loadSplit(app);

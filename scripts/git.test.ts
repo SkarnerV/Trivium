@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+	addWorktree,
 	commitChanges,
 	discardFiles,
 	listProjectFiles,
@@ -20,6 +21,7 @@ import {
 	readGitDiff,
 	readGitHistory,
 	readGitStatus,
+	readBranch,
 	readProjectFile,
 	sessionOfMessage,
 	stageFiles,
@@ -458,5 +460,39 @@ test("a file reads as text, or says it is binary, and a commit's version reads b
 		await assert.rejects(readFileAtCommit(repo, "HEAD", "README.md"));
 	} finally {
 		cleanup();
+	}
+});
+
+test("a project's branch, empty when HEAD is detached, and none outside a repository", async () => {
+	const { root, repo, git } = setup();
+	try {
+		assert.equal(await readBranch(repo), "main");
+		assert.equal(await readBranch(join(repo, "src")), "main");
+		git("checkout", "-q", "--detach");
+		assert.equal(await readBranch(repo), "");
+		const plain = join(root, "plain");
+		mkdirSync(plain);
+		assert.equal(await readBranch(plain), null);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("a worktree checks out a new branch beside the repository, in the folder matching the one asked for", async () => {
+	const { root, repo, git } = setup();
+	try {
+		const first = await addWorktree(join(repo, "src"), "trivium/fix-cart");
+		assert.equal(first, join(root, "shop.worktrees", "trivium-fix-cart", "src"));
+		assert.equal(await readBranch(first), "trivium/fix-cart");
+		// The project's own checkout stays where it was.
+		assert.equal(await readBranch(repo), "main");
+		// A folder already there gets a number; a branch already there is git's to refuse.
+		mkdirSync(join(root, "shop.worktrees", "trivium-other"), { recursive: true });
+		assert.equal(await addWorktree(repo, "trivium/other"), join(root, "shop.worktrees", "trivium-other-2"));
+		await assert.rejects(addWorktree(repo, "trivium/fix-cart"), /already exists/);
+		await assert.rejects(addWorktree(repo, "bad..name"), /not a valid branch name/);
+		assert.match(git("worktree", "list").toString(), /trivium-fix-cart/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
 	}
 });

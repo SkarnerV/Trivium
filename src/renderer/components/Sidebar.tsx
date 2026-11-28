@@ -21,7 +21,7 @@ import {
 	openSession,
 	openSettings,
 	setState,
-	startSession,
+	openNewSession,
 	switchApp,
 	togglePin,
 	trivium,
@@ -257,7 +257,7 @@ function projectMenu(app: AppId, group: ProjectGroup): MenuEntry[] {
 			icon: group.pinned ? <PinOffIcon size={14} /> : <PinIcon size={14} />,
 			onSelect: () => togglePin("pinnedProjects", `${app}:${group.cwd}`),
 		},
-		{ label: t("New session"), icon: <PlusIcon size={14} />, onSelect: () => void startSession({ app, cwd: group.cwd }) },
+		{ label: t("New session"), icon: <PlusIcon size={14} />, onSelect: () => openNewSession(group.cwd) },
 		"separator",
 		{ label: t("Archive all sessions"), icon: <ArchiveIcon size={14} />, onSelect: () => archiveProject(app, group) },
 	];
@@ -306,7 +306,7 @@ function ProjectSection({ app, group, selected, split }: { app: AppId; group: Pr
 					className="project-action"
 					aria-label={t("New session in {project}", { project: group.name })}
 					title={t("New session in {project}", { project: group.name })}
-					onClick={() => void startSession({ app, cwd: group.cwd })}
+					onClick={() => openNewSession(group.cwd)}
 				>
 					<PlusIcon size={13} />
 				</button>
@@ -439,7 +439,7 @@ export function Sidebar() {
 					<SearchIcon />
 					<span className="label">{t("Search")}</span>
 				</button>
-				<button type="button" className="sb-row" onClick={() => setState({ overlay: "new" })}>
+				<button type="button" className="sb-row" onClick={() => openNewSession()}>
 					<PlusIcon />
 					<span className="label">{t("New session")}</span>
 				</button>
@@ -569,7 +569,7 @@ export function Rail() {
 			<button type="button" className="rail-btn" aria-label={t("Search")} title={t("Search")} onClick={() => setState({ overlay: "search" })}>
 				<SearchIcon size={17} />
 			</button>
-			<button type="button" className="rail-btn" aria-label={t("New session")} title={t("New session")} onClick={() => setState({ overlay: "new" })}>
+			<button type="button" className="rail-btn" aria-label={t("New session")} title={t("New session")} onClick={() => openNewSession()}>
 				<PlusIcon size={17} />
 			</button>
 			<button type="button" className="rail-btn" aria-label={t("Memory")} title={t("Memory")} onClick={openMemory}>

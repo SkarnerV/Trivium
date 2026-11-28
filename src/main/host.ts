@@ -92,6 +92,7 @@ import {
 	draftSource,
 	fetchRemotes,
 	initRepo,
+	addWorktree,
 	listProjectFiles,
 	pullBranch,
 	pushBranch,
@@ -479,10 +480,12 @@ export class SessionHost {
 	}
 
 	async newSession(input: NewSessionInput): Promise<SessionView> {
-		const cwd = input.cwd ?? chatsDir;
-		if (!input.cwd) mkdirSync(chatsDir, { recursive: true });
+		// A worktree is made before the session, so a branch git refuses leaves no empty session behind.
+		const project = input.cwd && input.worktree ? await addWorktree(input.cwd, input.worktree.branch) : input.cwd;
+		const cwd = project ?? chatsDir;
+		if (!project) mkdirSync(chatsDir, { recursive: true });
 		const manager = SessionManager.create(cwd);
-		await this.workModes.created(manager.getSessionId(), input.app, Boolean(input.cwd), this.settings.app(input.app).workMode);
+		await this.workModes.created(manager.getSessionId(), input.app, Boolean(project), this.settings.app(input.app).workMode);
 		const live = await this.start(input.app, cwd, manager, true);
 		return this.holding(live, async () => {
 			this.appIndex[live.session.sessionId] = input.app;

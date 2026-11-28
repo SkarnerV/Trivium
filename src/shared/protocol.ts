@@ -710,6 +710,8 @@ export interface NewSessionInput {
 	/** The project folder. Left out, the session is a chat in Trivium's own folder. */
 	cwd?: string;
 	message?: string;
+	/** Work in a new worktree of the project's repository, on this new branch, instead of in the project folder. */
+	worktree?: { branch: string };
 }
 
 export interface AppProfileInfo {
@@ -1176,6 +1178,8 @@ export interface TriviumApi {
 	profiles(): Promise<AppProfileInfo[]>;
 	recentProjects(): Promise<string[]>;
 	pickFolder(): Promise<string | undefined>;
+	/** The branch a project folder's repository has checked out ("" when detached), or null when it is in none. */
+	projectBranch(cwd: string): Promise<string | null>;
 	openSession(path: string): Promise<SessionView>;
 	/** Says which sessions are on screen: one, or both halves of a split. */
 	setVisible(paths: string[]): Promise<void>;

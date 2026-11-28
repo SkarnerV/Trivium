@@ -2,10 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppId, LimitNotice, Run, SessionView } from "../../shared/protocol.ts";
 import { supervisorQuestions } from "../agents.ts";
 import { baseName, duration } from "../format.ts";
-import { AppIcon, BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, PlusIcon, ServerIcon } from "../icons.tsx";
+import { BranchIcon, CheckIcon, Chevron, CloseIcon, CopyIcon, ExternalIcon, FileIcon, ImageIcon, PanelRightIcon, PenIcon, ServerIcon } from "../icons.tsx";
 import { attempt, closePane, editMessage, focusPane, followDocument, forkFrom, openPreview, openSubagent, refreshGit, setState, showPanelView, trivium, useStore } from "../store.ts";
 import { PreviewOpener, PreviewSession } from "../preview.ts";
-import { THEMES } from "../theme.ts";
 import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
 import { panelKind, panelOpen, workingDocument } from "../panels.ts";
@@ -495,25 +494,5 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 				{subagent && <SubagentDrawer parent={view.path} target={subagent} app={app} />}
 			</main>
 		</SubagentOpenerContext.Provider>
-	);
-}
-
-export function EmptyPane() {
-	const app = useStore((s) => s.app);
-	const name = THEMES[app].name;
-	return (
-		<main className="pane">
-			<header className="pane-head drag" />
-			<div className="empty">
-				<span className="app-badge" style={{ width: 44, height: 44, borderRadius: 12 }}>
-					<AppIcon app={app} size={20} />
-				</span>
-				<h2>{t("Start a {mode} session", { mode: t(name) })}</h2>
-				<p>{t("Start a chat, or pick a project folder to work in. Sessions keep running when you switch modes.")}</p>
-				<button type="button" className="btn primary" onClick={() => setState({ overlay: "new" })}>
-					<PlusIcon size={14} /> {t("New session")}
-				</button>
-			</div>
-		</main>
 	);
 }

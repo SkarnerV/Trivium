@@ -51,6 +51,7 @@ import {
 } from "./custom-models.ts";
 import { editorArgs, editorUrl } from "./editor.ts";
 import { exportFileName, sessionMarkdown } from "./export.ts";
+import { readBranch } from "./git.ts";
 import { recallLessons } from "@pify/memory/src/lessons.ts";
 import { scanForSecrets } from "@pify/memory/src/secrets.ts";
 import { MemoryStore } from "./memory.ts";
@@ -306,6 +307,7 @@ function registerIpc(): void {
 		const result = await dialog.showOpenDialog(window!, { properties: ["openDirectory", "createDirectory"] });
 		return result.canceled ? undefined : result.filePaths[0];
 	});
+	handle("trivium:projectBranch", (cwd: string) => readBranch(cwd));
 	handle("trivium:openSession", (path: string) => host.openSession(path));
 	handle("trivium:setWorkMode", (path: string, mode: import("../shared/work-modes.ts").WorkModeId) => host.setWorkMode(path, mode));
 	handle("trivium:setVisible", (paths: string[]) => host.setVisible(paths));

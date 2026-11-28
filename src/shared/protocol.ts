@@ -528,6 +528,8 @@ export interface Notice {
 	id: string;
 	message: string;
 	level: "info" | "warning" | "error";
+	/** A command to copy, such as one that finishes a cleanup Trivium could not; the notice stays until dismissed. */
+	copy?: string;
 }
 
 export type HostEvent =
@@ -549,6 +551,7 @@ export type HostEvent =
 	| { type: "trust_closed"; id: string }
 	| { type: "reader_changed"; id: string }
 	| { type: "services"; services: Record<string, ServiceInfo[]> }
+	| { type: "launch"; state: LaunchState }
 	| { type: "update"; update: UpdateStatus }
 	| { type: "proxy"; status: ProxyStatus };
 
@@ -595,6 +598,103 @@ export interface ServiceInfo {
 	output: string;
 	/** A stop is under way. */
 	stopping: boolean;
+	/** The tasks.json label it was launched from, for an app the Launch button started. */
+	launch?: string;
+}
+
+/** A Docker Compose project Launch brought up for an app. */
+export interface InfraInfo {
+	/** Trivium's own Compose project name. */
+	project: string;
+	/** The docker-compose task's label. */
+	label: string;
+	files: string[];
+	services?: string[];
+	profiles?: string[];
+	/** The sessions using it, by session path. */
+	holders: string[];
+	state: "starting" | "running" | "failed" | "unknown" | "stopping";
+	/** What the last `up` printed, at most a few thousand characters. */
+	output: string;
+	/** The containers' last log lines, after a failed `up`. */
+	logs: string;
+	error?: string;
+	startedAt: number;
+	/** The `down` that stops it, to run by hand when Trivium can't. */
+	downCommand: string;
+}
+
+/** An app task in .vscode/tasks.json, as the Launch menu lists it. */
+export interface LaunchTask {
+	label: string;
+	/** The command line it runs. */
+	command: string;
+	/** The docker-compose task it starts first. */
+	dependsOn?: string;
+	/** Its Compose files and services, in a few words. */
+	dependsDetail?: string;
+	/** Why it can't be launched. */
+	error?: string;
+}
+
+export interface LaunchTaskList {
+	/** .vscode/tasks.json, relative to the project. */
+	file: string;
+	tasks: LaunchTask[];
+	/** Tasks that are neither: lint, test, build and the like. */
+	hidden: number;
+	/** The file is missing; `launchJson` says whether .vscode/launch.json is there instead. */
+	missing?: boolean;
+	launchJson?: boolean;
+	/** The file can't be read as written. */
+	error?: { message: string; line?: number; column?: number };
+	/** Launch is off for this project, and why. */
+	blocked?: string;
+}
+
+/** Everything a launch will run, for the user to confirm. Values of the environment are never in it. */
+export interface LaunchPlan {
+	id: string;
+	sessionPath: string;
+	label: string;
+	shell: string;
+	command: string;
+	cwd: string;
+	envNames: string[];
+	infra?: {
+		label: string;
+		project: string;
+		files: string[];
+		envFile?: string;
+		services?: string[];
+		profiles?: string[];
+		build: boolean;
+		/** Other sessions holding it, by title. */
+		sharedWith: string[];
+		running: boolean;
+	};
+}
+
+/** An app the Launch button is starting, or one that ended in a way to tell. Running apps are services. */
+export interface AppLaunchInfo {
+	sessionPath: string;
+	label: string;
+	state: "waiting" | "starting" | "running" | "exited" | "not_started";
+	/** Its service, once it runs. */
+	serviceId?: string;
+	/** The infrastructure it waits for or needs. */
+	project?: string;
+	exitCode?: number | null;
+	/** The end of what it printed, after it exited. */
+	tail?: string;
+	reason?: string;
+}
+
+export interface LaunchState {
+	infra: InfraInfo[];
+	apps: AppLaunchInfo[];
+	/** Trivium is quitting: nothing new starts. */
+	shuttingDown: boolean;
 }
 
 /** What goes into a session's message box, unsent: such as an earlier message taken back to edit. */
@@ -1139,6 +1239,21 @@ export interface TriviumApi {
 	services(): Promise<Record<string, ServiceInfo[]>>;
 	/** Ends a service and everything it started; fails if some of it is still running after. */
 	stopService(id: string): Promise<void>;
+	/** The app tasks a Code session's .vscode/tasks.json offers to launch. */
+	launchTasks(path: string): Promise<LaunchTaskList>;
+	/** Reads and checks a task for launching; resolves with what it will run, to confirm. */
+	prepareLaunch(path: string, label: string): Promise<LaunchPlan>;
+	/** Runs a confirmed plan, once. Resolves as soon as it has started; progress comes as launch events. */
+	startLaunch(id: string): Promise<void>;
+	/** Drops a plan that was not confirmed. */
+	cancelLaunch(id: string): Promise<void>;
+	launchState(): Promise<LaunchState>;
+	/** Stops a Compose project with `down`, keeping its named volumes. */
+	stopInfra(project: string): Promise<void>;
+	/** Checks a project against Docker again. */
+	checkInfra(project: string): Promise<void>;
+	/** Clears an app's exit or failure from the panel. */
+	dismissLaunch(path: string, label: string): Promise<void>;
 	/** Opens a web address in the system browser. */
 	openExternal(url: string): Promise<void>;
 	/** Opens a file with its default app. */

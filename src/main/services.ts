@@ -454,6 +454,19 @@ interface Tracked extends ServiceKey {
 	stopping: boolean;
 	/** The programs being stopped on their own, by root process id. */
 	stoppingRoots: Set<number>;
+	/** The tasks.json label, for an app the Launch button started. */
+	launch?: string;
+	/** A launched app's shell, until it exits: it is the service from the moment it spawns. */
+	child?: ChildProcess;
+}
+
+/** How a launched app ended. */
+export interface AppExit {
+	code: number | null;
+	/** Stopped from Trivium, rather than ending on its own. */
+	stopped: boolean;
+	tail: string;
+	error?: string;
 }
 
 /** A command's state before its processes are read. */
@@ -467,6 +480,7 @@ interface Saved {
 	cwd: string;
 	startedAt: number;
 	detached?: ServiceKey["detached"];
+	launch?: string;
 }
 
 /**
@@ -551,6 +565,7 @@ export class ServiceTracker {
 		} catch {
 			// Without Git Bash there are no ids to read.
 		}
+		// A launched app found again is shown, never started again.
 		for (const entry of saved) this.pending.set(entry.id, { ...entry, output: new OutputTail(), ...NOTHING_YET() });
 		await this.refresh();
 		await this.save();
@@ -665,6 +680,79 @@ export class ServiceTracker {
 				}
 			},
 		};
+	}
+
+	/**
+	 * Starts an app from the Launch button in Trivium's shell, without the agent's command prefix or time limits.
+	 * It is a service from the moment it spawns, so Stop works before the first process scan. `onExit` hears how
+	 * it ended.
+	 */
+	launchApp(options: {
+		sessionPath: string;
+		label: string;
+		command: string;
+		cwd: string;
+		env: NodeJS.ProcessEnv;
+		shellPath?: string;
+		onExit: (exit: AppExit) => void;
+	}): string {
+		const shell = getShellConfig(options.shellPath);
+		this.shell = shell.shell;
+		const id = randomBytes(8).toString("hex");
+		const fromStdin = shell.commandTransport === "stdin";
+		const startedAt = Date.now();
+		const child = spawn(shell.shell, fromStdin ? shell.args : [...shell.args, options.command], {
+			cwd: options.cwd,
+			detached: process.platform !== "win32",
+			env: { ...options.env, [MARKER]: id },
+			stdio: [fromStdin ? "pipe" : "ignore", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		if (fromStdin) {
+			child.stdin?.on("error", () => {});
+			child.stdin?.end(options.command);
+		}
+		const output = new OutputTail();
+		child.stdout?.on("data", (data: Buffer) => output.append(data));
+		child.stderr?.on("data", (data: Buffer) => output.append(data));
+		child.stdout?.on("error", () => {});
+		child.stderr?.on("error", () => {});
+		const tracked: Tracked = {
+			id,
+			startedAt,
+			shellPid: child.pid,
+			sessionPath: options.sessionPath,
+			command: options.command,
+			cwd: options.cwd,
+			output,
+			...NOTHING_YET(),
+			launch: options.label,
+			child,
+		};
+		if (child.pid) tracked.processes = [{ pid: child.pid, ppid: process.pid, name: basename(shell.shell).replace(/\.exe$/i, "") }];
+		this.services.set(id, tracked);
+		output.onChange = () => this.outputChanged();
+		this.changed();
+		void this.save().catch(() => {});
+		let ended = false;
+		const end = (code: number | null, error?: string) => {
+			if (ended) return;
+			ended = true;
+			tracked.child = undefined;
+			if (!child.pid) this.services.delete(id);
+			const stopped = tracked.stopping || tracked.stoppingRoots.size > 0;
+			if (!this.disposed) options.onExit({ code, stopped, tail: output.read(), error });
+			this.changed();
+			void this.refresh().catch(() => {});
+		};
+		child.once("error", (error) => end(null, error.message));
+		child.once("exit", (code, signal) => end(code ?? (signal ? 128 + (osConstants.signals[signal] ?? 0) : null)));
+		return id;
+	}
+
+	/** A session's running launched app, by its label. */
+	launched(sessionPath: string, label: string): string | undefined {
+		return [...this.services.values()].find((service) => service.sessionPath === sessionPath && service.launch === label)?.id;
 	}
 
 	/** The running services of every session, by session path. */
@@ -827,6 +915,8 @@ export class ServiceTracker {
 		for (const service of all) {
 			const processes = groups.get(service.id);
 			if (!processes) {
+				// A launched app's shell is its service until it exits, whatever the scan saw.
+				if (service.child) continue;
 				if (this.services.delete(service.id)) changed = true;
 				continue;
 			}
@@ -886,9 +976,10 @@ export class ServiceTracker {
 			url,
 			output,
 			stopping,
+			launch: service.launch,
 		});
 		// A command still running is one thing to the user, however its shell and programs are parented: Stop ends all of it.
-		if (parts.length <= 1 || this.background.has(service.id)) return [info(service.id, service.processes, service.ports, serviceUrl(output, service.ports), service.stopping)];
+		if (parts.length <= 1 || this.background.has(service.id) || service.launch) return [info(service.id, service.processes, service.ports, serviceUrl(output, service.ports), service.stopping)];
 		return parts.map((part) => {
 			const root = rootsOf(part)[0]!;
 			const ports = [...new Set(part.flatMap((row) => service.listening.get(row.pid) ?? []))].sort((a, b) => a - b);
@@ -901,7 +992,7 @@ export class ServiceTracker {
 	private async save(): Promise<void> {
 		// Not the shell's process id: after a restart another process may have it. Commands a failed read left
 		// unchecked are kept too.
-		const saved: Saved[] = [...this.services.values(), ...this.pending.values()].map(({ id, sessionPath, command, cwd, startedAt, detached }) => ({ id, sessionPath, command, cwd, startedAt, detached }));
+		const saved: Saved[] = [...this.services.values(), ...this.pending.values()].map(({ id, sessionPath, command, cwd, startedAt, detached, launch }) => ({ id, sessionPath, command, cwd, startedAt, detached, launch }));
 		if (!saved.length && !existsSync(this.file)) return;
 		const tmp = `${this.file}.tmp`;
 		await writeFile(tmp, JSON.stringify(saved, null, 2), { mode: 0o600 });

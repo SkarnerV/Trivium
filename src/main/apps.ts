@@ -14,8 +14,21 @@ interface AppProfile {
 	appendSystemPrompt?: string;
 }
 
+/**
+ * The Launch button reads .vscode/tasks.json, in a narrow subset of VS Code's format that refuses anything else.
+ * Code's model hears the subset, so a file it writes when asked to set up launching runs on the first try.
+ */
+const LAUNCH = [
+	"Trivium's Launch button starts this project's app, after the Docker Compose infrastructure it needs, from .vscode/tasks.json. When the user asks to set up or fix launching, write that file in this subset of VS Code Tasks 2.0.0; Launch refuses anything else:",
+	'- "version": "2.0.0" and a "tasks" list. No file-level command, args, options, type or windows/osx/linux. Comments and trailing commas are fine.',
+	'- App task: unique "label", "type": "shell", a string "command" with no ${...} in it, optional "args" (each only letters, digits and _@%+=:,./-), optional "options" with only "cwd" and "env" (string values; ${workspaceFolder} is the only variable), optional windows/osx/linux blocks with command, args and options, and optional "dependsOn" naming exactly one docker-compose task.',
+	'- Infrastructure task: "type": "docker-compose", "dockerCompose": { "files": [Compose files inside the project], "up": { "services": [...] or "profiles": [...], "build": true or false, "customOptions": "--wait" }, optional "envFile" }. No projectName, down, scale, "detached": false, options or dependsOn.',
+	"- In the Compose file, give each service a healthcheck so Launch waits until it is ready, bind ports to 127.0.0.1, and keep data in named volumes. Keep secrets out of tasks.json: use an env file or ${VAR:?message} in the Compose file.",
+	"Afterwards, tell the user to press Launch in the session header; it shows what will run and asks before running it. Don't start the app yourself for them to use.",
+].join("\n");
+
 const PROFILES: Record<AppId, AppProfile> = {
-	code: { id: "code" },
+	code: { id: "code", appendSystemPrompt: LAUNCH },
 	research: {
 		id: "research",
 		// "+" and "-" adjust pi's defaults instead of replacing them, so extension and MCP tools stay available.

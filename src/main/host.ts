@@ -254,6 +254,8 @@ function titleOf(text: string | undefined): string {
  */
 export class SessionHost {
 	private live = new Map<string, Live>();
+	private onDeleting?: (path: string) => Promise<void>;
+	private onDeleted?: (path: string) => void;
 	/** Sessions being loaded, so that opening one twice loads it once. */
 	private loading = new Map<string, Promise<Live>>();
 	private deleting = new Set<string>();
@@ -297,7 +299,13 @@ export class SessionHost {
 		thumbnail?: Thumbnail;
 		/** Runs agent commands and keeps the processes they leave running. */
 		services: ServiceTracker;
+		/** Told when a session is being deleted, before its services stop, so what it launched lets go. */
+		onDeleting?: (path: string) => Promise<void>;
+		/** Told once a session's deletion is over. */
+		onDeleted?: (path: string) => void;
 	}) {
+		this.onDeleting = options.onDeleting;
+		this.onDeleted = options.onDeleted;
 		this.emit = options.emit;
 		this.broker = options.broker;
 		this.indexFile = options.indexFile;
@@ -740,6 +748,42 @@ export class SessionHost {
 		return existsSync(file) ? readFile(file, "utf8") : "";
 	}
 
+	/** What the Launch button needs of a loaded session: its folder, whether it is a Code project, its title and shell. */
+	launchSession(path: string): { cwd: string; eligible: boolean; title: string; shellPath?: string } | undefined {
+		const live = this.live.get(path);
+		if (!live) return undefined;
+		let shellPath: string | undefined;
+		try {
+			// pi's own setting, from the global settings only: a project's settings are no reason to run another shell.
+			shellPath = SettingsManager.create(homedir(), this.agentDir).getShellPath();
+		} catch {
+			// The default shell.
+		}
+		return { cwd: live.cwd, eligible: live.app === "code" && !isChat(live.cwd) && Boolean(live.cwd), title: this.titleFor(live), shellPath };
+	}
+
+	/** A session's title, loaded or not. */
+	sessionTitle(path: string): string {
+		const live = this.live.get(path);
+		return live ? this.titleFor(live) : (this.summaries.find((summary) => summary.path === path)?.title ?? "Session");
+	}
+
+	/**
+	 * Whether Launch is off for a project: the user said never for it, this run or for good, or no decision was made
+	 * and undecided projects are set to never. Unlike loading .pi resources, a project with nothing in .pi still
+	 * needs this, since Launch runs the project's own commands.
+	 */
+	launchTrustDenied(cwd: string): boolean {
+		const known = this.sessionTrust.get(cwd) ?? this.trustStore.get(cwd);
+		if (known === false) return true;
+		if (known === true) return false;
+		try {
+			return SettingsManager.create(homedir(), this.agentDir).getDefaultProjectTrust() === "never";
+		} catch {
+			return false;
+		}
+	}
+
 	/** The project folder a session works in. */
 	cwdOf(path: string): string {
 		return this.require(path).cwd;
@@ -1071,6 +1115,8 @@ export class SessionHost {
 		try {
 			for (const path of paths) {
 				const id = idOf.get(path);
+				// Never fails: a launch's cleanup that can't finish says how to, and deleting goes on.
+				await this.onDeleting?.(path).catch(() => {});
 				await this.services.stopSession(path);
 				this.viewing.delete(path);
 				// A new session has no file until its first message.
@@ -1087,7 +1133,10 @@ export class SessionHost {
 				deleted.push(path);
 			}
 		} finally {
-			for (const path of paths) this.deleting.delete(path);
+			for (const path of paths) {
+				this.deleting.delete(path);
+				this.onDeleted?.(path);
+			}
 			const left = unloaded.filter((path) => !deleted.includes(path));
 			if (left.length) this.emit({ type: "unloaded", paths: left });
 		}

@@ -388,6 +388,18 @@ export const ServerIcon = (p: IconProps) => (
 		<path d="M7 16.5h.01" />
 	</Svg>
 );
+export const PlayIcon = ({ size = 12 }: { size?: number }) => (
+	<svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+		<path d="M4.5 2.8v10.4L13 8z" fill="currentColor" />
+	</svg>
+);
+export const DatabaseIcon = (p: IconProps) => (
+	<Svg {...p}>
+		<ellipse cx="12" cy="5" rx="8" ry="3" />
+		<path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+		<path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+	</Svg>
+);
 export const SendIcon = () => (
 	<Svg size={14} width={2.6}>
 		<path d="M12 19V5" />

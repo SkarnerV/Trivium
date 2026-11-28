@@ -10,7 +10,8 @@ import { getLocale, t } from "../../shared/i18n.ts";
 import { AskCard } from "./AskCard.tsx";
 import { panelKind, panelOpen, workingDocument } from "../panels.ts";
 import { Composer } from "./Composer.tsx";
-import { serviceCount, useServices } from "./ServicesPanel.tsx";
+import { serviceCount, useServices, useSessionInfra } from "./ServicesPanel.tsx";
+import { LaunchButton } from "./Launch.tsx";
 import { ImageTile } from "./ImageTile.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { Steps } from "./Steps.tsx";
@@ -347,8 +348,10 @@ function useWorkingDocument(view: SessionView, app: AppId): void {
 /** Says the session has services running, and opens the panel on them. */
 function ServicesButton({ view }: { view: SessionView }) {
 	const services = useServices(view.path);
+	const infra = useSessionInfra(view.path);
 	const showing = useStore((s) => !s.changesHidden[view.path] && s.panelTab[view.path] === "services");
-	if (!services.length) return null;
+	const count = services.length + infra.length;
+	if (!count) return null;
 	const ports = services.flatMap((service) => service.ports.map((port) => `:${port}`));
 	return (
 		<button
@@ -356,14 +359,14 @@ function ServicesButton({ view }: { view: SessionView }) {
 			className="changes-toggle services-toggle"
 			aria-pressed={showing}
 			title={t(ports.length ? "{services} running on {ports}. Show them in the panel." : "{services} running. Show them in the panel.", {
-				services: serviceCount(services.length),
+				services: serviceCount(count),
 				ports: ports.join(", "),
 			})}
 			onClick={() => showPanelView(view.path, "services")}
 		>
 			<span className="service-dot" aria-hidden="true" />
 			<ServerIcon size={14} />
-			<span>{serviceCount(services.length)}</span>
+			<span>{serviceCount(count)}</span>
 		</button>
 	);
 }
@@ -425,6 +428,7 @@ export function SessionPane({ view, split }: { view: SessionView; split?: PaneSp
 					)}
 					<SubagentsMenu runs={view.runs} running={view.running} />
 					<ServicesButton view={view} />
+					{agents && <LaunchButton view={view} />}
 					{/* In Code the summary cards say what changed and open it in the panel; the other apps toggle theirs. */}
 					{app === "code" ? (
 						<SummaryButton view={view} />

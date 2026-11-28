@@ -13,6 +13,9 @@ import type {
 	NewSessionInput,
 	ReaderFile,
 	ServiceInfo,
+	InfraInfo,
+	LaunchPlan,
+	LaunchState,
 	TrustRequest,
 	Notice,
 	SessionStatus,
@@ -80,6 +83,12 @@ export interface State {
 	git: Record<string, GitStatus | null>;
 	/** What each session's commands left running, by session path, whether or not the session is loaded. */
 	services: Record<string, ServiceInfo[]>;
+	/** What the Launch button started: Compose projects and apps on their way up or that ended badly. */
+	launch: LaunchState;
+	/** A launch waiting for the user to confirm it. */
+	launchPlan?: LaunchPlan;
+	/** The task each session launched last, which the Launch button repeats. */
+	lastLaunch: Record<string, string>;
 	overlay: "new" | "search" | "archived" | null;
 	page: "main" | "settings" | "memory";
 	settingsSection: SettingsSection;
@@ -165,6 +174,8 @@ let state: State = {
 	followed: {},
 	git: {},
 	services: {},
+	launch: { infra: [], apps: [], shuttingDown: false },
+	lastLaunch: {},
 	drafts: {},
 	queued: {},
 	held: {},
@@ -219,10 +230,11 @@ export function useStore<T>(select: (state: State) => T): T {
 
 const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export function notify(message: string, level: Notice["level"] = "error"): void {
-	const notice: Notice = { id: crypto.randomUUID(), message, level };
+export function notify(message: string, level: Notice["level"] = "error", copy?: string): void {
+	const notice: Notice = { id: crypto.randomUUID(), message, level, copy };
 	setState((s) => ({ notices: [...s.notices, notice] }));
-	noticeTimers.set(notice.id, setTimeout(() => dismissNotice(notice.id), level === "error" ? 8000 : 4000));
+	// A command to copy stays until it is dismissed.
+	if (!copy) noticeTimers.set(notice.id, setTimeout(() => dismissNotice(notice.id), level === "error" ? 8000 : 4000));
 }
 
 /** Keeps a notice up until the user dismisses it, such as once they expand it to read. */
@@ -304,7 +316,7 @@ function handleEvent(event: HostEvent): void {
 			setState((s) => ({ dialogs: s.dialogs.filter((d) => d.id !== event.id) }));
 			break;
 		case "notice":
-			notify(event.notice.message, event.notice.level);
+			notify(event.notice.message, event.notice.level, event.notice.copy);
 			break;
 		case "login":
 			setState((s) => (s.login ? { login: { ...s.login, events: [...s.login.events, event.event] } } : {}));
@@ -320,6 +332,9 @@ function handleEvent(event: HostEvent): void {
 			break;
 		case "services":
 			setState({ services: event.services });
+			break;
+		case "launch":
+			setState({ launch: event.state });
 			break;
 		case "proxy":
 			setState({ proxy: event.status });
@@ -423,6 +438,50 @@ function putView(view: SessionView): void {
 /** Stops a service; it leaves the list once its processes are gone. */
 export async function stopService(id: string): Promise<void> {
 	await attempt(() => trivium.stopService(id));
+}
+
+/** Reads a task and asks the user to confirm what it will run. Nothing runs until they do. */
+export async function prepareLaunch(path: string, label: string): Promise<void> {
+	const plan = await attempt(() => trivium.prepareLaunch(path, label));
+	if (plan) setState({ launchPlan: plan });
+}
+
+/** Runs the confirmed launch; it carries on in the background while its progress shows in Services. */
+export async function confirmLaunch(): Promise<void> {
+	const plan = getState().launchPlan;
+	if (!plan) return;
+	setState((s) => ({ launchPlan: undefined, lastLaunch: { ...s.lastLaunch, [plan.sessionPath]: plan.label } }));
+	const started = await attempt(() => trivium.startLaunch(plan.id).then(() => true));
+	if (started) showPanelView(plan.sessionPath, "services");
+}
+
+export function cancelLaunch(): void {
+	const plan = getState().launchPlan;
+	setState({ launchPlan: undefined });
+	if (plan) void trivium.cancelLaunch(plan.id).catch(() => {});
+}
+
+/** Stops a Compose project, asking first when other sessions use it too. */
+export async function stopInfra(info: InfraInfo, sessionPath: string): Promise<void> {
+	const others = info.holders.filter((holder) => holder !== sessionPath);
+	if (others.length) {
+		const titles = others.map((holder) => getState().sessions.find((session) => session.path === holder)?.title ?? t("another session"));
+		const ok = await askConfirm({
+			title: t(others.length === 1 ? "Stop {name} for 2 sessions?" : "Stop {name} for {n} sessions?", { name: info.label, n: others.length + 1 }),
+			message: t("{sessions} use it too, and their apps lose it. Saved data is kept.", { sessions: titles.join(", ") }),
+			confirmLabel: t(others.length === 1 ? "Stop for both" : "Stop for all"),
+		});
+		if (!ok) return;
+	}
+	await attempt(() => trivium.stopInfra(info.project));
+}
+
+export async function checkInfra(project: string): Promise<void> {
+	await attempt(() => trivium.checkInfra(project));
+}
+
+export async function dismissLaunch(path: string, label: string): Promise<void> {
+	await attempt(() => trivium.dismissLaunch(path, label));
 }
 
 /** Reads a Code session's git status, keeping the one on screen when nothing changed. */
@@ -1138,6 +1197,8 @@ export async function init(): Promise<void> {
 	if (settings) showSettings(settings);
 	const services = await attempt(() => trivium.services());
 	if (services) setState({ services });
+	const launch = await attempt(() => trivium.launchState());
+	if (launch) setState({ launch });
 	// A failed install from the last restart is reported before this page could hear of it.
 	const update = await attempt(() => trivium.updateStatus());
 	if (update) setState({ update });

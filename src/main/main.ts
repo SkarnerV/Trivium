@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { copyFile, writeFile } from "node:fs/promises";
@@ -61,6 +62,8 @@ import { renderPlantUml } from "./plantuml.ts";
 import { ProxyService } from "./proxy.ts";
 import { READER_SCHEME, ReaderStore } from "./reader.ts";
 import { ServiceTracker } from "./services.ts";
+import { InfraManager } from "./compose.ts";
+import { LaunchManager } from "./launch.ts";
 import { SettingsStore } from "./settings.ts";
 import { Updater } from "./updater.ts";
 import { UsageCounter } from "./usage.ts";
@@ -118,7 +121,7 @@ function emit(event: HostEvent): void {
 
 const broker = new DialogBroker(emit);
 const services = new ServiceTracker({ file: join(triviumDir, "services.json"), emit: (list) => send({ type: "services", services: list }) });
-const host = new SessionHost({
+const host: SessionHost = new SessionHost({
 	emit,
 	broker,
 	indexFile: join(triviumDir, "session-apps.json"),
@@ -126,6 +129,21 @@ const host = new SessionHost({
 	onDone: (path, title) => alert("done", path, title),
 	thumbnail,
 	services,
+	onDeleting: (path): Promise<void> => launcher.sessionDeleted(path),
+	onDeleted: (path): void => launcher.sessionGone(path),
+});
+const infra = new InfraManager({ file: join(triviumDir, "launch", "infra.json"), emit: () => launcher.emit() });
+const launcher: LaunchManager = new LaunchManager({
+	host: {
+		session: (path: string) => host.launchSession(path),
+		title: (path: string): string => host.sessionTitle(path),
+		trustDenied: (cwd: string): boolean => host.launchTrustDenied(cwd),
+	},
+	services,
+	infra,
+	triviumDir,
+	emit: (state) => send({ type: "launch", state }),
+	notice: (message, copy) => send({ type: "notice", notice: { id: randomUUID(), message, level: copy ? "warning" : "error", copy } }),
 });
 
 /** A preview at most 320×240, twice the size it shows at. JPEG keeps it small; PNG keeps transparency. */
@@ -170,7 +188,7 @@ const updater = new Updater({
 	fetch: (url, init) => net.fetch(url, init),
 	emit: (update) => send({ type: "update", update }),
 	enabled: () => settings.get().checkUpdates,
-	confirmQuit: async () => stopConfirmed || !services.count() || confirmStop(),
+	confirmQuit: async () => stopConfirmed || !running() || confirmStop(),
 	quit: () => app.quit(),
 });
 // pi's login flow asks the host for this installation's device ID.
@@ -573,6 +591,15 @@ function registerIpc(): void {
 	handle("trivium:gitStatus", (path: string) => host.gitStatus(path));
 	handle("trivium:services", () => services.list());
 	handle("trivium:stopService", (id: string) => services.stop(id));
+	// The Launch button's calls: only the window's own page makes them, and every launch is confirmed there first.
+	handle("trivium:launchTasks", (path: string) => launcher.list(String(path)));
+	handle("trivium:prepareLaunch", (path: string, label: string) => launcher.prepare(String(path), String(label)));
+	handle("trivium:startLaunch", (id: string) => launcher.start(String(id)));
+	handle("trivium:cancelLaunch", (id: string) => launcher.cancel(String(id)));
+	handle("trivium:launchState", () => launcher.state());
+	handle("trivium:stopInfra", (project: string) => launcher.stopInfra(String(project)));
+	handle("trivium:checkInfra", (project: string) => launcher.checkInfra(String(project)));
+	handle("trivium:dismissLaunch", (path: string, label: string) => launcher.dismiss(String(path), String(label)));
 	handle(
 		"trivium:openExternal",
 		async (url: string) => {
@@ -706,7 +733,7 @@ function createWindow(): void {
 	window.once("ready-to-show", () => window?.show());
 	// Closing the window quits on Windows and Linux; say first that the services will stop.
 	window.on("close", (event) => {
-		if (process.platform === "darwin" || stopConfirmed || !services.count()) return;
+		if (process.platform === "darwin" || stopConfirmed || !running()) return;
 		event.preventDefault();
 		void confirmStop().then((ok) => ok && window?.close());
 	});
@@ -774,6 +801,8 @@ app.whenReady().then(async () => {
 	await host.init();
 	// Services a crash left running show again in their sessions.
 	void services.init().catch((error: unknown) => console.error("Could not check for services left running:", error));
+	// And the Compose projects Launch started; apps are never started again.
+	void infra.init().catch((error: unknown) => console.error("Could not check launched infrastructure:", error));
 	// After the host: the proxy answers with the host's models.
 	void proxy.init().catch((error: unknown) => console.error("Could not start the API proxy:", error));
 	protocol.handle(READER_SCHEME, (request) => reader.respond(request));
@@ -793,29 +822,69 @@ function isLocalPage(url: string): boolean {
 /** Set once the user agreed to stop the services, or there were none, so quitting goes ahead. */
 let stopConfirmed = false;
 
+/** Whether quitting has anything to stop: services, launches under way, or Compose projects. */
+function running(): boolean {
+	return services.count() + launcher.count() > 0;
+}
+
+/** How long quitting waits for Docker to stop what Launch started. */
+const QUIT_DOCKER_MS = 20_000;
+
+/** The one question and cleanup every way of quitting shares: closing the window, the updater, Quit. */
+let quitting: Promise<boolean> | undefined;
+
+function confirmStop(): Promise<boolean> {
+	quitting ??= askAndStop().finally(() => {
+		quitting = undefined;
+	});
+	return quitting;
+}
+
+function showBox(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+	return window && !window.isDestroyed() ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options);
+}
+
 /**
- * Asks before quitting while sessions' services run, then stops them all: they would otherwise run on with
- * nothing in Trivium to show or stop them.
+ * Asks before quitting while sessions' services, launches or Compose projects run, then stops them all: they would
+ * otherwise run on with nothing in Trivium to show or stop them. When Docker can't stop a project in time, the user
+ * can try again, quit anyway and keep its record for next time, or stay.
  */
-async function confirmStop(): Promise<boolean> {
-	const count = services.count();
-	const options = {
-		type: "question" as const,
+async function askAndStop(): Promise<boolean> {
+	const count = services.count() + launcher.count();
+	const { response } = await showBox({
+		type: "question",
 		buttons: [t("Stop and quit"), t("Cancel")],
 		defaultId: 0,
 		cancelId: 1,
 		message: count === 1 ? t("A service started by Trivium is still running") : t("{n} services started by Trivium are still running", { n: count }),
 		detail: t("Quitting stops them, such as dev servers and watchers your sessions started. To keep one, run it yourself outside Trivium."),
-	};
-	const { response } = window && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
+	});
 	if (response !== 0) return false;
-	stopConfirmed = true;
+	launcher.shutdown();
 	await services.stopAll().catch(() => {});
+	for (;;) {
+		const left = await launcher.stopInfraForQuit(QUIT_DOCKER_MS);
+		if (!left.length) break;
+		const { response: choice } = await showBox({
+			type: "warning",
+			buttons: [t("Retry"), t("Quit anyway"), t("Cancel")],
+			defaultId: 0,
+			cancelId: 2,
+			message: t("Couldn't stop everything"),
+			detail: t("Docker did not stop {names} in time. Quitting anyway leaves them running; Trivium checks them next time it opens.", { names: left.join(", ") }),
+		});
+		if (choice === 1) break;
+		if (choice === 2) {
+			launcher.resume();
+			return false;
+		}
+	}
+	stopConfirmed = true;
 	return true;
 }
 
 app.on("before-quit", (event) => {
-	if (stopConfirmed || !services.count()) return;
+	if (stopConfirmed || !running()) return;
 	event.preventDefault();
 	void confirmStop().then((ok) => ok && app.quit());
 });
